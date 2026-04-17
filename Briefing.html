@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>브리핑 — AI News & Markets</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  @font-face {
+    font-family: 'SUIT';
+    src: url('fonts/suit_regular.ttf') format('truetype');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'SUIT';
+    src: url('fonts/suit_medium.ttf') format('truetype');
+    font-weight: 500; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'SUIT';
+    src: url('fonts/suit_semibold.ttf') format('truetype');
+    font-weight: 600; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'SUIT';
+    src: url('fonts/suit_bold.ttf') format('truetype');
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+</style>
+<style>
+  :root {
+    /* Dark palette — Liquid Lava accent */
+    --md-surface:#151419;            /* Dark Void — page background */
+    --md-surface-container:#1B1B1E;  /* Gluon Grey — cards */
+    --md-surface-container-high:#262626; /* Slate Grey — elevated (chips, inputs) */
+    --md-surface-container-low:#1B1B1E;
+    --md-surface-container-lowest:#1B1B1E;
+    --md-on-surface:#FBFBFB;         /* Snow — primary text */
+    --md-on-surface-var:#878787;     /* Dusty Grey — muted text */
+    --md-outline:#878787;
+    --md-outline-variant:rgba(255,255,255,0.08); /* separator — hairline on dark */
+    --md-primary:#F56E0F;            /* Liquid Lava — accent */
+    --md-on-primary:#FFFFFF;
+    --md-primary-container:rgba(245,110,15,0.14);
+    --md-on-primary-container:#F56E0F;
+    --md-secondary-container:#262626;
+    --md-on-secondary-container:#FBFBFB;
+
+    /* KR market convention */
+    --up:#FF3B30;     /* 상승 */
+    --down:#0064FF;   /* 하락 */
+    --flat:#878787;   /* 보합 */
+
+    --page: var(--md-surface);
+    --card: var(--md-surface-container);
+    --ink: var(--md-on-surface);
+    --ink-2: var(--md-on-surface-var);
+    --mute: var(--md-outline);
+    --mute-2: var(--md-outline-variant);
+    --hair: var(--md-outline-variant);
+    --hair-2: rgba(255,255,255,0.14);
+  }
+  html,body { margin:0; padding:0; background:#0A090D; }
+  body {
+    font-family: 'SUIT', system-ui, sans-serif;
+    font-weight: 500; /* default body = Medium per spec */
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+    font-feature-settings: "tnum" 1;
+  }
+  .mono { font-family:'Roboto Mono', ui-monospace, monospace; }
+  .stage {
+    min-height:100vh;
+    display:flex; align-items:center; justify-content:center;
+    padding:40px 20px;
+    background:
+      radial-gradient(1200px 600px at 20% 10%, #14121A 0%, transparent 60%),
+      radial-gradient(900px 500px at 80% 90%, #100F14 0%, transparent 55%),
+      #0A090D;
+  }
+  /* Scrollbar hide in phone */
+  .noscroll::-webkit-scrollbar { display:none; }
+  .noscroll { scrollbar-width:none; }
+
+  /* sheet */
+  @keyframes sheetIn { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  @keyframes fadeIn  { from { opacity:0 } to { opacity:1 } }
+
+  /* press */
+  .press { transition: background-color .18s ease; position:relative; }
+  .press:hover { background-color: rgba(255,255,255,0.03); }
+  .press:active { background-color: rgba(255,255,255,0.06); }
+
+  /* tweaks */
+  #tweaks {
+    position:fixed; right:20px; bottom:20px; width:280px;
+    background:#1B1B1E; color:#FBFBFB; border-radius:16px; padding:16px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06);
+    font-family:'SUIT', system-ui; font-size:13px;
+    display:none; z-index:1000;
+  }
+  #tweaks.on { display:block; }
+  #tweaks h4 { margin:0 0 12px; font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:#878787; font-weight:600; }
+  #tweaks label { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-top:1px solid rgba(255,255,255,0.06); color:#FBFBFB; }
+  #tweaks label:first-of-type { border-top:none; }
+  #tweaks select {
+    background:#262626; color:#FBFBFB; border:1px solid rgba(255,255,255,0.08);
+    border-radius:6px; padding:4px 8px; font-size:12px; font-family:inherit;
+  }
+</style>
+
+<script>
+  window.__TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+    "density": "compact",
+    "accent": "blue",
+    "showIndicators": true,
+    "cardStyle": "soft"
+  }/*EDITMODE-END*/;
+</script>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div class="stage">
+    <div id="root"></div>
+  </div>
+
+  <div id="tweaks">
+    <h4>Tweaks</h4>
+    <label>Density
+      <select id="tw-density">
+        <option value="compact">Compact</option>
+        <option value="comfortable">Comfortable</option>
+        <option value="spacious">Spacious</option>
+      </select>
+    </label>
+    <label>Accent
+      <select id="tw-accent">
+        <option value="green">Green (KR)</option>
+        <option value="blue">Blue</option>
+        <option value="mono">Monochrome</option>
+      </select>
+    </label>
+    <label>Card style
+      <select id="tw-cardStyle">
+        <option value="soft">Soft (shadow)</option>
+        <option value="outlined">Outlined</option>
+        <option value="flat">Flat</option>
+      </select>
+    </label>
+    <label>Indicators
+      <input type="checkbox" id="tw-showIndicators" />
+    </label>
+  </div>
+
+  <script type="text/babel" src="android-frame.jsx"></script>
+  <script type="text/babel" src="data.jsx"></script>
+  <script type="text/babel" src="components.jsx"></script>
+  <script type="text/babel" src="app.jsx"></script>
+
+  <script>
+    // Tweaks wiring
+    (function(){
+      const defaults = window.__TWEAK_DEFAULTS;
+      window.__tweaks = { ...defaults };
+
+      function syncUI() {
+        document.getElementById('tw-density').value = window.__tweaks.density;
+        document.getElementById('tw-accent').value = window.__tweaks.accent;
+        document.getElementById('tw-cardStyle').value = window.__tweaks.cardStyle;
+        document.getElementById('tw-showIndicators').checked = !!window.__tweaks.showIndicators;
+      }
+      syncUI();
+
+      function broadcast() {
+        window.dispatchEvent(new CustomEvent('tweakschange', { detail: { ...window.__tweaks } }));
+      }
+      function persist(patch) {
+        Object.assign(window.__tweaks, patch);
+        broadcast();
+        try { window.parent.postMessage({ type:'__edit_mode_set_keys', edits: patch }, '*'); } catch(e){}
+      }
+      document.getElementById('tw-density').addEventListener('change', e => persist({ density: e.target.value }));
+      document.getElementById('tw-accent').addEventListener('change', e => persist({ accent: e.target.value }));
+      document.getElementById('tw-cardStyle').addEventListener('change', e => persist({ cardStyle: e.target.value }));
+      document.getElementById('tw-showIndicators').addEventListener('change', e => persist({ showIndicators: e.target.checked }));
+
+      window.addEventListener('message', (ev) => {
+        const d = ev.data || {};
+        if (d.type === '__activate_edit_mode') document.getElementById('tweaks').classList.add('on');
+        if (d.type === '__deactivate_edit_mode') document.getElementById('tweaks').classList.remove('on');
+      });
+      try { window.parent.postMessage({ type:'__edit_mode_available' }, '*'); } catch(e){}
+    })();
+  </script>
+</body>
+</html>
