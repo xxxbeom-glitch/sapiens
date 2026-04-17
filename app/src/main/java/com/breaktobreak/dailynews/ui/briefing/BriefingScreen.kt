@@ -20,6 +20,7 @@ import com.breaktobreak.dailynews.data.mock.MockData
 import com.breaktobreak.dailynews.data.model.Article
 import com.breaktobreak.dailynews.ui.common.ArticleBottomSheet
 import com.breaktobreak.dailynews.ui.theme.Background
+import com.breaktobreak.dailynews.ui.theme.CardSpacing
 import com.breaktobreak.dailynews.ui.theme.TextSecondary
 
 @Composable
@@ -49,12 +50,18 @@ fun BriefingScreen() {
 
         item {
             Spacer(modifier = Modifier.height(18.dp))
-            SectionLabel(title = "미국 장 시황")
+            SectionLabel(title = "미국 시황")
         }
 
         item {
-            USMarketCard(
+            USMarketIndicatorsCard(
                 indicators = MockData.marketIndicators,
+            )
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(CardSpacing))
+            USMajorArticlesCard(
                 articles = MockData.usArticles,
                 onClickArticle = { selectedArticle = it }
             )

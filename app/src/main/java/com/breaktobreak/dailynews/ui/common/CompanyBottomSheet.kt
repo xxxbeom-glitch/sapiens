@@ -4,24 +4,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -37,10 +34,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.unit.dp
 import com.breaktobreak.dailynews.data.model.Company
 import com.breaktobreak.dailynews.ui.company.SectorChip
@@ -50,7 +46,6 @@ import com.breaktobreak.dailynews.ui.theme.Elevated
 import com.breaktobreak.dailynews.ui.theme.MarketDown
 import com.breaktobreak.dailynews.ui.theme.MarketFlat
 import com.breaktobreak.dailynews.ui.theme.MarketUp
-import com.breaktobreak.dailynews.ui.theme.SheetBottom
 import com.breaktobreak.dailynews.ui.theme.SheetHorizontal
 import com.breaktobreak.dailynews.ui.theme.SheetTop
 import com.breaktobreak.dailynews.ui.theme.RowVertical
@@ -67,36 +62,30 @@ fun CompanyBottomSheet(
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val nestedScrollConnection = rememberNestedScrollInteropConnection()
-    val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
 
     ModalBottomSheet(
         sheetState = sheetState,
         onDismissRequest = onDismissRequest,
         containerColor = Card,
         dragHandle = null,
-        modifier = Modifier.fillMaxHeight(0.92f)
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxHeight(0.75f)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = SheetHorizontal)
-        ) {
+        Column(modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
-                    .padding(top = 4.dp, bottom = 14.dp)
-                    .fillMaxWidth(0.12f)
-                    .background(TextSecondary.copy(alpha = 0.5f), RoundedCornerShape(99.dp))
-                    .padding(vertical = 2.dp)
+                    .padding(top = 8.dp, bottom = 8.dp)
+                    .size(width = 40.dp, height = 4.dp)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(TextSecondary.copy(alpha = 0.5f))
             )
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(
-                        vertical = SheetTop
-                    ),
+                    .padding(horizontal = SheetHorizontal, vertical = SheetTop),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -119,9 +108,7 @@ fun CompanyBottomSheet(
                 selectedTabIndex = selectedTab,
                 containerColor = Card,
                 contentColor = Accent,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp)
+                modifier = Modifier.fillMaxWidth()
             ) {
                 detailTabs.forEachIndexed { index, label ->
                     Tab(
@@ -132,54 +119,31 @@ fun CompanyBottomSheet(
                 }
             }
 
-            when (selectedTab) {
-                0 -> ScrollableTabContent(
-                    nestedScrollConnection = nestedScrollConnection
-                ) { CompanyInfoContent(company) }
-                1 -> ScrollableTabContent(
-                    nestedScrollConnection = nestedScrollConnection
-                ) { FinancialContent(company) }
-                else -> ScrollableTabContent(
-                    nestedScrollConnection = nestedScrollConnection
-                ) { AnalystAndOpinionContent(company) }
-            }
-
-            Button(
-                onClick = onDismissRequest,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp, bottom = SheetBottom)
-                    .padding(navigationBarsPadding),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Accent,
-                    contentColor = TextPrimary
-                )
-            ) {
-                Text("닫기")
+            Box(modifier = Modifier.weight(1f)) {
+                val scrollState = rememberScrollState()
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scrollState)
+                        .padding(horizontal = SheetHorizontal)
+                        .navigationBarsPadding(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Spacer(modifier = Modifier.height(SheetTop))
+                    when (selectedTab) {
+                        0 -> CompanyInfoContent(company)
+                        1 -> FinancialContent(company)
+                        else -> AnalystAndOpinionContent(company)
+                    }
+                    Spacer(modifier = Modifier.height(SheetTop))
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ColumnScope.ScrollableTabContent(
-    nestedScrollConnection: androidx.compose.ui.input.nestedscroll.NestedScrollConnection,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .weight(1f)
-            .padding(top = SheetTop)
-            .nestedScroll(nestedScrollConnection)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        content = content
-    )
-}
-
-@Composable
-private fun CompanyInfoContent(company: Company) {
+private fun ColumnScope.CompanyInfoContent(company: Company) {
     val info = mockCompanyInfo(company.ticker)
     val rows = listOf(
         "티커" to company.ticker,
@@ -224,7 +188,7 @@ private fun CompanyInfoRow(
 }
 
 @Composable
-private fun FinancialContent(company: Company) {
+private fun ColumnScope.FinancialContent(company: Company) {
     val financial = mockFinancialSeries(company.ticker)
     financial.metrics.forEachIndexed { index, metric ->
         Text(
@@ -324,7 +288,7 @@ private fun FinancialMetricCaption() {
 }
 
 @Composable
-private fun AnalystAndOpinionContent(company: Company) {
+private fun ColumnScope.AnalystAndOpinionContent(company: Company) {
     Text("증권가 전망", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
     mockAnalystComments(company.ticker).forEach { comment ->
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {

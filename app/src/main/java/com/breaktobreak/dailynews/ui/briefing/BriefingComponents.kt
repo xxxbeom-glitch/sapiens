@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
@@ -23,13 +24,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.breaktobreak.dailynews.data.model.Article
 import com.breaktobreak.dailynews.data.model.MarketDirection
 import com.breaktobreak.dailynews.data.model.MarketIndicator
+import com.breaktobreak.dailynews.ui.common.categoryChipColors
 import com.breaktobreak.dailynews.ui.theme.Accent
 import com.breaktobreak.dailynews.ui.theme.Card
 import com.breaktobreak.dailynews.ui.theme.CardPaddingBottom
@@ -71,6 +75,8 @@ fun MorningCardPager(
     pagerState: PagerState,
     onClickArticle: (Article) -> Unit
 ) {
+    val pagerHeight = (LocalConfiguration.current.screenWidthDp * 0.52f).dp
+
     Column {
         Card(
             modifier = Modifier
@@ -91,7 +97,9 @@ fun MorningCardPager(
             ) {
                 HorizontalPager(
                     state = pagerState,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(pagerHeight)
                 ) { page ->
                     val article = articles[page]
                     Column(
@@ -100,21 +108,33 @@ fun MorningCardPager(
                             .clickable { onClickArticle(article) },
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(
-                            text = article.headline,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = TextPrimary,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 56.dp)
+                        ) {
+                            Text(
+                                text = article.headline,
+                                style = MaterialTheme.typography.titleLarge,
+                                color = TextPrimary,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
 
-                        Text(
-                            text = article.summary,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 44.dp)
+                        ) {
+                            Text(
+                                text = article.summary,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextSecondary,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
 
                         HorizontalDivider(color = TextSecondary.copy(alpha = 0.24f))
 
@@ -157,10 +177,8 @@ fun MorningCardPager(
 }
 
 @Composable
-fun USMarketCard(
-    indicators: List<MarketIndicator>,
-    articles: List<Article>,
-    onClickArticle: (Article) -> Unit
+fun USMarketIndicatorsCard(
+    indicators: List<MarketIndicator>
 ) {
     Card(
         modifier = Modifier
@@ -222,12 +240,31 @@ fun USMarketCard(
                     modifier = Modifier.weight(1f)
                 )
             }
+        }
+    }
+}
 
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 12.dp),
-                color = TextSecondary.copy(alpha = 0.24f)
-            )
-
+@Composable
+fun USMajorArticlesCard(
+    articles: List<Article>,
+    onClickArticle: (Article) -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .background(Card)
+                .padding(
+                    start = CardPaddingHorizontal,
+                    end = CardPaddingHorizontal,
+                    top = CardPaddingVertical,
+                    bottom = CardPaddingBottom
+                )
+        ) {
             Text(
                 text = "주요 기사",
                 style = MaterialTheme.typography.titleSmall,
@@ -296,7 +333,9 @@ private fun MarketIndicatorRow(indicator: MarketIndicator) {
     ) {
         Text(
             text = indicator.name,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = (MaterialTheme.typography.labelSmall.fontSize.value + 2f).sp
+            ),
             color = TextSecondary
         )
         Column(
@@ -349,14 +388,15 @@ fun SourceChip(label: String) {
 
 @Composable
 private fun CategoryChip(label: String) {
+    val (backgroundColor, textColor) = categoryChipColors(label)
     Surface(
-        color = TextSecondary.copy(alpha = 0.18f),
+        color = backgroundColor,
         shape = RoundedCornerShape(6.dp)
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = TextPrimary,
+            color = textColor,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
         )
     }
