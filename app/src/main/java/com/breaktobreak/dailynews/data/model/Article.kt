@@ -5,6 +5,8 @@ data class Article(
     val headline: String,
     val summary: String,
     val time: String,
+    val category: String = "",
+    val summaryPoints: List<String> = emptyList(),
     val tag: String = "",
     val sourceColor: String? = null
 )
