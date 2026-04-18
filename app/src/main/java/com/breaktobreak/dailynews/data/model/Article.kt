@@ -24,6 +24,15 @@ data class MarketIndicator(
     val direction: MarketDirection
 )
 
+data class MarketIndex(
+    val group: String,
+    val name: String,
+    val value: String,
+    val change: String,
+    val prevValue: String,
+    val direction: MarketDirection
+)
+
 data class USReport(
     val date: String,
     val body: String

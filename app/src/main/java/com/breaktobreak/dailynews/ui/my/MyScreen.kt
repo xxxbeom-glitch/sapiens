@@ -2,6 +2,7 @@ package com.breaktobreak.dailynews.ui.my
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -250,7 +251,10 @@ private fun MenuRow(item: MenuItem) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { item.onClick() }
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() }
+            ) { item.onClick() }
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -312,7 +316,10 @@ private fun DetailScaffold(
                 )
             },
             navigationIcon = {
-                IconButton(onClick = onBack) {
+                IconButton(
+                    onClick = onBack,
+                    interactionSource = remember { MutableInteractionSource() }
+                ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "뒤로가기",
@@ -340,7 +347,11 @@ private fun AccountDetailScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         if (!isLoggedIn) {
-            Button(onClick = onGoogleSignInClick, modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = onGoogleSignInClick,
+                interactionSource = remember { MutableInteractionSource() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text("Google로 로그인")
             }
             Text(
@@ -375,7 +386,10 @@ private fun AccountDetailScreen(
                         Text(userEmail, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                     }
                 }
-                OutlinedButton(onClick = onSignOutClick) { Text("로그아웃") }
+                OutlinedButton(
+                    onClick = onSignOutClick,
+                    interactionSource = remember { MutableInteractionSource() }
+                ) { Text("로그아웃") }
             }
         }
     }
@@ -418,7 +432,10 @@ private fun ChipGrid(
             Surface(
                 color = if (selected) Accent.copy(alpha = 0.2f) else Color.Transparent,
                 shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.clickable { onToggle(label) }
+                modifier = Modifier.clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() }
+                ) { onToggle(label) }
             ) {
                 Text(
                     text = label,
@@ -445,7 +462,10 @@ private fun BookmarkDetailScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onClickItem(article) }
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { onClickItem(article) }
                         .padding(vertical = RowVertical)
                 ) {
                     Text(
@@ -518,7 +538,11 @@ private fun ThemeOptionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                onClick = onClick
+            )
             .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -530,7 +554,8 @@ private fun ThemeOptionRow(
         )
         RadioButton(
             selected = selected,
-            onClick = onClick
+            onClick = onClick,
+            interactionSource = remember { MutableInteractionSource() }
         )
     }
 }

@@ -1,6 +1,7 @@
 package com.breaktobreak.dailynews.ui.briefing
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
@@ -21,17 +23,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.breaktobreak.dailynews.data.model.Article
 import com.breaktobreak.dailynews.data.model.MarketDirection
+import com.breaktobreak.dailynews.data.model.MarketIndex
 import com.breaktobreak.dailynews.data.model.MarketIndicator
 import com.breaktobreak.dailynews.ui.common.categoryChipColors
 import com.breaktobreak.dailynews.ui.theme.Accent
@@ -44,6 +48,7 @@ import com.breaktobreak.dailynews.ui.theme.MarketFlat
 import com.breaktobreak.dailynews.ui.theme.MarketUp
 import com.breaktobreak.dailynews.ui.theme.TextPrimary
 import com.breaktobreak.dailynews.ui.theme.TextSecondary
+import kotlinx.coroutines.delay
 
 @Composable
 fun SectionLabel(
@@ -53,11 +58,7 @@ fun SectionLabel(
     Column(
         modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelLarge,
-            color = TextSecondary
-        )
+        SectionTitleText(title = title)
         if (subtitle != null) {
             Text(
                 text = subtitle,
@@ -70,13 +71,20 @@ fun SectionLabel(
 }
 
 @Composable
+private fun SectionTitleText(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        color = TextPrimary
+    )
+}
+
+@Composable
 fun MorningCardPager(
     articles: List<Article>,
     pagerState: PagerState,
     onClickArticle: (Article) -> Unit
 ) {
-    val pagerHeight = (LocalConfiguration.current.screenWidthDp * 0.52f).dp
-
     Column {
         Card(
             modifier = Modifier
@@ -99,13 +107,15 @@ fun MorningCardPager(
                     state = pagerState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(pagerHeight)
                 ) { page ->
                     val article = articles[page]
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onClickArticle(article) },
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }
+                            ) { onClickArticle(article) },
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Box(
@@ -117,6 +127,7 @@ fun MorningCardPager(
                                 text = article.headline,
                                 style = MaterialTheme.typography.titleLarge,
                                 color = TextPrimary,
+                                minLines = 2,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -131,6 +142,7 @@ fun MorningCardPager(
                                 text = article.summary,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = TextSecondary,
+                                minLines = 2,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -177,70 +189,113 @@ fun MorningCardPager(
 }
 
 @Composable
-fun USMarketIndicatorsCard(
-    indicators: List<MarketIndicator>
+fun MarketTickerBanner(
+    pages: List<List<MarketIndicator>>
 ) {
-    Card(
+    if (pages.isEmpty()) return
+
+    val pagerState = rememberPagerState(pageCount = { pages.size })
+
+    LaunchedEffect(pagerState, pages.size) {
+        while (true) {
+            delay(3000)
+            val nextPage = (pagerState.currentPage + 1) % pages.size
+            pagerState.animateScrollToPage(nextPage)
+        }
+    }
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(18.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        Column(
+        HorizontalPager(
+            state = pagerState,
             modifier = Modifier
-                .background(Card)
-                .padding(
-                    start = CardPaddingHorizontal,
-                    end = CardPaddingHorizontal,
-                    top = CardPaddingVertical,
-                    bottom = CardPaddingBottom
-                )
+                .fillMaxWidth()
         ) {
+            val pageItems = pages[it]
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "시장 지표",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = TextPrimary
-                )
-                Text(
-                    text = "4/18 장 마감 기준",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextSecondary
-                )
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                val leftIndicators = indicators.take(3)
-                val rightIndicators = indicators.drop(3).take(3)
-
-                IndicatorColumn(
-                    indicators = leftIndicators,
+                MarketTickerItem(
+                    indicator = pageItems.getOrNull(0),
                     modifier = Modifier.weight(1f)
                 )
 
                 Box(
                     modifier = Modifier
-                        .padding(horizontal = 12.dp)
+                        .height(28.dp)
                         .width(0.5.dp)
-                        .height(120.dp)
-                        .background(TextSecondary.copy(alpha = 0.08f))
+                        .background(TextSecondary.copy(alpha = 0.2f))
                 )
 
-                IndicatorColumn(
-                    indicators = rightIndicators,
+                MarketTickerItem(
+                    indicator = pageItems.getOrNull(1),
                     modifier = Modifier.weight(1f)
                 )
             }
         }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            repeat(pages.size) { index ->
+                val selected = pagerState.currentPage == index
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 2.dp)
+                        .height(4.dp)
+                        .width(if (selected) 12.dp else 4.dp)
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(if (selected) Accent else TextSecondary.copy(alpha = 0.35f))
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MarketTickerItem(
+    indicator: MarketIndicator?,
+    modifier: Modifier = Modifier
+) {
+    if (indicator == null) {
+        Spacer(modifier = modifier)
+        return
+    }
+
+    val directionColor = when (indicator.direction) {
+        MarketDirection.UP -> com.breaktobreak.dailynews.ui.theme.MarketUp
+        MarketDirection.DOWN -> MarketDown
+        MarketDirection.FLAT -> com.breaktobreak.dailynews.ui.theme.MarketFlat
+    }
+
+    Row(
+        modifier = modifier.padding(horizontal = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = indicator.name,
+            style = MaterialTheme.typography.labelSmall,
+            color = TextSecondary
+        )
+        Text(
+            text = indicator.value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextPrimary,
+            fontWeight = FontWeight.Medium
+        )
+        Text(
+            text = indicator.change,
+            style = MaterialTheme.typography.labelSmall,
+            color = directionColor
+        )
     }
 }
 
@@ -276,7 +331,10 @@ fun USMajorArticlesCard(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onClickArticle(article) }
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }
+                            ) { onClickArticle(article) }
                             .padding(vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -299,63 +357,73 @@ fun USMajorArticlesCard(
 }
 
 @Composable
-private fun IndicatorColumn(
-    indicators: List<MarketIndicator>,
-    modifier: Modifier = Modifier
+fun MarketIndexGrid(
+    indices: List<MarketIndex>
 ) {
-    Column(modifier = modifier) {
-        indicators.forEachIndexed { index, indicator ->
-            MarketIndicatorRow(indicator = indicator)
-            if (index < indicators.lastIndex) {
-                HorizontalDivider(
-                    thickness = 0.5.dp,
-                    color = TextSecondary.copy(alpha = 0.06f)
-                )
+    val rows = indices.chunked(2)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        rows.forEach { rowItems ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                rowItems.forEach { index ->
+                    MarketIndexCard(
+                        index = index,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (rowItems.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
             }
         }
     }
 }
 
 @Composable
-private fun MarketIndicatorRow(indicator: MarketIndicator) {
-    val directionColor = when (indicator.direction) {
+private fun MarketIndexCard(
+    index: MarketIndex,
+    modifier: Modifier = Modifier
+) {
+    val directionColor = when (index.direction) {
         MarketDirection.UP -> MarketUp
         MarketDirection.DOWN -> MarketDown
         MarketDirection.FLAT -> MarketFlat
     }
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+    Column(
+        modifier = modifier
+            .background(Color(0xFF28282A), RoundedCornerShape(14.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text(
-            text = indicator.name,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = (MaterialTheme.typography.labelSmall.fontSize.value + 2f).sp
-            ),
+            text = index.group.uppercase(),
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
             color = TextSecondary
         )
-        Column(
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                text = indicator.value,
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextPrimary,
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.End
-            )
-            Text(
-                text = indicator.change,
-                style = MaterialTheme.typography.labelSmall,
-                color = directionColor,
-                textAlign = TextAlign.End
-            )
-        }
+        Text(
+            text = index.name,
+            style = MaterialTheme.typography.labelSmall,
+            color = TextSecondary
+        )
+        Text(
+            text = index.value,
+            style = MaterialTheme.typography.titleMedium,
+            color = TextPrimary,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = index.change,
+            style = MaterialTheme.typography.labelSmall,
+            color = directionColor
+        )
     }
 }
 

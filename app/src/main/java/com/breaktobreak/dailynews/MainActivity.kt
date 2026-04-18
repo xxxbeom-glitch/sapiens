@@ -1,9 +1,9 @@
 package com.breaktobreak.dailynews
 
 import android.os.Bundle
+import android.graphics.Color as AndroidColor
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -17,15 +17,34 @@ import com.breaktobreak.dailynews.data.store.UserPreferencesRepository
 import com.breaktobreak.dailynews.ui.main.MainScreen
 import com.breaktobreak.dailynews.ui.theme.DailyNewsTheme
 import com.breaktobreak.dailynews.ui.theme.applyThemePalette
+import androidx.core.view.WindowCompat
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = AndroidColor.TRANSPARENT
+        window.navigationBarColor = AndroidColor.TRANSPARENT
+
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
+
         setContent {
             DailyNewsApp()
         }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        android.util.Log.d(
+            "StatusBar",
+            "hasFocus=$hasFocus, isLight=${controller.isAppearanceLightStatusBars}"
+        )
     }
 }
 

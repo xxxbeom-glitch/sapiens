@@ -2,8 +2,12 @@ package com.breaktobreak.dailynews.data.mock
 
 import com.breaktobreak.dailynews.data.model.Article
 import com.breaktobreak.dailynews.data.model.Company
+import com.breaktobreak.dailynews.data.model.FinancialMetric
+import com.breaktobreak.dailynews.data.model.FinancialSeries
 import com.breaktobreak.dailynews.data.model.MarketDirection
+import com.breaktobreak.dailynews.data.model.MarketIndex
 import com.breaktobreak.dailynews.data.model.MarketIndicator
+import com.breaktobreak.dailynews.data.model.YearFinancialValue
 import com.breaktobreak.dailynews.data.model.USReport
 
 object MockData {
@@ -11,7 +15,7 @@ object MockData {
         Article(
             source = "한국경제",
             sourceColor = "kr",
-            headline = "반도체 수출 3개월 연속 증가… AI 수요가 견인",
+            headline = "반도체 수출 3개월 연속 증가, AI 서버 수요가 상승 견인",
             summary = "4월 반도체 수출이 전년 대비 18.4% 증가하며 회복세가 뚜렷해졌다. 메모리 가격 반등과 AI 서버 수요 확대가 주요 동력으로 작용했다.",
             time = "오전 6:42",
             category = "경제",
@@ -25,7 +29,7 @@ object MockData {
         Article(
             source = "매일경제",
             sourceColor = "kr",
-            headline = "금리 인하 기대 속 코스피 2,850선 돌파",
+            headline = "금리 인하 기대 확산에 코스피 2850선 돌파 흐름 지속",
             summary = "연준 6월 인하 가능성이 높아지며 외국인 매수세가 유입됐다. 전기차·2차전지 섹터가 지수 상승을 주도했다.",
             time = "오전 7:10",
             category = "매크로",
@@ -39,7 +43,7 @@ object MockData {
         Article(
             source = "조선비즈",
             sourceColor = "kr",
-            headline = "서울 아파트 거래량 2년 만에 최고치 기록",
+            headline = "서울 아파트 거래량 2년래 최고, 강남권 회복세 뚜렷",
             summary = "4월 서울 아파트 매매 거래가 5,200건을 넘어서며 2024년 2월 이후 최고치를 기록했다. 강남3구와 마용성 중심으로 회복세가 뚜렷하다.",
             time = "오전 7:28",
             category = "부동산",
@@ -53,7 +57,7 @@ object MockData {
         Article(
             source = "연합뉴스",
             sourceColor = "kr",
-            headline = "삼성전자, 2나노 파운드리 첫 양산 돌입",
+            headline = "삼성전자 2나노 파운드리 양산 시작, 고객사 수주 기대 확대",
             summary = "삼성전자가 화성 캠퍼스에서 2나노 공정 양산을 시작했다. 주요 고객사로 퀄컴과 테슬라가 거론되고 있다.",
             time = "오전 7:45",
             category = "IT",
@@ -75,6 +79,40 @@ object MockData {
         MarketIndicator(name = "WTI 유가", value = "82.14", change = "−1.08%", direction = MarketDirection.DOWN)
     )
 
+    val TICKER_PAGES = listOf(
+        listOf(
+            MarketIndicator(name = "코스피", value = "2,856.13", change = "+0.72%", direction = MarketDirection.UP),
+            MarketIndicator(name = "코스닥", value = "871.42", change = "+0.38%", direction = MarketDirection.UP)
+        ),
+        listOf(
+            MarketIndicator(name = "원화/달러", value = "1,356.80", change = "−0.41%", direction = MarketDirection.DOWN),
+            MarketIndicator(name = "원화/엔화", value = "905.14", change = "−0.22%", direction = MarketDirection.DOWN)
+        ),
+        listOf(
+            MarketIndicator(name = "금", value = "2,418.90", change = "+0.52%", direction = MarketDirection.UP),
+            MarketIndicator(name = "은", value = "31.18", change = "+0.64%", direction = MarketDirection.UP)
+        ),
+        listOf(
+            MarketIndicator(name = "S&P 500", value = "5,303.27", change = "+0.92%", direction = MarketDirection.UP),
+            MarketIndicator(name = "나스닥", value = "17,940.22", change = "+1.21%", direction = MarketDirection.UP)
+        ),
+        listOf(
+            MarketIndicator(name = "다우", value = "39,582.10", change = "+0.84%", direction = MarketDirection.UP),
+            MarketIndicator(name = "WTI 유가", value = "82.14", change = "−1.08%", direction = MarketDirection.DOWN)
+        )
+    )
+
+    val MARKET_INDEX_LIST = listOf(
+        MarketIndex("국내", "코스피", "2,856.13", "+0.72%", "2,835.70", MarketDirection.UP),
+        MarketIndex("국내", "코스닥", "871.42", "+0.38%", "868.12", MarketDirection.UP),
+        MarketIndex("미국", "S&P 500", "5,303.27", "+0.92%", "5,254.35", MarketDirection.UP),
+        MarketIndex("미국", "나스닥", "17,940.22", "+1.21%", "17,726.10", MarketDirection.UP),
+        MarketIndex("환율", "달러/원", "1,368.50", "−0.34%", "1,373.20", MarketDirection.DOWN),
+        MarketIndex("원자재", "금", "2,418.90", "+0.52%", "2,406.39", MarketDirection.UP),
+        MarketIndex("원자재", "WTI 유가", "82.14", "−1.08%", "83.04", MarketDirection.DOWN),
+        MarketIndex("미국", "다우존스", "39,582.10", "+0.84%", "39,251.44", MarketDirection.UP)
+    )
+
     val usReport = USReport(
         date = "4/18 현지시간",
         body = "뉴욕증시 3대 지수는 강한 기업 실적과 인플레이션 둔화 신호에 힘입어 일제히 상승 마감했다. 엔비디아가 3.2% 오르며 AI 반도체 랠리를 다시 이끌었고, 금융주도 견조한 흐름을 보였다. 장 후반 발표된 주간 실업수당 청구건수가 예상치를 하회하며 연착륙 기대를 키웠다."
@@ -83,7 +121,7 @@ object MockData {
     val usArticles = listOf(
         Article(
             source = "Bloomberg",
-            headline = "엔비디아, 신제품 발표 앞두고 사상 최고가 경신",
+            headline = "엔비디아 신제품 공개 기대에 주가 사상 최고치 재경신",
             summary = "신형 AI 가속기 공개 기대와 데이터센터 수요가 겹치며 주가가 신고가를 재차 경신했다.",
             time = "06:40",
             category = "빅테크",
@@ -95,7 +133,7 @@ object MockData {
         ),
         Article(
             source = "Reuters",
-            headline = "애플, 서비스 매출 분기 사상 최대… AI 전환 가속",
+            headline = "애플 서비스 매출 분기 최대, 온디바이스 AI 전환 가속",
             summary = "서비스 부문 기록 경신과 온디바이스 AI 전략 강화가 동시에 확인됐다.",
             time = "06:12",
             category = "빅테크",
@@ -107,7 +145,7 @@ object MockData {
         ),
         Article(
             source = "WSJ",
-            headline = "JP모건 \"미국 경제 연착륙 확률 70%로 상향\"",
+            headline = "JP모건, 미국 경제 연착륙 확률 70%로 상향 제시",
             summary = "고용·소비 지표가 예상보다 견조해 경기 침체 가능성이 낮아졌다는 분석이 나왔다.",
             time = "05:58",
             category = "매크로",
@@ -119,7 +157,7 @@ object MockData {
         ),
         Article(
             source = "CNBC",
-            headline = "테슬라, 2분기 인도량 시장 예상 상회",
+            headline = "테슬라 2분기 인도량 예상 상회, 생산 효율 개선 확인",
             summary = "공격적 가격정책과 생산 효율 개선으로 인도량이 컨센서스를 웃돌았다.",
             time = "05:30",
             category = "모빌리티",
@@ -131,7 +169,7 @@ object MockData {
         ),
         Article(
             source = "Bloomberg",
-            headline = "연준 의사록, 6월 금리 인하 신호 강화",
+            headline = "연준 의사록, 6월 금리 인하 가능성 신호 한층 강화",
             summary = "의사록에서 인플레이션 둔화 확인 시 정책 완화 여지가 언급됐다.",
             time = "05:02",
             category = "금리",
@@ -143,7 +181,7 @@ object MockData {
         ),
         Article(
             source = "FT",
-            headline = "달러 인덱스 3주래 최저… 원화 강세 전환",
+            headline = "달러 인덱스 3주래 최저 하락, 원화 강세 흐름 전환",
             summary = "달러 약세와 위험선호 회복으로 원화가 강세 구간에 진입했다.",
             time = "04:45",
             category = "환율",
@@ -158,7 +196,7 @@ object MockData {
     val newsFeed = listOf(
         Article(
             source = "한국경제",
-            headline = "한은, 기준금리 동결… 연내 인하 시점 저울질",
+            headline = "한은 기준금리 동결 유지, 연내 인하 시점 신중 검토",
             summary = "물가 둔화 속도와 환율 변동성이 함께 고려되며, 완화 전환 시점은 하반기 이후가 유력하다는 분석이 나온다.",
             time = "12분 전",
             category = "금리",
@@ -171,7 +209,7 @@ object MockData {
         ),
         Article(
             source = "전자신문",
-            headline = "카카오, 자회사 구조조정 마무리 단계",
+            headline = "카카오 자회사 구조조정 마무리 단계, 핵심 사업 재편 가속",
             summary = "핵심 사업 중심 재편으로 수익성 개선에 속도를 내며, 연내 비용 효율화 효과가 본격 반영될 전망이다.",
             time = "34분 전",
             category = "빅테크",
@@ -184,7 +222,7 @@ object MockData {
         ),
         Article(
             source = "연합뉴스",
-            headline = "국회, 5월 임시회 소집… AI 기본법 처리 주목",
+            headline = "국회 5월 임시회 소집, AI 기본법 처리 논의 본격화",
             summary = "산업 경쟁력 강화를 위한 제도적 기반 마련이 핵심 쟁점으로 부상하면서 관련 업계의 관심이 높아지고 있다.",
             time = "1시간 전",
             category = "정책",
@@ -197,7 +235,7 @@ object MockData {
         ),
         Article(
             source = "조선비즈",
-            headline = "현대차, 전기차 신모델 북미 출시 일정 공개",
+            headline = "현대차 전기차 신모델 북미 출시 일정 공개, 점유율 확대 승부",
             summary = "북미 생산 거점과 배터리 공급망 전략을 결합해 전기차 시장 점유율 확대를 노리는 로드맵이 제시됐다.",
             time = "1시간 전",
             category = "모빌리티",
@@ -210,7 +248,7 @@ object MockData {
         ),
         Article(
             source = "매일경제",
-            headline = "시중은행 예금금리 다시 하락세",
+            headline = "시중은행 예금금리 다시 하락세, 고금리 특판 빠르게 축소",
             summary = "시장금리 안정과 은행권 조달 비용 변화가 반영되며 고금리 특판이 빠르게 축소되는 모습이다.",
             time = "2시간 전",
             category = "금융",
@@ -223,7 +261,7 @@ object MockData {
         ),
         Article(
             source = "Reuters",
-            headline = "유럽중앙은행, 6월 인하 사실상 확정",
+            headline = "유럽중앙은행 6월 금리 인하 유력, 정책 전환 기대 확산",
             summary = "유로존 경기 둔화와 인플레이션 완화가 맞물리며 정책 전환 기대가 강화되고 위험자산 선호가 회복되고 있다.",
             time = "3시간 전",
             category = "매크로",
@@ -241,7 +279,7 @@ object MockData {
     val NEWS_REALTIME = listOf(
         Article(
             source = "연합뉴스",
-            headline = "코스피 장중 2,860선 돌파… 외국인 순매수 확대",
+            headline = "코스피 장중 2860선 돌파, 외국인 순매수 확대 지속",
             summary = "반도체와 2차전지 동반 강세로 지수가 급등했다.",
             time = "방금 전",
             category = "경제",
@@ -254,7 +292,7 @@ object MockData {
         ),
         Article(
             source = "Reuters",
-            headline = "미 10년물 금리 4.2% 하회… 기술주 선물 강세",
+            headline = "미 10년물 금리 4.2% 하회, 기술주 선물 강세 확대",
             summary = "금리 하락과 함께 나스닥 선물이 반등세를 보인다.",
             time = "2분 전",
             category = "금리",
@@ -267,7 +305,7 @@ object MockData {
         ),
         Article(
             source = "전자신문",
-            headline = "국내 AI 반도체 스타트업, 대형 수주 계약 체결",
+            headline = "국내 AI 반도체 스타트업, 대형 수주 계약 체결로 기대 확대",
             summary = "데이터센터용 추론칩 납품 계약이 체결됐다.",
             time = "5분 전",
             category = "IT",
@@ -280,7 +318,7 @@ object MockData {
         ),
         Article(
             source = "매일경제",
-            headline = "원/달러 1,355원대 진입… 수입주 부담 완화",
+            headline = "원달러 환율 1355원대 진입, 수입주 원가 부담 완화",
             summary = "달러 약세가 이어지며 원화 강세 흐름이 나타났다.",
             time = "8분 전",
             category = "매크로",
@@ -293,7 +331,7 @@ object MockData {
         ),
         Article(
             source = "조선비즈",
-            headline = "서울 아파트 매물 소진 속도 빨라져… 호가 상승",
+            headline = "서울 아파트 매물 소진 빨라져, 핵심지 호가 상승세 확대",
             summary = "핵심 지역 중심으로 매물 감소가 나타나고 있다.",
             time = "11분 전",
             category = "부동산",
@@ -306,7 +344,7 @@ object MockData {
         ),
         Article(
             source = "Bloomberg",
-            headline = "엔비디아 공급망 병목 완화 신호… 부품주 동반 상승",
+            headline = "엔비디아 공급망 병목 완화 신호, 부품주 동반 상승 확산",
             summary = "GPU 공급 안정 기대가 확대되며 관련주가 강세다.",
             time = "14분 전",
             category = "빅테크",
@@ -322,7 +360,7 @@ object MockData {
     val NEWS_POPULAR = listOf(
         Article(
             source = "한국경제",
-            headline = "한은, 기준금리 동결… 연내 인하 시점 저울질",
+            headline = "한은 기준금리 동결 유지, 연내 인하 시점 신중 검토",
             summary = "물가 둔화와 환율 변동성 사이 균형을 유지했다.",
             time = "오늘",
             category = "금리",
@@ -335,7 +373,7 @@ object MockData {
         ),
         Article(
             source = "연합뉴스",
-            headline = "국회, 5월 임시회 소집… AI 기본법 처리 주목",
+            headline = "국회 5월 임시회 소집, AI 기본법 처리 논의 본격화",
             summary = "AI 제도화 논의가 본격화됐다.",
             time = "오늘",
             category = "정치",
@@ -348,7 +386,7 @@ object MockData {
         ),
         Article(
             source = "조선비즈",
-            headline = "현대차, 전기차 신모델 북미 출시 일정 공개",
+            headline = "현대차 전기차 신모델 북미 출시 일정 공개, 점유율 확대 승부",
             summary = "북미 시장 공략 로드맵이 공개됐다.",
             time = "오늘",
             category = "산업",
@@ -361,7 +399,7 @@ object MockData {
         ),
         Article(
             source = "Reuters",
-            headline = "유럽중앙은행, 6월 인하 사실상 확정",
+            headline = "유럽중앙은행 6월 금리 인하 유력, 정책 전환 기대 확산",
             summary = "정책 전환 기대가 강화됐다.",
             time = "오늘",
             category = "매크로",
@@ -374,7 +412,7 @@ object MockData {
         ),
         Article(
             source = "매일경제",
-            headline = "시중은행 예금금리 다시 하락세",
+            headline = "시중은행 예금금리 다시 하락세, 고금리 특판 빠르게 축소",
             summary = "고금리 특판이 빠르게 축소되고 있다.",
             time = "오늘",
             category = "금융",
@@ -387,7 +425,7 @@ object MockData {
         ),
         Article(
             source = "전자신문",
-            headline = "카카오, 자회사 구조조정 마무리 단계",
+            headline = "카카오 자회사 구조조정 마무리 단계, 핵심 사업 재편 가속",
             summary = "핵심 사업 중심 재편이 마무리 단계다.",
             time = "오늘",
             category = "빅테크",
@@ -445,6 +483,79 @@ object MockData {
         )
     )
 
+    val companyFinancialSeries: Map<String, FinancialSeries> = mapOf(
+        "005930" to FinancialSeries(
+            metrics = listOf(
+                metric("매출", 250f to "250조원", 275f to "275조원", 300f to "300조원", 320f to "320조원", 340f to "340조원"),
+                metric("영업이익", 2.1f to "2.1조원", 2.4f to "2.4조원", 2.8f to "2.8조원", 3.0f to "3조원", 3.4f to "3.4조원"),
+                metric("순이익", 1.5f to "1.5조원", 1.8f to "1.8조원", 2.1f to "2.1조원", 2.4f to "2.4조원", 2.7f to "2.7조원"),
+                metric("EPS", 2500f to "2,500원", 2850f to "2,850원", 3200f to "3,200원", 3600f to "3,600원", 4100f to "4,100원"),
+                metric("PER", 15.1f to "15.1배", 16.0f to "16.0배", 16.9f to "16.9배", 17.6f to "17.6배", 18.4f to "18.4배"),
+                metric("ROE", 7.4f to "7.4%", 8.5f to "8.5%", 9.6f to "9.6%", 10.8f to "10.8%", 12.1f to "12.1%")
+            )
+        ),
+        "000660" to FinancialSeries(
+            metrics = listOf(
+                metric("매출", 36f to "36조원", 41f to "41조원", 46f to "46조원", 52f to "52조원", 58f to "58조원"),
+                metric("영업이익", 6.1f to "6.1조원", 7.2f to "7.2조원", 8.4f to "8.4조원", 10.1f to "10.1조원", 12.2f to "12.2조원"),
+                metric("순이익", 4.8f to "4.8조원", 5.8f to "5.8조원", 6.8f to "6.8조원", 8.0f to "8조원", 9.6f to "9.6조원"),
+                metric("EPS", 8600f to "8,600원", 10300f to "10,300원", 12000f to "12,000원", 14200f to "14,200원", 16800f to "16,800원"),
+                metric("PER", 10.2f to "10.2배", 11.0f to "11.0배", 11.8f to "11.8배", 13.2f to "13.2배", 14.6f to "14.6배"),
+                metric("ROE", 11.1f to "11.1%", 12.6f to "12.6%", 14.2f to "14.2%", 15.9f to "15.9%", 17.3f to "17.3%")
+            )
+        ),
+        "NVDA" to FinancialSeries(
+            metrics = listOf(
+                metric("매출", 27f to "$27B", 43f to "$43B", 61f to "$61B", 130f to "$130B", 195f to "$195B"),
+                metric("영업이익", 12f to "$12B", 21f to "$21B", 33f to "$33B", 82f to "$82B", 124f to "$124B"),
+                metric("순이익", 10f to "$10B", 18f to "$18B", 30f to "$30B", 73f to "$73B", 112f to "$112B"),
+                metric("EPS", 0.4f to "$0.4", 0.8f to "$0.8", 1.2f to "$1.2", 2.9f to "$2.9", 4.5f to "$4.5"),
+                metric("PER", 36.1f to "36.1배", 40.3f to "40.3배", 44.5f to "44.5배", 48.2f to "48.2배", 52.1f to "52.1배"),
+                metric("ROE", 40.2f to "40.2%", 45.6f to "45.6%", 51.0f to "51.0%", 57.4f to "57.4%", 61.8f to "61.8%")
+            )
+        ),
+        "035420" to FinancialSeries(
+            metrics = listOf(
+                metric("매출", 9.4f to "9.4조원", 10.1f to "10.1조원", 10.8f to "10.8조원", 11.5f to "11.5조원", 12.6f to "12.6조원"),
+                metric("영업이익", 1.2f to "1.2조원", 1.4f to "1.4조원", 1.6f to "1.6조원", 1.8f to "1.8조원", 2.1f to "2.1조원"),
+                metric("순이익", 0.95f to "0.95조원", 1.08f to "1.08조원", 1.2f to "1.2조원", 1.35f to "1.35조원", 1.55f to "1.55조원"),
+                metric("EPS", 4700f to "4,700원", 5150f to "5,150원", 5600f to "5,600원", 6300f to "6,300원", 7100f to "7,100원"),
+                metric("PER", 18.7f to "18.7배", 19.6f to "19.6배", 20.6f to "20.6배", 21.4f to "21.4배", 22.7f to "22.7배"),
+                metric("ROE", 6.4f to "6.4%", 7.1f to "7.1%", 7.9f to "7.9%", 8.6f to "8.6%", 9.4f to "9.4%")
+            )
+        ),
+        "AAPL" to FinancialSeries(
+            metrics = listOf(
+                metric("매출", 356f to "$356B", 374f to "$374B", 391f to "$391B", 408f to "$408B", 427f to "$427B"),
+                metric("영업이익", 108f to "$108B", 115f to "$115B", 121f to "$121B", 126f to "$126B", 132f to "$132B"),
+                metric("순이익", 86f to "$86B", 91f to "$91B", 97f to "$97B", 101f to "$101B", 106f to "$106B"),
+                metric("EPS", 5.6f to "$5.6", 6.0f to "$6.0", 6.4f to "$6.4", 6.8f to "$6.8", 7.2f to "$7.2"),
+                metric("PER", 25.9f to "25.9배", 26.7f to "26.7배", 27.5f to "27.5배", 28.1f to "28.1배", 29.0f to "29.0배"),
+                metric("ROE", 144f to "144%", 148f to "148%", 152f to "152%", 156f to "156%", 161f to "161%")
+            )
+        ),
+        "051910" to FinancialSeries(
+            metrics = listOf(
+                metric("매출", 41f to "41조원", 45f to "45조원", 49f to "49조원", 53f to "53조원", 58f to "58조원"),
+                metric("영업이익", 1.9f to "1.9조원", 2.4f to "2.4조원", 2.9f to "2.9조원", 3.4f to "3.4조원", 4.1f to "4.1조원"),
+                metric("순이익", 1.3f to "1.3조원", 1.6f to "1.6조원", 2.0f to "2조원", 2.5f to "2.5조원", 3.1f to "3.1조원"),
+                metric("EPS", 7600f to "7,600원", 8700f to "8,700원", 9800f to "9,800원", 11300f to "11,300원", 12900f to "12,900원"),
+                metric("PER", 13.4f to "13.4배", 14.5f to "14.5배", 15.6f to "15.6배", 16.8f to "16.8배", 18.1f to "18.1배"),
+                metric("ROE", 4.4f to "4.4%", 5.3f to "5.3%", 6.2f to "6.2%", 7.5f to "7.5%", 8.9f to "8.9%")
+            )
+        ),
+        "TSLA" to FinancialSeries(
+            metrics = listOf(
+                metric("매출", 73f to "$73B", 85f to "$85B", 97f to "$97B", 112f to "$112B", 128f to "$128B"),
+                metric("영업이익", 5.4f to "$5.4B", 6.7f to "$6.7B", 8.1f to "$8.1B", 10.4f to "$10.4B", 13.0f to "$13.0B"),
+                metric("순이익", 4.3f to "$4.3B", 5.5f to "$5.5B", 6.7f to "$6.7B", 8.6f to "$8.6B", 10.9f to "$10.9B"),
+                metric("EPS", 2.1f to "$2.1", 2.6f to "$2.6", 3.2f to "$3.2", 4.0f to "$4.0", 4.9f to "$4.9"),
+                metric("PER", 33.2f to "33.2배", 37.8f to "37.8배", 42.7f to "42.7배", 49.3f to "49.3배", 56.1f to "56.1배"),
+                metric("ROE", 10.1f to "10.1%", 12.2f to "12.2%", 14.3f to "14.3%", 16.7f to "16.7%", 19.8f to "19.8%")
+            )
+        )
+    )
+
     val bookmarkedArticles = listOf(
         Article(
             source = "Bloomberg",
@@ -466,6 +577,23 @@ object MockData {
             summary = "AI 산업 규제와 진흥의 균형을 둘러싼 논의가 본격화되며 기업 대응 전략 수립이 요구된다.",
             time = "1시간 전",
             tag = "정치"
+        )
+    )
+
+    private fun metric(
+        title: String,
+        @Suppress("UNUSED_PARAMETER") y2022: Pair<Float, String>,
+        y2023: Pair<Float, String>,
+        y2024: Pair<Float, String>,
+        y2025: Pair<Float, String>,
+        y2026: Pair<Float, String>
+    ): FinancialMetric = FinancialMetric(
+        title = title,
+        values = listOf(
+            YearFinancialValue("2023", y2023.first, y2023.second),
+            YearFinancialValue("2024", y2024.first, y2024.second),
+            YearFinancialValue("2025", y2025.first, y2025.second),
+            YearFinancialValue("2026", y2026.first, y2026.second)
         )
     )
 }
