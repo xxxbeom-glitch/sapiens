@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.breaktobreak.dailynews"
+    namespace = "com.sapiens.app"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -13,7 +13,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.breaktobreak.dailynews"
+        applicationId = "com.sapiens.app"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
