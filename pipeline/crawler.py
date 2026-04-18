@@ -646,16 +646,16 @@ def crawl_yahoo_tech() -> list[dict[str, Any]]:
         return []
 
 
-def crawl_yahoo_market_news() -> list[dict[str, Any]]:
+def crawl_yahoo_morning_brief() -> list[dict[str, Any]]:
     """
-    Stock market topic 뉴스 스트림.
-    https://finance.yahoo.com/topic/stock-market-news/
+    Morning Brief 토픽 뉴스 스트림.
+    https://finance.yahoo.com/topic/morning-brief/
     """
-    u = f"{YAHOO_FINANCE}/topic/stock-market-news/"
+    u = f"{YAHOO_FINANCE}/topic/morning-brief/"
     try:
         return _crawl_yahoo_finance_list_url(u, YAHOO_MAX_LIST_ITEMS)
     except Exception as e:
-        logger.exception("crawl_yahoo_market_news 실패: %s", e)
+        logger.exception("crawl_yahoo_morning_brief 실패: %s", e)
         return []
 
 

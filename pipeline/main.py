@@ -47,10 +47,10 @@ def run() -> None:
     domestic["popular"] = crawler.dedupe_items(domestic["popular"])
     domestic["main"] = crawler.dedupe_items(domestic["main"])
 
-    # 2) 해외: Yahoo Finance HTML(뉴스 / 테크 / stock-market topic) + NAVER 아침 신문(한경+매경)
+    # 2) 해외: Yahoo Finance HTML(뉴스 / 테크 / morning-brief) + NAVER 아침 신문(한경+매경)
     overseas_stocks = crawler.crawl_yahoo_stocks()
     overseas_tech = crawler.crawl_yahoo_tech()
-    yahoo_market_news = crawler.crawl_yahoo_market_news()
+    yahoo_morning_brief = crawler.crawl_yahoo_morning_brief()
     newspaper_hankyung = crawler.crawl_hankyung_newspaper()
     newspaper_maeil = crawler.crawl_maeil_newspaper()
     newspaper_merged: list[dict] = list(newspaper_hankyung) + list(newspaper_maeil)
@@ -65,7 +65,7 @@ def run() -> None:
         "main": len(domestic["main"]),
         "overseas_stocks": len(overseas_stocks),
         "overseas_tech": len(overseas_tech),
-        "yahoo_market_news": len(yahoo_market_news),
+        "yahoo_morning_brief": len(yahoo_morning_brief),
         "newspaper_merged": len(newspaper_merged),
         "indicators": len(indicators),
     }
@@ -97,7 +97,7 @@ def run() -> None:
         if ai:
             fs_morning.append(summarizer.merge_to_firestore_article(row, ai))
 
-    # Yahoo Finance HTML: 뉴스(스톡) / 테크 + stock-market topic(→ briefing/us_market/articles)
+    # Yahoo Finance HTML: 뉴스(스톡) / 테크 + morning-brief(→ briefing/us_market/articles)
     fs_overseas_stocks: list[dict] = []
     for row in summarizer.summarize_batch(client, overseas_stocks):
         ai = row.pop("_ai", None)
@@ -110,16 +110,16 @@ def run() -> None:
         if ai:
             fs_overseas_tech.append(summarizer.merge_to_firestore_article(row, ai))
 
-    fs_yahoo_market: list[dict] = []
-    for row in summarizer.summarize_batch(client, yahoo_market_news):
+    fs_yahoo_morning_brief: list[dict] = []
+    for row in summarizer.summarize_batch(client, yahoo_morning_brief):
         ai = row.pop("_ai", None)
         if ai:
-            fs_yahoo_market.append(summarizer.merge_to_firestore_article(row, ai))
+            fs_yahoo_morning_brief.append(summarizer.merge_to_firestore_article(row, ai))
 
-    # 시황 리포트: 해외(스톡/테크/stock-market topic) 요약 + 국내 지표
+    # 시황 리포트: 해외(스톡/테크/morning-brief) 요약 + 국내 지표
     try:
         fs_for_report: list[dict] = (
-            list(fs_overseas_stocks) + list(fs_overseas_tech) + list(fs_yahoo_market)
+            list(fs_overseas_stocks) + list(fs_overseas_tech) + list(fs_yahoo_morning_brief)
         )
         report = summarizer.generate_market_report(client, indicators, fs_for_report)
         logger.info("시황 요약:\n%s", report.get("report", "")[:500])
@@ -130,7 +130,7 @@ def run() -> None:
     firebase_client.save_morning_articles(fs_morning)
     firebase_client.save_overseas_stocks_articles(fs_overseas_stocks)
     firebase_client.save_overseas_tech_articles(fs_overseas_tech)
-    firebase_client.save_us_market_articles(fs_yahoo_market)
+    firebase_client.save_us_market_articles(fs_yahoo_morning_brief)
     firebase_client.save_market_indicators(indicators)
     firebase_client.save_news_feed(fs_realtime, "realtime")
     firebase_client.save_news_feed(fs_popular, "popular")
@@ -172,7 +172,7 @@ def run() -> None:
         + len(fs_morning)
         + len(fs_overseas_stocks)
         + len(fs_overseas_tech)
-        + len(fs_yahoo_market)
+        + len(fs_yahoo_morning_brief)
     )
     logger.info(
         "완료 — 뉴스 저장: %s건, 지표: %s, 종목 저장: %s, 소요 %.1f초",
