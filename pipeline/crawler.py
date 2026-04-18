@@ -192,6 +192,72 @@ def _collect_naver_links_from_list(html: str, max_n: int) -> list[dict[str, Any]
     return out
 
 
+def _parse_naver_ranked_simple_news_li(li) -> dict[str, Any] | None:
+    """
+    많이 본 뉴스(RANK) 페이지: div.hotNewsList ul.simpleNewsList li
+    - 링크/제목: a[href], title 속성(제목), a 텍스트(요약용)
+    - span.press, span.wdate; 썸네일 없음
+    """
+    a = li.select_one("a[href]")
+    if not a:
+        return None
+    url = _resolve_naver_news_href((a.get("href") or "").strip())
+    if not url:
+        return None
+    title = ((a.get("title") or "").strip() or a.get_text(strip=True) or "").strip()
+    if len(title) < 2:
+        return None
+    pr = li.select_one("span.press")
+    if pr and pr.get_text(strip=True):
+        source = pr.get_text(strip=True)
+    else:
+        source = "네이버금융"
+    wd = li.select_one("span.wdate")
+    published = wd.get_text(strip=True) if wd else ""
+    raw = a.get_text(separator=" ", strip=True)
+    summary = (raw[:SUMMARY_CHARS] + ("…" if len(raw) > SUMMARY_CHARS else "")).strip() or title[:SUMMARY_CHARS]
+    return {
+        "title": title,
+        "url": url,
+        "source": source,
+        "published_at": published,
+        "summary": summary,
+        "category": "",
+        "thumbnail_url": "",
+    }
+
+
+def _collect_naver_ranked_from_list(html: str, max_n: int) -> list[dict[str, Any]]:
+    """많이 본 뉴스 전용 목록 (simpleNewsList)."""
+    soup = BeautifulSoup(html, "lxml")
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    debug_lines: list[str] = []
+    debug = os.environ.get("SAPIENS_NAVER_CRAWL_DEBUG", "").lower() in ("1", "true", "yes")
+
+    for li in soup.select("div.hotNewsList ul.simpleNewsList li"):
+        row = _parse_naver_ranked_simple_news_li(li)
+        if not row:
+            continue
+        u = row["url"]
+        if u in seen:
+            continue
+        seen.add(u)
+        if debug:
+            debug_lines.append(f"{u} | {row['title']!r} | {row.get('source')!r}")
+        out.append(row)
+        if len(out) >= max_n:
+            break
+    if debug and debug_lines:
+        logger.info(
+            "NAVER CRAWL DEBUG (RANK): simpleNewsList li %d (max %d):\n%s",
+            len(debug_lines),
+            max_n,
+            "\n".join(debug_lines),
+        )
+    return out
+
+
 def crawl_naver_realtime() -> list[dict[str, Any]]:
     url = "https://finance.naver.com/news/news_list.naver?mode=LSS2D&section_id=101&section_id2=258"
     items: list[dict[str, Any]] = []
@@ -213,7 +279,7 @@ def crawl_naver_ranked() -> list[dict[str, Any]]:
         html = _fetch(url)
         if not html:
             return items
-        links = _collect_naver_links_from_list(html, MAX_PER_SECTION * 2)
+        links = _collect_naver_ranked_from_list(html, MAX_PER_SECTION * 2)
         for rank, row in enumerate(links[:MAX_PER_SECTION], start=1):
             d = dict(row)
             d["title"] = f"[{rank}] {d['title']}"
