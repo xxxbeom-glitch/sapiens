@@ -70,6 +70,7 @@ import com.sapiens.app.ui.theme.Elevated
 import com.sapiens.app.ui.theme.MarketDown
 import com.sapiens.app.ui.theme.MarketFlat
 import com.sapiens.app.ui.theme.MarketUp
+import com.sapiens.app.ui.theme.BottomSheetBottomPadding
 import com.sapiens.app.ui.theme.SheetHorizontal
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
@@ -202,7 +203,7 @@ fun CompanyBottomSheet(
                         .fillMaxWidth()
                         .verticalScroll(scrollState)
                         .padding(horizontal = SheetHorizontal)
-                        .padding(bottom = 24.dp),
+                        .padding(bottom = BottomSheetBottomPadding),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Spacer(modifier = Modifier.height(12.dp))

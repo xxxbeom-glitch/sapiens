@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.Card
-import com.sapiens.app.ui.theme.SheetBottom
+import com.sapiens.app.ui.theme.BottomSheetBottomPadding
 import com.sapiens.app.ui.theme.SheetHorizontal
 import com.sapiens.app.ui.theme.SheetTop
 import com.sapiens.app.ui.theme.SummaryPointSpacing
@@ -65,6 +65,7 @@ fun ArticleBottomSheet(
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .padding(horizontal = SheetHorizontal)
+                .padding(bottom = BottomSheetBottomPadding)
         ) {
             Box(
                 modifier = Modifier
@@ -125,7 +126,7 @@ fun ArticleBottomSheet(
             )
 
             Column(
-                modifier = Modifier.padding(top = 14.dp, bottom = SheetBottom),
+                modifier = Modifier.padding(top = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(SummaryPointSpacing)
             ) {
                 resolvedPoints.take(4).forEachIndexed { index, point ->

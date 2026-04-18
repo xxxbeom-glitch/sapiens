@@ -65,14 +65,8 @@ class NewsRepositoryImpl(
         awaitClose { reg.remove() }
     }.distinctUntilChanged()
 
-    override fun getNewsFeed(type: String): Flow<List<Article>> = callbackFlow {
-        val docId = when (type) {
-            NewsFeedType.REALTIME -> "realtime"
-            NewsFeedType.POPULAR -> "popular"
-            NewsFeedType.MAIN -> "main"
-            else -> "main"
-        }
-        val reg = firestore.collection(COLLECTION_NEWS).document(docId)
+    override fun getNewsFeed(type: NewsFeedType): Flow<List<Article>> = callbackFlow {
+        val reg = firestore.collection(COLLECTION_NEWS).document(type.documentId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     trySend(emptyList())

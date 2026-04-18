@@ -1,7 +1,6 @@
 package com.sapiens.app.ui.news
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,12 +9,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -32,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.ui.common.ArticleBottomSheet
 import com.sapiens.app.ui.theme.Accent
@@ -42,7 +44,7 @@ import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
 
 private val domesticTabLabels = listOf("실시간 속보", "많이 본 뉴스", "주요 뉴스")
-private val overseasTabLabels = listOf("실시간 속보", "인기뉴스", "주요뉴스")
+private val overseasTabLabels = listOf("Stocks", "Technology")
 
 @Composable
 fun NewsScreen(viewModel: NewsViewModel) {
@@ -50,9 +52,8 @@ fun NewsScreen(viewModel: NewsViewModel) {
     val realtimeNews by viewModel.realtimeNews.collectAsState()
     val popularNews by viewModel.popularNews.collectAsState()
     val mainNews by viewModel.mainNews.collectAsState()
-    val overseasRealtime by viewModel.overseasRealtime.collectAsState()
-    val overseasPopular by viewModel.overseasPopular.collectAsState()
-    val overseasMain by viewModel.overseasMain.collectAsState()
+    val overseasStocks by viewModel.overseasStocks.collectAsState()
+    val overseasTech by viewModel.overseasTech.collectAsState()
 
     var selectedArticle by remember { mutableStateOf<Article?>(null) }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
@@ -66,9 +67,9 @@ fun NewsScreen(viewModel: NewsViewModel) {
 
     val currentItems = when {
         isOverseas -> when (selectedTabIndex) {
-            0 -> overseasRealtime
-            1 -> overseasPopular
-            else -> overseasMain
+            0 -> overseasStocks
+            1 -> overseasTech
+            else -> overseasStocks
         }
         else -> when (selectedTabIndex) {
             0 -> realtimeNews
@@ -76,7 +77,7 @@ fun NewsScreen(viewModel: NewsViewModel) {
             else -> mainNews
         }
     }
-    val showRank = selectedTabIndex == 1
+    val showRank = !isOverseas && selectedTabIndex == 1
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (isLoading) {
@@ -94,51 +95,59 @@ fun NewsScreen(viewModel: NewsViewModel) {
                     .fillMaxSize()
                     .background(Background)
             ) {
+                val pillSurface = Card.copy(alpha = 0.5f)
+                val innerH = 24.dp
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.End,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Text(
+                        text = "뉴스",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = TextPrimary
+                    )
                     Row(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(22.dp))
-                            .border(
-                                width = 1.dp,
-                                color = TextSecondary.copy(alpha = 0.28f),
-                                shape = RoundedCornerShape(22.dp)
-                            )
+                            .height(30.dp)
+                            .clip(RoundedCornerShape(15.dp))
+                            .background(pillSurface)
+                            .padding(3.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val domesticSelected = !isOverseas
                         Box(
+                            contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(22.dp))
-                                .background(if (domesticSelected) Accent else Color.Transparent)
-                                .clickable {
-                                    isOverseas = false
-                                }
-                                .padding(horizontal = 14.dp, vertical = 8.dp),
-                            contentAlignment = Alignment.Center
+                                .weight(1f)
+                                .height(innerH)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (!isOverseas) Accent else Color.Transparent)
+                                .clickable { isOverseas = false }
+                                .padding(horizontal = 12.dp)
                         ) {
                             Text(
-                                text = "국내뉴스",
-                                color = if (domesticSelected) Color.White else TextSecondary
+                                text = "국내",
+                                color = if (!isOverseas) Color.White else TextSecondary,
+                                fontSize = 12.sp
                             )
                         }
                         Box(
+                            contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(22.dp))
+                                .weight(1f)
+                                .height(innerH)
+                                .clip(RoundedCornerShape(10.dp))
                                 .background(if (isOverseas) Accent else Color.Transparent)
-                                .clickable {
-                                    isOverseas = true
-                                }
-                                .padding(horizontal = 14.dp, vertical = 8.dp),
-                            contentAlignment = Alignment.Center
+                                .clickable { isOverseas = true }
+                                .padding(horizontal = 12.dp)
                         ) {
                             Text(
-                                text = "해외뉴스",
-                                color = if (isOverseas) Color.White else TextSecondary
+                                text = "해외",
+                                color = if (isOverseas) Color.White else TextSecondary,
+                                fontSize = 12.sp
                             )
                         }
                     }

@@ -8,12 +8,17 @@ interface NewsRepository {
     fun getMorningArticles(): Flow<List<Article>>
     fun getUsArticles(): Flow<List<Article>>
     fun getMarketIndicators(): Flow<List<MarketIndicator>>
-    fun getNewsFeed(type: String): Flow<List<Article>>
+    fun getNewsFeed(type: NewsFeedType): Flow<List<Article>>
 }
 
-/** `getNewsFeed(type)` 인자 — Firestore `news/feed` 문서 필드명과 동일 */
-object NewsFeedType {
-    const val REALTIME = "realtime"
-    const val POPULAR = "popular"
-    const val MAIN = "main"
+/**
+ * Firestore `news/{documentId}` 문서의 `articles` 필드와 1:1.
+ * 국내: realtime / popular / main, 해외: overseas_stocks / overseas_tech
+ */
+enum class NewsFeedType(val documentId: String) {
+    REALTIME("realtime"),
+    POPULAR("popular"),
+    MAIN("main"),
+    OVERSEAS_STOCKS("overseas_stocks"),
+    OVERSEAS_TECH("overseas_tech"),
 }

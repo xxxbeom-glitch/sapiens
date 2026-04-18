@@ -29,14 +29,11 @@ class NewsViewModel(
     private val _mainNews = MutableStateFlow(MockData.NEWS_MAIN)
     val mainNews: StateFlow<List<Article>> = _mainNews.asStateFlow()
 
-    private val _overseasRealtime = MutableStateFlow(MockData.OVERSEAS_NEWS_REALTIME)
-    val overseasRealtime: StateFlow<List<Article>> = _overseasRealtime.asStateFlow()
+    private val _overseasStocks = MutableStateFlow(emptyList<Article>())
+    val overseasStocks: StateFlow<List<Article>> = _overseasStocks.asStateFlow()
 
-    private val _overseasPopular = MutableStateFlow(MockData.OVERSEAS_NEWS_POPULAR)
-    val overseasPopular: StateFlow<List<Article>> = _overseasPopular.asStateFlow()
-
-    private val _overseasMain = MutableStateFlow(MockData.OVERSEAS_NEWS_MAIN)
-    val overseasMain: StateFlow<List<Article>> = _overseasMain.asStateFlow()
+    private val _overseasTech = MutableStateFlow(emptyList<Article>())
+    val overseasTech: StateFlow<List<Article>> = _overseasTech.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -51,6 +48,16 @@ class NewsViewModel(
                 _popularNews.value = popular.ifEmpty { MockData.NEWS_POPULAR }
                 _mainNews.value = main.ifEmpty { MockData.NEWS_MAIN }
                 _isLoading.value = false
+            }
+        }
+        viewModelScope.launch {
+            repository.getNewsFeed(NewsFeedType.OVERSEAS_STOCKS).collect { list ->
+                _overseasStocks.value = list
+            }
+        }
+        viewModelScope.launch {
+            repository.getNewsFeed(NewsFeedType.OVERSEAS_TECH).collect { list ->
+                _overseasTech.value = list
             }
         }
     }

@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sapiens.app.data.model.Company
 import com.sapiens.app.ui.theme.Accent
+import com.sapiens.app.ui.theme.BottomSheetBottomPadding
 import com.sapiens.app.ui.theme.Card
 import com.sapiens.app.ui.theme.Elevated
 import com.sapiens.app.ui.theme.SheetHorizontal
@@ -92,6 +93,7 @@ fun CompanySearchBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(bottom = BottomSheetBottomPadding)
         ) {
             Row(
                 modifier = Modifier
