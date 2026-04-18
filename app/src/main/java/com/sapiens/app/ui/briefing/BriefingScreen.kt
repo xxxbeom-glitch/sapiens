@@ -33,17 +33,12 @@ fun BriefingScreen(viewModel: BriefingViewModel) {
     val isLoading by viewModel.isLoading.collectAsState()
     val morningArticles by viewModel.morningArticles.collectAsState()
     val usArticles by viewModel.usArticles.collectAsState()
-    val marketIndicators by viewModel.marketIndicators.collectAsState()
 
     var selectedArticle by remember { mutableStateOf<Article?>(null) }
     val pagerState = rememberPagerState(
         initialPage = 0,
         pageCount = { morningArticles.size.coerceAtLeast(1) }
     )
-
-    val tickerPages = remember(marketIndicators) {
-        marketIndicators.chunked(2).filter { it.isNotEmpty() }
-    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (isLoading) {
@@ -64,7 +59,7 @@ fun BriefingScreen(viewModel: BriefingViewModel) {
             ) {
                 item {
                     SectionLabel(
-                        title = "아침 브리핑"
+                        title = "국내 주요뉴스"
                     )
                 }
 
@@ -78,13 +73,7 @@ fun BriefingScreen(viewModel: BriefingViewModel) {
 
                 item {
                     Spacer(modifier = Modifier.height(18.dp))
-                    SectionLabel(title = "미국 시황")
-                }
-
-                if (tickerPages.isNotEmpty()) {
-                    item {
-                        MarketTickerBanner(pages = tickerPages)
-                    }
+                    SectionLabel(title = "해외 주요뉴스")
                 }
 
                 item {

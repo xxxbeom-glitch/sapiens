@@ -646,19 +646,6 @@ def crawl_yahoo_tech() -> list[dict[str, Any]]:
         return []
 
 
-def crawl_yahoo_morning_brief() -> list[dict[str, Any]]:
-    """
-    Morning Brief 토픽 뉴스 스트림.
-    https://finance.yahoo.com/topic/morning-brief/
-    """
-    u = f"{YAHOO_FINANCE}/topic/morning-brief/"
-    try:
-        return _crawl_yahoo_finance_list_url(u, YAHOO_MAX_LIST_ITEMS)
-    except Exception as e:
-        logger.exception("crawl_yahoo_morning_brief 실패: %s", e)
-        return []
-
-
 NAVER_MEDIA = "https://media.naver.com"
 MAX_NEWSPAPER_ITEMS = 15
 

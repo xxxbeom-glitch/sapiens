@@ -109,6 +109,69 @@ def generate_market_report(
     raise last_err or RuntimeError("generate_market_report failed")
 
 
+def curate_us_market_articles(
+    client: anthropic.Anthropic,
+    items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    stocks+tech 합친 리스트에서 Claude로 최대 8개 엄선 (중복·광고성 제외).
+    8개 미만이면 전부 반환; 8개 이하면 API 생략하고 전부 반환.
+    """
+    if not items:
+        return []
+    n = len(items)
+    if n <= 8:
+        return [dict(x) for x in items]
+
+    lines: list[str] = []
+    for i, it in enumerate(items):
+        t = str(it.get("title", ""))[:220]
+        s = str(it.get("summary", ""))[:400]
+        src = str(it.get("source", ""))[:80]
+        u = str(it.get("url", ""))[:300]
+        lines.append(f'[{i}] title: {t}\n  source: {src}\n  url: {u}\n  lead: {s}')
+    body = "\n\n".join(lines)
+    user = (
+        "당신은 글로벌 금융 뉴스 큐레이터입니다.\n"
+        "투자자 관점에서 가장 중요하고, 서로 **다른 주제**를 넓게 커버하도록 **정확히 8개** 기사를 고르세요. "
+        "제목·내용이 **중복/유사**한 기사는 **하나만** 남기세요. **광고성·낚시성(클릭베이트)** 느낌이 강한 기사는 제외하세요.\n"
+        f"아래 [0]~[{n-1}] 인덱스로 식별됩니다. **서로 다른 정수 8개**의 인덱스만 JSON으로 출력하세요.\n"
+        '형식(배열만, 길이 8): {{"selected_indices": [0,1,2,3,4,5,6,7]}}\n\n'
+        f"{body}"
+    )
+    last_err: Exception | None = None
+    for attempt in range(2):
+        try:
+            raw = _call_claude(client, user)
+            data = _extract_json(raw)
+            idxs = data.get("selected_indices", [])
+            if not isinstance(idxs, list) or not idxs:
+                raise ValueError("missing or invalid selected_indices")
+            picked: list[dict[str, Any]] = []
+            seen: set[int] = set()
+            for j in idxs:
+                if not isinstance(j, int) or j < 0 or j >= n or j in seen:
+                    continue
+                seen.add(j)
+                picked.append(dict(items[j]))
+            if not picked:
+                return [dict(items[i]) for i in range(min(8, n))]
+            for i in range(n):
+                if len(picked) >= 8:
+                    break
+                if i not in seen:
+                    seen.add(i)
+                    picked.append(dict(items[i]))
+            return picked[:8]
+        except Exception as e:
+            last_err = e
+            logger.warning("curate_us_market_articles 재시도 (%s): %s", attempt + 1, e)
+            if attempt == 0:
+                time.sleep(1.0)
+    logger.warning("curate_us_market_articles 실패, 상위 8개 사용: %s", last_err)
+    return [dict(items[i]) for i in range(min(8, n))]
+
+
 def summarize_batch(
     client: anthropic.Anthropic,
     items: list[dict[str, Any]],
