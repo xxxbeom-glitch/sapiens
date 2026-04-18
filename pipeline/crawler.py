@@ -21,13 +21,19 @@ logger = logging.getLogger(__name__)
 
 HEADERS = {
     "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 "
+        "(KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1"
     ),
     "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
 NAVER_BASE = "https://finance.naver.com"
+NAVER_M_STOCK = "https://m.stock.naver.com"
+NAVER_NEWS_M = {
+    "realtime": "https://m.stock.naver.com/investment/news/flashnews",
+    "ranked": "https://m.stock.naver.com/investment/news/ranknews",
+    "main": "https://m.stock.naver.com/investment/news/mainnews",
+}
 TOSS_INVEST_BASE = "https://www.tossinvest.com"
 TOSS_INVEST_NEWS_URL = "https://www.tossinvest.com/news"
 REQUEST_TIMEOUT = 20
@@ -68,6 +74,8 @@ def _resolve_naver_news_href(href: str) -> str:
     if h.startswith("/"):
         if h.startswith(("/mnp", "/include", "/article/option")) or "article" in h:
             return urljoin("https://n.news.naver.com", h).split("#")[0]
+        if h.startswith("/investment/"):
+            return urljoin(NAVER_M_STOCK, h).split("#")[0]
     return urljoin(NAVER_BASE, h).split("#")[0]
 
 
@@ -174,10 +182,7 @@ def _collect_naver_links_from_list(html: str, max_n: int) -> list[dict[str, Any]
 
 
 def crawl_naver_realtime() -> list[dict[str, Any]]:
-    url = (
-        "https://finance.naver.com/news/news_list.naver?"
-        "mode=LSS2D&section_id=101&section_id2=258"
-    )
+    url = NAVER_NEWS_M["realtime"]
     items: list[dict[str, Any]] = []
     try:
         html = _fetch(url)
@@ -191,7 +196,7 @@ def crawl_naver_realtime() -> list[dict[str, Any]]:
 
 
 def crawl_naver_ranked() -> list[dict[str, Any]]:
-    url = "https://finance.naver.com/news/news_list.naver?mode=RANK"
+    url = NAVER_NEWS_M["ranked"]
     items: list[dict[str, Any]] = []
     try:
         html = _fetch(url)
@@ -208,7 +213,7 @@ def crawl_naver_ranked() -> list[dict[str, Any]]:
 
 
 def crawl_naver_main() -> list[dict[str, Any]]:
-    url = f"{NAVER_BASE}/news/mainnews.naver"
+    url = NAVER_NEWS_M["main"]
     items: list[dict[str, Any]] = []
     try:
         html = _fetch(url)
@@ -226,7 +231,7 @@ def _debug_naver_mainnews_list_all_links() -> None:
     mainnews.naver HTML: NewsList_link 파싱 결과와 _collect_naver_links_from_list(max 15) 출력.
     사용:  python pipeline/crawler.py debug-naver-main  (pipeline 폴더 기준)
     """
-    u = f"{NAVER_BASE}/news/mainnews.naver"
+    u = NAVER_NEWS_M["main"]
     print("GET", u, file=sys.stderr, flush=True)
     html = _fetch(u)
     if not html:
