@@ -2,12 +2,14 @@ package com.sapiens.app.data.repository
 
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.MarketIndicator
+import com.sapiens.app.data.model.MarketIndexSnapshot
 import kotlinx.coroutines.flow.Flow
 
 interface NewsRepository {
     fun getMorningArticles(): Flow<List<Article>>
     fun getUsArticles(): Flow<List<Article>>
     fun getMarketIndicators(): Flow<List<MarketIndicator>>
+    fun getRepresentativeIndices(): Flow<MarketIndexSnapshot>
     fun getNewsFeed(type: NewsFeedType): Flow<List<Article>>
 }
 

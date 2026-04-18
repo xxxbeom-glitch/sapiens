@@ -33,6 +33,11 @@ data class MarketIndex(
     val direction: MarketDirection
 )
 
+data class MarketIndexSnapshot(
+    val indices: List<MarketIndex>,
+    val updatedAtMillis: Long
+)
+
 data class USReport(
     val date: String,
     val body: String

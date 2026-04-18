@@ -21,6 +21,21 @@ SYSTEM = (
 )
 
 
+_HANGUL_RE = re.compile(r"[가-힣]")
+_LATIN_RE = re.compile(r"[A-Za-z]")
+
+
+def _contains_hangul(text: str) -> bool:
+    return bool(_HANGUL_RE.search(text or ""))
+
+
+def _looks_english_headline(text: str) -> bool:
+    s = (text or "").strip()
+    if not s:
+        return False
+    return bool(_LATIN_RE.search(s)) and not _contains_hangul(s)
+
+
 def _extract_json(text: str) -> dict[str, Any]:
     text = text.strip()
     m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
@@ -51,6 +66,7 @@ def summarize_article(client: anthropic.Anthropic, title: str, summary: str, sou
     user = (
         f"다음 뉴스를 분석해 JSON만 출력하세요.\n"
         f'키: "headline", "category", "summary_points"\n'
+        f"headline은 반드시 한국어로 작성하세요. 원문이 영어면 자연스러운 한국어 제목으로 번역하세요.\n"
         f'category는 반드시 다음 중 하나: '
         f"경제, IT, 정치, 사회, 국제, 부동산, 산업, 금융, 매크로, 빅테크\n"
         f"summary_points는 문자열 배열, 각 항목은 수치·배경·영향을 담은 2~3문장.\n\n"
@@ -65,6 +81,14 @@ def summarize_article(client: anthropic.Anthropic, title: str, summary: str, sou
             data = _extract_json(raw)
             if "headline" not in data or "category" not in data or "summary_points" not in data:
                 raise ValueError(f"Invalid JSON keys: {data.keys()}")
+            data["headline"] = str(data.get("headline", "")).strip()
+            if _looks_english_headline(data["headline"]):
+                data["headline"] = translate_headline_to_korean(
+                    client=client,
+                    headline=data["headline"],
+                    source=source,
+                    summary=summary,
+                )
             pts = data["summary_points"]
             if not isinstance(pts, list):
                 raise ValueError("summary_points must be a list")
@@ -76,6 +100,42 @@ def summarize_article(client: anthropic.Anthropic, title: str, summary: str, sou
             if attempt == 0:
                 time.sleep(1.0)
     raise last_err or RuntimeError("summarize_article failed")
+
+
+def translate_headline_to_korean(
+    client: anthropic.Anthropic,
+    headline: str,
+    source: str,
+    summary: str = "",
+) -> str:
+    """영문 헤드라인을 한국어 투자 뉴스 제목으로 번역."""
+    src = (headline or "").strip()
+    if not src:
+        return src
+    user = (
+        "다음 뉴스 헤드라인을 한국어로 번역하세요.\n"
+        "의미를 보존하되 과장 없이 간결한 뉴스 제목 톤으로 작성하세요.\n"
+        '반드시 JSON 한 개만 출력: {"headline_ko":"..."}\n\n'
+        f"source: {source}\n"
+        f"headline_en: {src}\n"
+        f"context_summary: {(summary or '')[:400]}\n"
+    )
+    last_err: Exception | None = None
+    for attempt in range(2):
+        try:
+            raw = _call_claude(client, user)
+            data = _extract_json(raw)
+            ko = str(data.get("headline_ko", "")).strip()
+            if not ko:
+                raise ValueError("missing headline_ko")
+            return ko
+        except Exception as e:
+            last_err = e
+            logger.warning("translate_headline_to_korean 재시도 (%s): %s", attempt + 1, e)
+            if attempt == 0:
+                time.sleep(0.7)
+    logger.warning("translate_headline_to_korean 실패, 원문 유지: %s", last_err)
+    return src
 
 
 def generate_market_report(
@@ -272,9 +332,12 @@ def analyze_company(
 
 def merge_to_firestore_article(raw: dict[str, Any], ai: dict[str, Any]) -> dict[str, Any]:
     """앱 Article 스키마에 맞춘 dict."""
+    ko_headline = str(ai.get("headline", "")).strip() or str(raw.get("title", "")).strip()
     return {
         "source": raw.get("source", ""),
-        "headline": ai.get("headline", raw.get("title", "")),
+        "headline": ko_headline,
+        "headline_ko": ko_headline,
+        "headline_en": raw.get("title", ""),
         "summary": (raw.get("summary") or "")[:500],
         "time": raw.get("published_at") or "",
         "category": ai.get("category", ""),

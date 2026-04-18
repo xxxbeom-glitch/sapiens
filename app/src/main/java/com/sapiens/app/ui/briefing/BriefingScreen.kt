@@ -20,7 +20,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.sapiens.app.data.mock.MockData
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.ui.common.ArticleBottomSheet
 import com.sapiens.app.ui.theme.Accent
@@ -33,6 +32,8 @@ fun BriefingScreen(viewModel: BriefingViewModel) {
     val isLoading by viewModel.isLoading.collectAsState()
     val morningArticles by viewModel.morningArticles.collectAsState()
     val usArticles by viewModel.usArticles.collectAsState()
+    val marketIndices by viewModel.marketIndices.collectAsState()
+    val marketUpdatedLabel by viewModel.marketUpdatedLabel.collectAsState()
 
     var selectedArticle by remember { mutableStateOf<Article?>(null) }
     val pagerState = rememberPagerState(
@@ -90,14 +91,14 @@ fun BriefingScreen(viewModel: BriefingViewModel) {
 
                 item {
                     MarketIndexGrid(
-                        indices = MockData.MARKET_INDEX_LIST
+                        indices = marketIndices
                     )
                 }
 
                 item {
                     Spacer(modifier = Modifier.height(24.dp))
                     Text(
-                        text = "AI 요약 · 06:00 업데이트",
+                        text = marketUpdatedLabel,
                         style = MaterialTheme.typography.labelMedium,
                         color = TextSecondary,
                         modifier = Modifier.padding(horizontal = 20.dp)

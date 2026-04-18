@@ -41,6 +41,7 @@ import com.sapiens.app.ui.briefing.BriefingViewModel
 import com.sapiens.app.ui.company.CompanySearchBottomSheet
 import com.sapiens.app.ui.company.CompanyScreen
 import com.sapiens.app.ui.my.MyScreen
+import com.sapiens.app.ui.news.NewsRegionToggle
 import com.sapiens.app.ui.news.NewsScreen
 import com.sapiens.app.ui.news.NewsViewModel
 import com.sapiens.app.ui.theme.Accent
@@ -67,6 +68,7 @@ fun MainScreen(
 ) {
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     var showCompanySearchSheet by remember { mutableStateOf(false) }
+    var isOverseasNews by remember { mutableStateOf(false) }
     val addedCompanies = remember { mutableStateListOf<Company>() }
 
     val newsRepository = remember { NewsRepositoryImpl() }
@@ -80,7 +82,10 @@ fun MainScreen(
             MainTopAppBar(
                 title = tabs[selectedTabIndex].label,
                 showSearchAction = selectedTabIndex == 2,
-                onClickSearch = { showCompanySearchSheet = true }
+                onClickSearch = { showCompanySearchSheet = true },
+                showNewsRegionToggle = selectedTabIndex == 1,
+                isOverseasNews = isOverseasNews,
+                onOverseasNewsChange = { isOverseasNews = it }
             )
         },
         bottomBar = {
@@ -98,7 +103,10 @@ fun MainScreen(
         ) {
             when (selectedTabIndex) {
                 0 -> BriefingScreen(viewModel = briefingViewModel)
-                1 -> NewsScreen(viewModel = newsViewModel)
+                1 -> NewsScreen(
+                    viewModel = newsViewModel,
+                    isOverseas = isOverseasNews
+                )
                 2 -> CompanyScreen(
                     addedCompanies = addedCompanies
                 )
@@ -129,7 +137,10 @@ fun MainScreen(
 private fun MainTopAppBar(
     title: String,
     showSearchAction: Boolean,
-    onClickSearch: () -> Unit
+    onClickSearch: () -> Unit,
+    showNewsRegionToggle: Boolean = false,
+    isOverseasNews: Boolean = false,
+    onOverseasNewsChange: (Boolean) -> Unit = {}
 ) {
     TopAppBar(
         modifier = Modifier
@@ -147,16 +158,26 @@ private fun MainTopAppBar(
             )
         },
         actions = {
-            if (showSearchAction) {
-                IconButton(
-                    onClick = onClickSearch,
-                    interactionSource = remember { MutableInteractionSource() }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "기업 검색",
-                        tint = TextPrimary
-                    )
+            when {
+                showNewsRegionToggle -> {
+                    Box(Modifier.padding(end = 4.dp)) {
+                        NewsRegionToggle(
+                            isOverseas = isOverseasNews,
+                            onIsOverseasChange = onOverseasNewsChange
+                        )
+                    }
+                }
+                showSearchAction -> {
+                    IconButton(
+                        onClick = onClickSearch,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "기업 검색",
+                            tint = TextPrimary
+                        )
+                    }
                 }
             }
         },

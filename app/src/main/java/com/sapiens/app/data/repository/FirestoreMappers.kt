@@ -29,7 +29,9 @@ private fun Any?.asIndicatorList(): List<MarketIndicator> {
 
 private fun Map<*, *>.toArticle(): Article? {
     val source = this["source"] as? String ?: return null
-    val headline = this["headline"] as? String ?: return null
+    val headlineKo = this["headline_ko"] as? String
+    val headline = (headlineKo ?: this["headline"] as? String)?.trim().orEmpty()
+    if (headline.isBlank()) return null
     val summary = this["summary"] as? String ?: return null
     val time = this["time"] as? String ?: return null
     val category = this["category"] as? String ?: ""
