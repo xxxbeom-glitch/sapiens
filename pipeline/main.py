@@ -1,5 +1,8 @@
 """
 뉴스 크롤링 → Claude 요약 → Firestore 저장.
+
+RunPod 등에서 `from main import run` 시 import 단계에서 부작용·무거운 초기화가
+돌아가지 않도록, 로깅 설정·환경 로드·하위 모듈 import는 모두 `run()` 안에서 수행합니다.
 """
 from __future__ import annotations
 
@@ -7,22 +10,14 @@ import logging
 import os
 import time
 from pathlib import Path
+from typing import Any
 
-import anthropic
-from dotenv import load_dotenv
-
-import crawler
-import firebase_client
-import summarizer
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
 logger = logging.getLogger("pipeline")
 
 
-def _build_client() -> anthropic.Anthropic:
+def _build_client() -> Any:
+    import anthropic
+
     key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not key:
         raise RuntimeError("ANTHROPIC_API_KEY 가 설정되어 있어야 합니다.")
@@ -30,8 +25,19 @@ def _build_client() -> anthropic.Anthropic:
 
 
 def run() -> None:
-    t0 = time.perf_counter()
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+    from dotenv import load_dotenv
+
     load_dotenv(Path(__file__).resolve().parent / ".env")
+
+    import crawler
+    import firebase_client
+    import summarizer
+
+    t0 = time.perf_counter()
 
     client = _build_client()
 
