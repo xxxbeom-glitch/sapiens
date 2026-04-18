@@ -1,5 +1,5 @@
 """
-네이버 금융 / Google·Yahoo RSS 뉴스 크롤러 + 종목 재무·증권가 크롤링.
+네이버 금융 / Yahoo Finance(HTML) 뉴스 크롤러 + 종목 재무·증권가 크롤링.
 (토스증권 Playwright `crawl_tossinvest_news` 는 보존. `crawl_domestic` 에서는 미사용.)
 """
 from __future__ import annotations
@@ -13,7 +13,6 @@ import sys
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
-import feedparser
 import requests
 from bs4 import BeautifulSoup
 
@@ -500,76 +499,8 @@ def crawl_tossinvest_news() -> dict[str, list[dict[str, Any]]]:
     return empty
 
 
-GOOGLE_FEEDS = [
-    ("Google Finance", "https://news.google.com/rss/search?q=stock+market&hl=en-US&gl=US&ceid=US:en"),
-    ("Google Finance", "https://news.google.com/rss/search?q=nvidia+apple+meta+google&hl=en-US&gl=US&ceid=US:en"),
-    ("Google Finance", "https://news.google.com/rss/search?q=fed+interest+rate+inflation&hl=en-US&gl=US&ceid=US:en"),
-]
-
-YAHOO_FEED = "https://feeds.finance.yahoo.com/rss/2.0/headline"
 YAHOO_FINANCE = "https://finance.yahoo.com"
 YAHOO_MAX_LIST_ITEMS = 10
-
-
-def _published_str(entry: Any) -> str:
-    if getattr(entry, "published", None):
-        return str(entry.published)
-    if getattr(entry, "updated", None):
-        return str(entry.updated)
-    return ""
-
-
-def _feed_to_items(feed_url: str, source_label: str, max_n: int) -> list[dict[str, Any]]:
-    items: list[dict[str, Any]] = []
-    try:
-        raw = _fetch(feed_url)
-        if not raw:
-            return items
-        parsed = feedparser.parse(raw)
-        for entry in parsed.entries[:max_n]:
-            title = getattr(entry, "title", "") or ""
-            link = getattr(entry, "link", "") or ""
-            if not title or not link:
-                continue
-            summary_src = ""
-            if getattr(entry, "summary", None):
-                soup = BeautifulSoup(entry.summary, "lxml")
-                summary_src = soup.get_text(separator=" ", strip=True)
-            if not summary_src and getattr(entry, "description", None):
-                soup = BeautifulSoup(entry.description, "lxml")
-                summary_src = soup.get_text(separator=" ", strip=True)
-            summary = (summary_src[:SUMMARY_CHARS] + ("…" if len(summary_src) > SUMMARY_CHARS else "")).strip()
-            items.append(
-                {
-                    "title": title.strip(),
-                    "summary": summary or title[:SUMMARY_CHARS],
-                    "source": source_label,
-                    "url": _normalize_url(link),
-                    "published_at": _published_str(entry),
-                    "category": "",
-                }
-            )
-    except Exception as e:
-        logger.warning("_feed_to_items 실패 %s: %s", feed_url, e)
-    return items
-
-
-def crawl_google_finance_rss() -> list[dict[str, Any]]:
-    all_items: list[dict[str, Any]] = []
-    try:
-        for label, feed_url in GOOGLE_FEEDS:
-            all_items.extend(_feed_to_items(feed_url, label, MAX_PER_SECTION))
-    except Exception as e:
-        logger.exception("crawl_google_finance_rss 실패: %s", e)
-    return all_items
-
-
-def crawl_yahoo_rss() -> list[dict[str, Any]]:
-    try:
-        return _feed_to_items(YAHOO_FEED, "Yahoo Finance", MAX_PER_SECTION)
-    except Exception as e:
-        logger.exception("crawl_yahoo_rss 실패: %s", e)
-        return []
 
 
 def _resolve_yahoo_href(href: str) -> str:
@@ -748,17 +679,6 @@ def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
         "popular": crawl_naver_ranked(),
         "main": crawl_naver_main(),
     }
-
-
-def crawl_international() -> list[dict[str, Any]]:
-    """
-    Google + Yahoo RSS 병합 후 dedupe.
-    (Yahoo Finance HTML 뉴스·테크는 `crawl_yahoo_stocks` / `crawl_yahoo_tech` 로 별도 수집·저장)
-    """
-    merged: list[dict[str, Any]] = []
-    merged.extend(crawl_google_finance_rss())
-    merged.extend(crawl_yahoo_rss())
-    return dedupe_items(merged)
 
 
 def crawl_market_indicators() -> list[dict[str, Any]]:

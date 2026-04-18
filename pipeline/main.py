@@ -47,8 +47,7 @@ def run() -> None:
     domestic["popular"] = crawler.dedupe_items(domestic["popular"])
     domestic["main"] = crawler.dedupe_items(domestic["main"])
 
-    # 2) 해외: RSS(병합 dedupe) + Yahoo HTML 뉴스·테크 별도
-    international = crawler.crawl_international()
+    # 2) 해외: Yahoo Finance HTML(뉴스 / 테크)
     overseas_stocks = crawler.crawl_yahoo_stocks()
     overseas_tech = crawler.crawl_yahoo_tech()
 
@@ -59,7 +58,6 @@ def run() -> None:
         "realtime": len(domestic["realtime"]),
         "popular": len(domestic["popular"]),
         "main": len(domestic["main"]),
-        "international_rss": len(international),
         "overseas_stocks": len(overseas_stocks),
         "overseas_tech": len(overseas_tech),
         "indicators": len(indicators),
@@ -88,13 +86,6 @@ def run() -> None:
     # 아침 브리핑: 주요 뉴스 요약본과 동일 소스 우선 (주요 기사 요약 상위)
     fs_morning = fs_main[:10] if fs_main else []
 
-    # 해외 RSS → 요약 (시황 리포트용, RSS 단독 Firestore는 없음)
-    fs_intl: list[dict] = []
-    for row in summarizer.summarize_batch(client, international):
-        ai = row.pop("_ai", None)
-        if ai:
-            fs_intl.append(summarizer.merge_to_firestore_article(row, ai))
-
     # Yahoo Finance HTML: 뉴스(스톡스) / 테크 — 각각 요약 후 news/overseas_stocks, news/overseas_tech
     fs_overseas_stocks: list[dict] = []
     for row in summarizer.summarize_batch(client, overseas_stocks):
@@ -108,9 +99,9 @@ def run() -> None:
         if ai:
             fs_overseas_tech.append(summarizer.merge_to_firestore_article(row, ai))
 
-    # 시황 리포트: RSS + 스톡 + 테크 요약본을 합쳐 맥락 제공
+    # 시황 리포트: 해외 요약본(스톡 + 테크) + 국내 지표
     try:
-        fs_for_report: list[dict] = list(fs_intl) + list(fs_overseas_stocks) + list(fs_overseas_tech)
+        fs_for_report: list[dict] = list(fs_overseas_stocks) + list(fs_overseas_tech)
         report = summarizer.generate_market_report(client, indicators, fs_for_report)
         logger.info("시황 요약:\n%s", report.get("report", "")[:500])
     except Exception as e:
@@ -159,7 +150,6 @@ def run() -> None:
         + len(fs_popular)
         + len(fs_main)
         + len(fs_morning)
-        + len(fs_intl)
         + len(fs_overseas_stocks)
         + len(fs_overseas_tech)
     )
