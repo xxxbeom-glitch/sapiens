@@ -1,12 +1,18 @@
 import runpod
 from main import run
 
-def handler(job):
-    job_input = job.get("input", {})
+def handler(event):
     try:
+        job_input = event.get("input", {})
         result = run()
         return {"status": "success", "message": "Pipeline completed successfully"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        import traceback
+        return {
+            "status": "error",
+            "message": str(e),
+            "traceback": traceback.format_exc()
+        }
 
-runpod.serverless.start({"handler": handler})
+if __name__ == "__main__":
+    runpod.serverless.start({"handler": handler})
