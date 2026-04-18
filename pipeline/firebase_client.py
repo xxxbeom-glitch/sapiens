@@ -16,10 +16,14 @@ logger = logging.getLogger(__name__)
 _db: firestore.Client | None = None
 
 
-def _get_db() -> firestore.Client:
-    global _db
-    if _db is not None:
-        return _db
+def _ensure_firebase_app() -> None:
+    """기본 Firebase 앱이 없을 때만 서비스 계정으로 초기화. 중복 initialize_app 방지."""
+    try:
+        firebase_admin.get_app()
+        return
+    except ValueError:
+        # 기본 앱이 아직 없음
+        pass
 
     path = os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH", "").strip()
     if not path or not os.path.isfile(path):
@@ -27,13 +31,24 @@ def _get_db() -> firestore.Client:
             "FIREBASE_SERVICE_ACCOUNT_PATH 가 유효한 서비스 계정 JSON 파일을 가리켜야 합니다."
         )
 
-    database_id = os.environ.get("DATABASE_ID", "sapiens").strip() or "sapiens"
-
+    cred = credentials.Certificate(path)
     try:
-        firebase_admin.initialize_app(credentials.Certificate(path))
-    except ValueError:
-        # 이미 초기화됨
-        pass
+        firebase_admin.initialize_app(cred)
+    except ValueError as e:
+        msg = str(e).lower()
+        if "already exists" in msg:
+            return
+        raise
+
+
+def _get_db() -> firestore.Client:
+    global _db
+    if _db is not None:
+        return _db
+
+    _ensure_firebase_app()
+
+    database_id = os.environ.get("DATABASE_ID", "sapiens").strip() or "sapiens"
 
     try:
         _db = firestore.client(database_id=database_id)
