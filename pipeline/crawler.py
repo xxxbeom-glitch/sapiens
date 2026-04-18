@@ -206,32 +206,35 @@ def crawl_naver_main() -> list[dict[str, Any]]:
 
 
 def _toss_click_tab(page: Any, label: str) -> None:
-    """뉴스 탭 클릭 (텍스트/role 여러 전략)."""
-    pattern = re.compile(re.escape(label), re.I)
-    factories: list[Any] = [
-        lambda: page.get_by_role("tab", name=pattern),
-        lambda: page.get_by_role("button", name=pattern),
-        lambda: page.get_by_text(label, exact=True),
-        lambda: page.get_by_text(label, exact=False),
-    ]
-    last_err: Exception | None = None
-    for factory in factories:
-        try:
-            loc = factory()
-            if loc.count() == 0:
-                continue
-            loc.first.click(timeout=8000)
-            return
-        except Exception as e:
-            last_err = e
-            continue
-    if last_err:
-        raise last_err
-    raise RuntimeError(f"탭을 찾을 수 없음: {label}")
+    """토스증권 뉴스 텍스트 탭 클릭 (get_by_text → button/tab/a → 전체 노드 순)."""
+    errors: list[Exception] = []
+
+    try:
+        page.get_by_text(label, exact=True).click(timeout=8000)
+        return
+    except Exception as e:
+        errors.append(e)
+
+    try:
+        page.locator("button, [role='tab'], a").filter(has_text=label).first.click(timeout=8000)
+        return
+    except Exception as e:
+        errors.append(e)
+
+    try:
+        page.locator("*").filter(has_text=label).first.click(timeout=8000)
+        return
+    except Exception as e:
+        errors.append(e)
+
+    msg = f"탭 클릭 실패: {label!r}"
+    if errors:
+        raise RuntimeError(msg) from errors[-1]
+    raise RuntimeError(msg)
 
 
 def _extract_toss_items_from_page(page: Any, max_n: int) -> list[dict[str, Any]]:
-    """현재 탭에서 기사 링크·썸네일·시간·언론사 힌트 수집."""
+    """현재 탭에서 a[href*='news'] 링크 기준 수집 (텍스트 10자 이상)."""
     raw = page.evaluate(
         """(maxN) => {
       const seen = new Set();
@@ -240,16 +243,16 @@ def _extract_toss_items_from_page(page: Any, max_n: int) -> list[dict[str, Any]]
       for (const a of anchors) {
         if (rows.length >= maxN) break;
         const href = a.getAttribute('href') || '';
-        if (!href.includes('/news/')) continue;
-        const path = href.split('?')[0];
-        if (path.endsWith('/news') || path.endsWith('/news/')) continue;
+        if (!href.includes('/news')) continue;
+        const pathOnly = href.split('?')[0].replace(/\\/$/, '');
+        if (pathOnly.endsWith('/news')) continue;
         let abs;
         try { abs = new URL(href, location.origin).href; } catch (e) { continue; }
         if (seen.has(abs)) continue;
         let title = (a.innerText || '').trim().replace(/\\s+/g, ' ');
         const lines = title.split(/\\n+/).map(s => s.trim()).filter(Boolean);
         title = (lines[0] || title).trim();
-        if (title.length < 6) continue;
+        if (title.length < 10) continue;
         let thumb = '';
         let press = '';
         let ptime = '';
@@ -338,7 +341,7 @@ def crawl_tossinvest_news() -> dict[str, list[dict[str, Any]]]:
                 )
                 page = context.new_page()
                 page.goto(TOSS_INVEST_NEWS_URL, wait_until="domcontentloaded", timeout=90000)
-                page.wait_for_timeout(3500)
+                page.wait_for_timeout(3000)
 
                 for key, aliases in tab_jobs:
                     clicked = False
@@ -352,7 +355,7 @@ def crawl_tossinvest_news() -> dict[str, list[dict[str, Any]]]:
                     if not clicked:
                         logger.warning("토스증권 탭 클릭 실패 (%s), 시도 라벨: %s", key, aliases)
                         continue
-                    page.wait_for_timeout(2200)
+                    page.wait_for_timeout(1500)
                     empty[key] = _extract_toss_items_from_page(page, MAX_TOSS_NEWS)
             finally:
                 browser.close()
