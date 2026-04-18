@@ -88,7 +88,7 @@ class NewsRepositoryImpl(
     }.distinctUntilChanged()
 
     companion object {
-        private const val DATABASE_ID = "daily-brief"
+        private const val DATABASE_ID = "sapiens"
         private const val COLLECTION_BRIEFING = "briefing"
         private const val COLLECTION_NEWS = "news"
         private const val DOC_MORNING = "morning"

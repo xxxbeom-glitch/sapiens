@@ -32,6 +32,7 @@ google-services.json
 
 # Android Profiling
 *.hprof
+<<<<<<< HEAD
 
 google-services.json
 
@@ -40,3 +41,5 @@ google-services.json
 .env
 
 serviceaccount.json
+=======
+>>>>>>> edd896cab902b9e823caedebee8c19f3c0b47815

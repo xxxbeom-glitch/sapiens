@@ -1,5 +1,5 @@
 """
-Firestore (database: daily-brief) 저장.
+Firestore (database: sapiens) 저장.
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def _get_db() -> firestore.Client:
             "FIREBASE_SERVICE_ACCOUNT_PATH 가 유효한 서비스 계정 JSON 파일을 가리켜야 합니다."
         )
 
-    database_id = os.environ.get("DATABASE_ID", "daily-brief").strip() or "daily-brief"
+    database_id = os.environ.get("DATABASE_ID", "sapiens").strip() or "sapiens"
 
     try:
         firebase_admin.initialize_app(credentials.Certificate(path))
