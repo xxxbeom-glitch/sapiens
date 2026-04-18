@@ -137,3 +137,15 @@ def save_news_feed(articles: List[dict[str, Any]], feed_type: str) -> None:
         },
         merge=True,
     )
+
+
+def save_overseas_articles(articles: List[dict[str, Any]]) -> None:
+    """news/overseas 문서에 articles 배열 + updated_at 저장 (해외 뉴스 단일 피드)."""
+    db = _get_db()
+    db.collection("news").document("overseas").set(
+        {
+            "articles": articles,
+            "updated_at": SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )

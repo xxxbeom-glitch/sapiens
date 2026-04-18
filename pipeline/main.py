@@ -47,7 +47,7 @@ def run() -> None:
     domestic["popular"] = crawler.dedupe_items(domestic["popular"])
     domestic["main"] = crawler.dedupe_items(domestic["main"])
 
-    # 2) 해외 RSS
+    # 2) 해외 (Google/Yahoo RSS + Yahoo Finance 뉴스·테크 HTML) → dedupe
     international = crawler.crawl_international()
 
     # 3) 시장 지표
@@ -84,7 +84,7 @@ def run() -> None:
     # 아침 브리핑: 주요 뉴스 요약본과 동일 소스 우선 (주요 기사 요약 상위)
     fs_morning = fs_main[:10] if fs_main else []
 
-    # 해외 → US 시장 기사
+    # 해외 뉴스 → 요약 후 news/overseas Firestore
     fs_us: list[dict] = []
     for row in summarizer.summarize_batch(client, international):
         ai = row.pop("_ai", None)
@@ -100,7 +100,7 @@ def run() -> None:
 
     # 5) Firestore
     firebase_client.save_morning_articles(fs_morning)
-    firebase_client.save_us_articles(fs_us)
+    firebase_client.save_overseas_articles(fs_us)
     firebase_client.save_market_indicators(indicators)
     firebase_client.save_news_feed(fs_realtime, "realtime")
     firebase_client.save_news_feed(fs_popular, "popular")
