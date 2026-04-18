@@ -89,8 +89,8 @@ def save_morning_articles(articles: List[dict[str, Any]]) -> None:
     )
 
 
-def save_us_articles(articles: List[dict[str, Any]]) -> None:
-    """briefing/us_market 문서에 articles 병합 저장."""
+def save_us_market_articles(articles: List[dict[str, Any]]) -> None:
+    """briefing/us_market 문서에 articles (Yahoo market 뉴스 요약 등)."""
     db = _get_db()
     db.collection("briefing").document("us_market").set(
         {
@@ -99,6 +99,11 @@ def save_us_articles(articles: List[dict[str, Any]]) -> None:
         },
         merge=True,
     )
+
+
+def save_us_articles(articles: List[dict[str, Any]]) -> None:
+    """briefing/us_market — `save_us_market_articles` 별칭 (하위 호환)."""
+    save_us_market_articles(articles)
 
 
 def save_market_indicators(indicators: List[dict[str, Any]]) -> None:

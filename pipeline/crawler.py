@@ -646,6 +646,123 @@ def crawl_yahoo_tech() -> list[dict[str, Any]]:
         return []
 
 
+def crawl_yahoo_market_news() -> list[dict[str, Any]]:
+    """
+    Stock market topic 뉴스 스트림.
+    https://finance.yahoo.com/topic/stock-market-news/
+    """
+    u = f"{YAHOO_FINANCE}/topic/stock-market-news/"
+    try:
+        return _crawl_yahoo_finance_list_url(u, YAHOO_MAX_LIST_ITEMS)
+    except Exception as e:
+        logger.exception("crawl_yahoo_market_news 실패: %s", e)
+        return []
+
+
+NAVER_MEDIA = "https://media.naver.com"
+MAX_NEWSPAPER_ITEMS = 15
+
+
+def _absolutize_media_naver_url(href: str) -> str:
+    h = (href or "").strip()
+    if not h or h.startswith("#") or "javascript" in h.lower():
+        return ""
+    if h.startswith("http://") or h.startswith("https://"):
+        return h.split("#")[0]
+    if h.startswith("//"):
+        return ("https:" + h).split("#")[0]
+    return urljoin(NAVER_MEDIA, h).split("#")[0]
+
+
+def _absolutize_naver_newspaper_img(src: str) -> str:
+    t = (src or "").strip()
+    if not t or t.startswith("data:"):
+        return ""
+    if t.startswith("//"):
+        return "https:" + t
+    if t.startswith("http://") or t.startswith("https://"):
+        return t.split("#")[0]
+    if t.startswith("/"):
+        return urljoin(NAVER_MEDIA, t)
+    return t
+
+
+def _parse_naver_press_newspaper_li(li, source_label: str) -> dict[str, Any] | None:
+    """ul.newspaper_article_lst li — a[href], strong 제목, img[ src ]."""
+    a = li.select_one("a[href]")
+    if not a:
+        return None
+    url = _absolutize_media_naver_url(a.get("href", ""))
+    if not url:
+        return None
+    st = a.select_one("strong") or li.select_one("strong")
+    title = (st.get_text(strip=True) if st else a.get_text(strip=True) or "").strip()
+    if len(title) < 2:
+        return None
+    img = li.select_one("img[src]")
+    thumb = _absolutize_naver_newspaper_img((img.get("src") or "").strip()) if img else ""
+    summ = (title[:SUMMARY_CHARS] + ("…" if len(title) > SUMMARY_CHARS else "")).strip()
+    return {
+        "title": title,
+        "summary": summ,
+        "source": source_label,
+        "url": _normalize_url(url),
+        "published_at": "",
+        "category": "",
+        "thumbnail_url": thumb,
+    }
+
+
+def _crawl_naver_newspaper(url: str, source_label: str, max_n: int) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    try:
+        html = _fetch(url)
+        if not html:
+            return out
+        soup = BeautifulSoup(html, "lxml")
+        seen: set[str] = set()
+        for li in soup.select("ul.newspaper_article_lst li"):
+            row = _parse_naver_press_newspaper_li(li, source_label)
+            if not row:
+                continue
+            u = (row.get("url") or "").strip()
+            if not u or u in seen:
+                continue
+            seen.add(u)
+            out.append(row)
+            if len(out) >= max_n:
+                break
+    except Exception as e:
+        logger.warning("_crawl_naver_newspaper %s: %s", url, e)
+    return out
+
+
+def crawl_hankyung_newspaper() -> list[dict[str, Any]]:
+    """NAVER 뉴스 — 한국경제 신문 스탠드 (최대 15)."""
+    try:
+        return _crawl_naver_newspaper(
+            f"{NAVER_MEDIA}/press/015/newspaper",
+            "한국경제",
+            MAX_NEWSPAPER_ITEMS,
+        )
+    except Exception as e:
+        logger.exception("crawl_hankyung_newspaper 실패: %s", e)
+        return []
+
+
+def crawl_maeil_newspaper() -> list[dict[str, Any]]:
+    """NAVER 뉴스 — 매일경제 신문 스탠드 (최대 15)."""
+    try:
+        return _crawl_naver_newspaper(
+            f"{NAVER_MEDIA}/press/009/newspaper",
+            "매일경제",
+            MAX_NEWSPAPER_ITEMS,
+        )
+    except Exception as e:
+        logger.exception("crawl_maeil_newspaper 실패: %s", e)
+        return []
+
+
 def dedupe_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """URL 기준 중복 제거 후, 제목 유사도 80% 이상 difflib 중복 제거."""
     by_url: dict[str, dict[str, Any]] = {}
