@@ -21,19 +21,13 @@ logger = logging.getLogger(__name__)
 
 HEADERS = {
     "User-Agent": (
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 "
-        "(KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1"
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     ),
     "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
 NAVER_BASE = "https://finance.naver.com"
-NAVER_M_STOCK = "https://m.stock.naver.com"
-NAVER_NEWS_M = {
-    "realtime": "https://m.stock.naver.com/investment/news/flashnews",
-    "ranked": "https://m.stock.naver.com/investment/news/ranknews",
-    "main": "https://m.stock.naver.com/investment/news/mainnews",
-}
 TOSS_INVEST_BASE = "https://www.tossinvest.com"
 TOSS_INVEST_NEWS_URL = "https://www.tossinvest.com/news"
 REQUEST_TIMEOUT = 20
@@ -74,68 +68,87 @@ def _resolve_naver_news_href(href: str) -> str:
     if h.startswith("/"):
         if h.startswith(("/mnp", "/include", "/article/option")) or "article" in h:
             return urljoin("https://n.news.naver.com", h).split("#")[0]
-        if h.startswith("/investment/"):
-            return urljoin(NAVER_M_STOCK, h).split("#")[0]
     return urljoin(NAVER_BASE, h).split("#")[0]
 
 
-def _naver_list_search_chain(anchor) -> list[Any]:
-    """제목/요약이 a 바깥 부모에 있을 때를 대비한 탐색 순서."""
-    nodes: list[Any] = [anchor]
-    p = anchor.parent
-    for _ in range(6):
-        if p is None or getattr(p, "name", None) in ("html", "body", "[document]"):
-            break
-        nodes.append(p)
-        p = p.parent
-    return nodes
+def _absolutize_naver_list_image(src: str) -> str:
+    t = (src or "").strip()
+    if not t:
+        return ""
+    if t.startswith("//"):
+        return "https:" + t
+    if t.startswith("/"):
+        return urljoin("https://mimgnews.pstatic.net", t)
+    return t
 
 
-def _parse_naver_newslist_block(anchor) -> dict[str, Any] | None:
+def _article_summary_text_excluding_spans(article_summary_dd) -> str:
+    """dd.articleSummary에서 span.press, span.bar, span.wdate 제거 후 텍스트."""
+    if not article_summary_dd:
+        return ""
+    frag = BeautifulSoup(str(article_summary_dd), "lxml")
+    root = frag.find("dd") or frag
+    for sp in root.select("span.press, span.bar, span.wdate"):
+        sp.decompose()
+    raw = root.get_text(separator=" ", strip=True)
+    return re.sub(r"\s+", " ", raw).strip()
+
+
+def _parse_naver_pc_article_block(dd_subj) -> dict[str, Any] | None:
     """
-    news_list HTML: a.NewsList_link, strong.NewsList_title, cite/time.NewsList_description,
-    p.NewsList_text, span.NewsList_thumb > img
+    PC finance 뉴스 목록:
+    - 링크: dd.articleSubject > a
+    - 제목: a[title] 또는 a 텍스트
+    - 요약: dd.articleSummary (press/bar/wdate span 제외)
+    - 언론: span.press, 날짜: span.wdate, 썸네일: dt.thumb > a > img
     """
-    href = (anchor.get("href") or "").strip()
-    url = _resolve_naver_news_href(href)
+    a = dd_subj.select_one("a[href]")
+    if not a:
+        return None
+    url = _resolve_naver_news_href((a.get("href") or "").strip())
     if not url:
         return None
-
-    scopes = _naver_list_search_chain(anchor)
-
-    def _pick(css: str):
-        for s in scopes:
-            n = s.select_one(css) if hasattr(s, "select_one") else None
-            if n:
-                return n
-        return None
-
-    title_el = _pick('strong[class*="NewsList_title"]')
-    title = (title_el.get_text(strip=True) if title_el else anchor.get_text(strip=True)) or ""
+    title = ((a.get("title") or "").strip() or a.get_text(strip=True) or "").strip()
     if len(title) < 2:
         return None
 
-    cite_el = _pick('cite[class*="NewsList_description"]')
-    time_el = _pick('time[class*="NewsList_description"]')
-    source = (cite_el.get_text(strip=True) if cite_el else "") or "네이버금융"
-    if time_el:
-        published = (time_el.get("datetime") or "").strip() or time_el.get_text(strip=True) or ""
-    else:
-        published = ""
+    dl = dd_subj.find_parent("dl")
+    asum = None
+    if dl:
+        asum = dl.select_one("dd.articleSummary")
+    if not asum:
+        sib: Any = dd_subj
+        for _ in range(20):
+            sib = sib.find_next_sibling()
+            if sib is None:
+                break
+            if not getattr(sib, "name", None):
+                continue
+            cls = sib.get("class") or []
+            if sib.name == "dd" and "articleSummary" in cls:
+                asum = sib
+                break
 
-    text_el = _pick('p[class*="NewsList_text"]')
-    raw = text_el.get_text(separator=" ", strip=True) if text_el else ""
+    source = "네이버금융"
+    published = ""
+    if asum:
+        pr = asum.select_one("span.press")
+        if pr:
+            s = pr.get_text(strip=True)
+            if s:
+                source = s
+        wd = asum.select_one("span.wdate")
+        if wd:
+            published = wd.get_text(strip=True) or ""
+
+    raw = _article_summary_text_excluding_spans(asum)
     summary = (raw[:SUMMARY_CHARS] + ("…" if len(raw) > SUMMARY_CHARS else "")).strip() or title[:SUMMARY_CHARS]
 
     thumb = ""
-    img = _pick('span[class*="NewsList_thumb"] img')
-    if img and img.get("src"):
-        thumb = img.get("src", "").strip()
-        if thumb.startswith("//"):
-            thumb = "https:" + thumb
-        elif thumb.startswith("/"):
-            # 언론 썸네일은 pstatic, 상대 path만 오는 경우가 많음
-            thumb = urljoin("https://mimgnews.pstatic.net", thumb)
+    if dl:
+        img = dl.select_one("dt.thumb > a > img") or dl.select_one("dt.thumb a img")
+        if img and img.get("src"):
+            thumb = _absolutize_naver_list_image(img.get("src", ""))
 
     return {
         "title": title,
@@ -149,17 +162,15 @@ def _parse_naver_newslist_block(anchor) -> dict[str, Any] | None:
 
 
 def _collect_naver_links_from_list(html: str, max_n: int) -> list[dict[str, Any]]:
-    """
-    a[class*='NewsList_link'] 기준 — 본문 추가 요청 없이 목록의 p.NewsList_text를 summary로 사용.
-    """
+    """dd.articleSubject 블록 단위로 PC 목록 HTML 파싱 (기사 URL 별도 요청 없음)."""
     soup = BeautifulSoup(html, "lxml")
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
     debug_lines: list[str] = []
     debug = os.environ.get("SAPIENS_NAVER_CRAWL_DEBUG", "").lower() in ("1", "true", "yes")
 
-    for a in soup.select('a[class*="NewsList_link"]'):
-        row = _parse_naver_newslist_block(a)
+    for dd in soup.select("dd.articleSubject"):
+        row = _parse_naver_pc_article_block(dd)
         if not row:
             continue
         u = row["url"]
@@ -173,7 +184,7 @@ def _collect_naver_links_from_list(html: str, max_n: int) -> list[dict[str, Any]
             break
     if debug and debug_lines:
         logger.info(
-            "NAVER CRAWL DEBUG: NewsList_link %d (max %d):\n%s",
+            "NAVER CRAWL DEBUG: articleSubject %d (max %d):\n%s",
             len(debug_lines),
             max_n,
             "\n".join(debug_lines),
@@ -182,7 +193,7 @@ def _collect_naver_links_from_list(html: str, max_n: int) -> list[dict[str, Any]
 
 
 def crawl_naver_realtime() -> list[dict[str, Any]]:
-    url = NAVER_NEWS_M["realtime"]
+    url = "https://finance.naver.com/news/news_list.naver?mode=LSS2D&section_id=101&section_id2=258"
     items: list[dict[str, Any]] = []
     try:
         html = _fetch(url)
@@ -196,7 +207,7 @@ def crawl_naver_realtime() -> list[dict[str, Any]]:
 
 
 def crawl_naver_ranked() -> list[dict[str, Any]]:
-    url = NAVER_NEWS_M["ranked"]
+    url = "https://finance.naver.com/news/news_list.naver?mode=RANK"
     items: list[dict[str, Any]] = []
     try:
         html = _fetch(url)
@@ -213,7 +224,7 @@ def crawl_naver_ranked() -> list[dict[str, Any]]:
 
 
 def crawl_naver_main() -> list[dict[str, Any]]:
-    url = NAVER_NEWS_M["main"]
+    url = f"{NAVER_BASE}/news/mainnews.naver"
     items: list[dict[str, Any]] = []
     try:
         html = _fetch(url)
@@ -228,10 +239,10 @@ def crawl_naver_main() -> list[dict[str, Any]]:
 
 def _debug_naver_mainnews_list_all_links() -> None:
     """
-    mainnews.naver HTML: NewsList_link 파싱 결과와 _collect_naver_links_from_list(max 15) 출력.
+    mainnews.naver PC HTML: dd.articleSubject 파싱 + _collect_naver_links_from_list(max 15) 출력.
     사용:  python pipeline/crawler.py debug-naver-main  (pipeline 폴더 기준)
     """
-    u = NAVER_NEWS_M["main"]
+    u = f"{NAVER_BASE}/news/mainnews.naver"
     print("GET", u, file=sys.stderr, flush=True)
     html = _fetch(u)
     if not html:
@@ -239,9 +250,9 @@ def _debug_naver_mainnews_list_all_links() -> None:
         return
     print("html length:", len(html), file=sys.stderr, flush=True)
     soup = BeautifulSoup(html, "lxml")
-    print("--- a[class*='NewsList_link'] (parsed) ---", flush=True)
-    for a in soup.select('a[class*="NewsList_link"]'):
-        row = _parse_naver_newslist_block(a)
+    print("--- dd.articleSubject (parsed) ---", flush=True)
+    for dd in soup.select("dd.articleSubject"):
+        row = _parse_naver_pc_article_block(dd)
         if row:
             s = (row.get("summary") or "")[:80]
             print(
