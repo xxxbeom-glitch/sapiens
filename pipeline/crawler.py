@@ -691,10 +691,10 @@ def _crawl_yahoo_finance_list_url(page_url: str, max_n: int) -> list[dict[str, A
 
 def crawl_yahoo_stocks() -> list[dict[str, Any]]:
     """
-    Most Active 등 주식 마켓 스트림 (요청이 차단될 수 있어 빈 리스트일 수 있음).
-    https://finance.yahoo.com/markets/stocks/most-active/
+    Yahoo Finance 뉴스 메인 스트림 (요청이 차단될 수 있어 빈 리스트일 수 있음).
+    https://finance.yahoo.com/news/
     """
-    u = f"{YAHOO_FINANCE}/markets/stocks/most-active/"
+    u = f"{YAHOO_FINANCE}/news/"
     try:
         return _crawl_yahoo_finance_list_url(u, YAHOO_MAX_LIST_ITEMS)
     except Exception as e:
