@@ -3,6 +3,7 @@ Firestore (database: sapiens) 저장.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Any, List
@@ -31,7 +32,11 @@ def _ensure_firebase_app() -> None:
             "FIREBASE_SERVICE_ACCOUNT_PATH 가 유효한 서비스 계정 JSON 파일을 가리켜야 합니다."
         )
 
-    cred = credentials.Certificate(path)
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read()
+    # strict=False: PEM 등에 포함된 제어 문자로 인한 JSONDecodeError 완화
+    json_data = json.loads(content, strict=False)
+    cred = credentials.Certificate(json_data)
     try:
         firebase_admin.initialize_app(cred)
     except ValueError as e:
