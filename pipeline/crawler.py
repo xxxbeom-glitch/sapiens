@@ -1,5 +1,6 @@
 """
-네이버 금융 / 토스증권(Playwright) / Google·Yahoo RSS 뉴스 크롤러 + 종목 재무·증권가 크롤링.
+네이버 금융 / Google·Yahoo RSS 뉴스 크롤러 + 종목 재무·증권가 크롤링.
+(토스증권 Playwright `crawl_tossinvest_news` 는 보존. `crawl_domestic` 에서는 미사용.)
 """
 from __future__ import annotations
 
@@ -471,12 +472,11 @@ def dedupe_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
-    """실시간 / 많이 본 / 주요: 토스증권(Playwright) + 네이버 금융."""
-    toss = crawl_tossinvest_news()
+    """실시간 / 많이 본 / 주요: 네이버 금융만 (토스증권 `crawl_tossinvest_news` 는 미사용)."""
     return {
-        "realtime": (toss.get("realtime") or []) + crawl_naver_realtime(),
-        "popular": (toss.get("many_viewed") or []) + crawl_naver_ranked(),
-        "main": (toss.get("main_news") or []) + crawl_naver_main(),
+        "realtime": crawl_naver_realtime(),
+        "popular": crawl_naver_ranked(),
+        "main": crawl_naver_main(),
     }
 
 
