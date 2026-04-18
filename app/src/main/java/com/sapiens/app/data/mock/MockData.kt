@@ -438,6 +438,211 @@ object MockData {
         )
     )
 
+    /** 해외 뉴스 탭용 목업 (영문 제목 · CNBC / Reuters / Bloomberg) */
+    val OVERSEAS_NEWS_REALTIME = listOf(
+        Article(
+            source = "Bloomberg",
+            headline = "Fed officials signal patience on cuts as inflation lingers above target",
+            summary = "Several policymakers said they want more months of data before easing again.",
+            time = "Just now",
+            category = "Markets",
+            tag = "MACRO",
+            summaryPoints = listOf(
+                "Minutes leaned toward a slower easing path than futures had priced.",
+                "Core services inflation remains sticky in major metro areas.",
+                "Traders trimmed June cut probabilities after the remarks."
+            )
+        ),
+        Article(
+            source = "Reuters",
+            headline = "Oil slips as ceasefire talks progress; risk assets drift higher",
+            summary = "Crude benchmarks fell about 1% while equities held modest gains.",
+            time = "3m ago",
+            category = "Energy",
+            tag = "COMMODITIES",
+            summaryPoints = listOf(
+                "Brent moved back below \$83 on headline-driven flows.",
+                "Shipping risk premia compressed slightly in Asian hours.",
+                "Refiners are watching diesel cracks into summer driving season."
+            )
+        ),
+        Article(
+            source = "CNBC",
+            headline = "Nvidia supplier checks point to improving lead times for AI accelerators",
+            summary = "Channel checks suggest backlog digestion is ahead of plan.",
+            time = "6m ago",
+            category = "Tech",
+            tag = "SEMIS",
+            summaryPoints = listOf(
+                "Packaging and memory vendors saw order visibility extend two quarters.",
+                "Hyperscaler capex commentary remained constructive on AI clusters.",
+                "Street models nudged up server shipment forecasts for Q3."
+            )
+        ),
+        Article(
+            source = "Bloomberg",
+            headline = "Treasury yields dip after soft retail sales surprise",
+            summary = "The 10-year yield fell 6bp as growth worries resurfaced.",
+            time = "9m ago",
+            category = "Rates",
+            tag = "BONDS",
+            summaryPoints = listOf(
+                "Control group sales missed consensus for the first time in three prints.",
+                "Curve bull-flattened with front-end outperforming.",
+                "Fed watch tools showed a higher bar for a July move."
+            )
+        ),
+        Article(
+            source = "Reuters",
+            headline = "EU trade chief warns of retaliation risk in transatlantic tariff row",
+            summary = "Brussels reiterated readiness to respond if levies broaden.",
+            time = "12m ago",
+            category = "Geopolitics",
+            tag = "TRADE",
+            summaryPoints = listOf(
+                "Automotive and pharma sectors were cited as sensitive areas.",
+                "Euro dipped modestly on headline risk.",
+                "Corporate treasuries flagged higher hedging costs into Q3."
+            )
+        )
+    )
+
+    val OVERSEAS_NEWS_POPULAR = listOf(
+        Article(
+            source = "CNBC",
+            headline = "Magnificent Seven earnings: what Wall Street is watching this season",
+            summary = "Analysts focus on AI monetization, cloud margins, and capex cadence.",
+            time = "Top",
+            category = "Equities",
+            tag = "EARNINGS",
+            summaryPoints = listOf(
+                "Guidance bandwidth is wider than usual after tariff headlines.",
+                "Buybacks could be a swing factor if cash yields stay elevated.",
+                "Options markets priced a slightly softer reaction window."
+            )
+        ),
+        Article(
+            source = "Bloomberg",
+            headline = "JPMorgan lifts S&P 500 year-end target on resilient earnings breadth",
+            summary = "Strategists cited better-than-feared margins in industrials and financials.",
+            time = "Top",
+            category = "Strategy",
+            tag = "INDEX",
+            summaryPoints = listOf(
+                "Revisions breadth turned positive for the first time in 2026.",
+                "Small caps still lag but participation improved last week.",
+                "Risk parity funds added modest equity beta."
+            )
+        ),
+        Article(
+            source = "Reuters",
+            headline = "Apple explores on-device models for next-generation Siri features",
+            summary = "Sources said privacy and latency drove the architecture choice.",
+            time = "Top",
+            category = "Tech",
+            tag = "AAPL",
+            summaryPoints = listOf(
+                "Silicon teams are aligning with a common inference runtime.",
+                "Partners expect developer APIs to tighten review requirements.",
+                "Competitive response from Android OEMs is likely within two cycles."
+            )
+        ),
+        Article(
+            source = "CNBC",
+            headline = "Goldman: hedge funds rotated from crowded growth into quality cyclicals",
+            summary = "Prime book data showed two weeks of net buying in materials and energy.",
+            time = "Top",
+            category = "Flows",
+            tag = "HF",
+            summaryPoints = listOf(
+                "Crowding scores in semis declined from late-2025 peaks.",
+                "Macro pods added crude and copper deltas selectively.",
+                "Risk appetite remains fragile around payroll weeks."
+            )
+        ),
+        Article(
+            source = "Bloomberg",
+            headline = "BOE holds rates steady but opens door to summer easing",
+            summary = "Governor remarks emphasized services inflation persistence.",
+            time = "Top",
+            category = "FX",
+            tag = "GBP",
+            summaryPoints = listOf(
+                "Sterling slipped 0.3% against the dollar after the decision.",
+                "OIS priced one cut by September with low conviction.",
+                "Real yields in gilts remain attractive to overseas asset managers."
+            )
+        )
+    )
+
+    val OVERSEAS_NEWS_MAIN = listOf(
+        Article(
+            source = "Reuters",
+            headline = "Global manufacturing PMI edges up; Asia factory orders improve",
+            summary = "New export orders rose for the first time in six months in the regional gauge.",
+            time = "Main",
+            category = "Macro",
+            tag = "PMI",
+            summaryPoints = listOf(
+                "Electronics supply chains showed the largest sequential gain.",
+                "Auto production schedules stabilized in ASEAN hubs.",
+                "Inventory restocking narratives gained traction in sell-side notes."
+            )
+        ),
+        Article(
+            source = "CNBC",
+            headline = "Microsoft closes gap with OpenAI partnership renewal, analysts say",
+            summary = "The multi-year pact reinforces Azure as default training substrate.",
+            time = "Main",
+            category = "Cloud",
+            tag = "MSFT",
+            summaryPoints = listOf(
+                "Enterprise renewals cited as the key upside driver.",
+                "Capex intensity will be dissected on the next call.",
+                "Regulatory scrutiny on exclusivity clauses remains an overhang."
+            )
+        ),
+        Article(
+            source = "Bloomberg",
+            headline = "Tesla robotaxi pilot expands to two new cities; insurance partners named",
+            summary = "The program adds incremental miles but profitability timeline is debated.",
+            time = "Main",
+            category = "Autos",
+            tag = "TSLA",
+            summaryPoints = listOf(
+                "Safety incident rate stayed below internal thresholds in early data.",
+                "Underwriters pushed for dynamic pricing tied to weather and traffic.",
+                "Short interest ticked lower after the announcement."
+            )
+        ),
+        Article(
+            source = "Reuters",
+            headline = "OPEC+ maintains output stance; delegates cite balanced market",
+            summary = "Ministers left quotas unchanged while monitoring voluntary cuts compliance.",
+            time = "Main",
+            category = "Energy",
+            tag = "OIL",
+            summaryPoints = listOf(
+                "Saudi guidance reiterated readiness to act if inventories build.",
+                "Non-OPEC supply growth from the Americas remains a headwind.",
+                "Asian refiners trimmed sour crude differentials slightly."
+            )
+        ),
+        Article(
+            source = "CNBC",
+            headline = "Amazon Web Services unveils cheaper inference tier for startups",
+            summary = "The move targets price-sensitive workloads as competition intensifies.",
+            time = "Main",
+            category = "Cloud",
+            tag = "AMZN",
+            summaryPoints = listOf(
+                "Credits bundle with marketplace listings for eligible founders.",
+                "Analysts see limited near-term ARPU impact but higher attach potential.",
+                "Competitors are expected to match within a quarter."
+            )
+        )
+    )
+
     val companyList = listOf(
         Company(
             ticker = "005930",

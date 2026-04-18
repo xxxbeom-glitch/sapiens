@@ -1,5 +1,5 @@
 """
-네이버 금융 / Google·Yahoo RSS 뉴스 크롤러 + 종목 재무·증권가 크롤링.
+네이버 금융 / 토스증권(Playwright) / Google·Yahoo RSS 뉴스 크롤러 + 종목 재무·증권가 크롤링.
 """
 from __future__ import annotations
 
@@ -25,8 +25,11 @@ HEADERS = {
 }
 
 NAVER_BASE = "https://finance.naver.com"
+TOSS_INVEST_BASE = "https://www.tossinvest.com"
+TOSS_INVEST_NEWS_URL = "https://www.tossinvest.com/news"
 REQUEST_TIMEOUT = 20
 MAX_PER_SECTION = 10
+MAX_TOSS_NEWS = 20
 SUMMARY_CHARS = 200
 
 
@@ -202,6 +205,164 @@ def crawl_naver_main() -> list[dict[str, Any]]:
     return items
 
 
+def _toss_click_tab(page: Any, label: str) -> None:
+    """뉴스 탭 클릭 (텍스트/role 여러 전략)."""
+    pattern = re.compile(re.escape(label), re.I)
+    factories: list[Any] = [
+        lambda: page.get_by_role("tab", name=pattern),
+        lambda: page.get_by_role("button", name=pattern),
+        lambda: page.get_by_text(label, exact=True),
+        lambda: page.get_by_text(label, exact=False),
+    ]
+    last_err: Exception | None = None
+    for factory in factories:
+        try:
+            loc = factory()
+            if loc.count() == 0:
+                continue
+            loc.first.click(timeout=8000)
+            return
+        except Exception as e:
+            last_err = e
+            continue
+    if last_err:
+        raise last_err
+    raise RuntimeError(f"탭을 찾을 수 없음: {label}")
+
+
+def _extract_toss_items_from_page(page: Any, max_n: int) -> list[dict[str, Any]]:
+    """현재 탭에서 기사 링크·썸네일·시간·언론사 힌트 수집."""
+    raw = page.evaluate(
+        """(maxN) => {
+      const seen = new Set();
+      const rows = [];
+      const anchors = document.querySelectorAll('a[href]');
+      for (const a of anchors) {
+        if (rows.length >= maxN) break;
+        const href = a.getAttribute('href') || '';
+        if (!href.includes('/news/')) continue;
+        const path = href.split('?')[0];
+        if (path.endsWith('/news') || path.endsWith('/news/')) continue;
+        let abs;
+        try { abs = new URL(href, location.origin).href; } catch (e) { continue; }
+        if (seen.has(abs)) continue;
+        let title = (a.innerText || '').trim().replace(/\\s+/g, ' ');
+        const lines = title.split(/\\n+/).map(s => s.trim()).filter(Boolean);
+        title = (lines[0] || title).trim();
+        if (title.length < 6) continue;
+        let thumb = '';
+        let press = '';
+        let ptime = '';
+        let el = a.closest('li') || a.closest('article') || a.closest('div');
+        for (let depth = 0; depth < 8 && el; depth++) {
+          const img = el.querySelector('img[src]');
+          if (img && !thumb) thumb = img.getAttribute('src') || '';
+          const smalls = el.querySelectorAll('span, p, em, time, div');
+          for (const s of smalls) {
+            const tx = (s.innerText || '').trim();
+            if (!tx || tx.length > 40) continue;
+            if (/분 전|시간 전|일 전|주 전|\\d{4}\\.\\d{2}\\.\\d{2}|\\d{1,2}:\\d{2}/.test(tx)) {
+              if (!ptime) ptime = tx;
+            } else if (tx.length >= 2 && tx.length <= 20 && tx !== title && !title.startsWith(tx)) {
+              if (!press) press = tx;
+            }
+          }
+          el = el.parentElement;
+        }
+        seen.add(abs);
+        rows.push({ url: abs, title: title.slice(0, 500), thumb, press, time: ptime });
+      }
+      return rows;
+    }""",
+        max_n,
+    )
+    items: list[dict[str, Any]] = []
+    for row in raw or []:
+        url = _normalize_url(str(row.get("url") or ""))
+        title = (str(row.get("title") or "")).strip()
+        if not url or not title:
+            continue
+        press = (str(row.get("press") or "")).strip()
+        time_s = (str(row.get("time") or "")).strip()
+        thumb = (str(row.get("thumb") or "")).strip()
+        if thumb.startswith("//"):
+            thumb = "https:" + thumb
+        elif thumb.startswith("/"):
+            thumb = urljoin(TOSS_INVEST_BASE, thumb)
+        summary_src = title
+        summary = (summary_src[:SUMMARY_CHARS] + ("…" if len(summary_src) > SUMMARY_CHARS else "")).strip()
+        items.append(
+            {
+                "title": title,
+                "summary": summary or title[:SUMMARY_CHARS],
+                "source": press or "토스증권",
+                "url": url,
+                "published_at": time_s,
+                "category": "토스증권",
+                "thumbnail_url": thumb,
+            }
+        )
+    return items
+
+
+def crawl_tossinvest_news() -> dict[str, list[dict[str, Any]]]:
+    """
+    토스증권 뉴스(https://www.tossinvest.com/news) 탭별 Playwright 크롤.
+    반환 키: many_viewed(인기), main_news(주요), realtime(최신) — 각 최대 MAX_TOSS_NEWS건.
+    """
+    empty: dict[str, list[dict[str, Any]]] = {
+        "many_viewed": [],
+        "main_news": [],
+        "realtime": [],
+    }
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        logger.warning("playwright 미설치 — 토스증권 뉴스 크롤 스킵")
+        return empty
+
+    tab_jobs: list[tuple[str, tuple[str, ...]]] = [
+        ("many_viewed", ("인기뉴스", "많이 본 뉴스", "많이 본")),
+        ("main_news", ("주요뉴스", "주요 뉴스")),
+        ("realtime", ("최신뉴스", "실시간 속보", "실시간")),
+    ]
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            try:
+                context = browser.new_context(
+                    user_agent=HEADERS["User-Agent"],
+                    locale="ko-KR",
+                    viewport={"width": 1400, "height": 2200},
+                )
+                page = context.new_page()
+                page.goto(TOSS_INVEST_NEWS_URL, wait_until="domcontentloaded", timeout=90000)
+                page.wait_for_timeout(3500)
+
+                for key, aliases in tab_jobs:
+                    clicked = False
+                    for label in aliases:
+                        try:
+                            _toss_click_tab(page, label)
+                            clicked = True
+                            break
+                        except Exception:
+                            continue
+                    if not clicked:
+                        logger.warning("토스증권 탭 클릭 실패 (%s), 시도 라벨: %s", key, aliases)
+                        continue
+                    page.wait_for_timeout(2200)
+                    empty[key] = _extract_toss_items_from_page(page, MAX_TOSS_NEWS)
+            finally:
+                browser.close()
+    except Exception as e:
+        logger.exception("crawl_tossinvest_news 실패: %s", e)
+        return {"many_viewed": [], "main_news": [], "realtime": []}
+
+    return empty
+
+
 GOOGLE_FEEDS = [
     ("Google Finance", "https://news.google.com/rss/search?q=stock+market&hl=en-US&gl=US&ceid=US:en"),
     ("Google Finance", "https://news.google.com/rss/search?q=nvidia+apple+meta+google&hl=en-US&gl=US&ceid=US:en"),
@@ -299,11 +460,12 @@ def dedupe_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
-    """실시간 / 많이 본 / 주요 네이버 뉴스."""
+    """실시간 / 많이 본 / 주요: 토스증권(Playwright) + 네이버 금융."""
+    toss = crawl_tossinvest_news()
     return {
-        "realtime": crawl_naver_realtime(),
-        "popular": crawl_naver_ranked(),
-        "main": crawl_naver_main(),
+        "realtime": (toss.get("realtime") or []) + crawl_naver_realtime(),
+        "popular": (toss.get("many_viewed") or []) + crawl_naver_ranked(),
+        "main": (toss.get("main_news") or []) + crawl_naver_main(),
     }
 
 
