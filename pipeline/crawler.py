@@ -751,12 +751,13 @@ def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
 
 
 def crawl_international() -> list[dict[str, Any]]:
-    """Google + Yahoo RSS + Yahoo Finance(뉴스/테크 HTML) 병합 후 dedupe."""
+    """
+    Google + Yahoo RSS 병합 후 dedupe.
+    (Yahoo Finance HTML 뉴스·테크는 `crawl_yahoo_stocks` / `crawl_yahoo_tech` 로 별도 수집·저장)
+    """
     merged: list[dict[str, Any]] = []
     merged.extend(crawl_google_finance_rss())
     merged.extend(crawl_yahoo_rss())
-    merged.extend(crawl_yahoo_stocks())
-    merged.extend(crawl_yahoo_tech())
     return dedupe_items(merged)
 
 
