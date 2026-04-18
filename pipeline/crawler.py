@@ -507,6 +507,8 @@ GOOGLE_FEEDS = [
 ]
 
 YAHOO_FEED = "https://feeds.finance.yahoo.com/rss/2.0/headline"
+YAHOO_FINANCE = "https://finance.yahoo.com"
+YAHOO_MAX_LIST_ITEMS = 10
 
 
 def _published_str(entry: Any) -> str:
@@ -567,6 +569,149 @@ def crawl_yahoo_rss() -> list[dict[str, Any]]:
         return _feed_to_items(YAHOO_FEED, "Yahoo Finance", MAX_PER_SECTION)
     except Exception as e:
         logger.exception("crawl_yahoo_rss 실패: %s", e)
+        return []
+
+
+def _resolve_yahoo_href(href: str) -> str:
+    h = (href or "").strip()
+    if not h or h.startswith("#") or "javascript" in h.lower():
+        return ""
+    if h.startswith("http://") or h.startswith("https://"):
+        return h.split("#")[0]
+    if h.startswith("//"):
+        return ("https:" + h).split("#")[0]
+    return urljoin(YAHOO_FINANCE, h).split("#")[0]
+
+
+def _parse_yahoo_publishing_line(text: str) -> tuple[str, str]:
+    """
+    div.publishing 한 줄: 언론사 • 날짜 형태(• 또는 ·) 앞/뒤.
+    """
+    s = re.sub(r"\s+", " ", (text or "").strip())
+    for sep in ("•", "·", "|"):
+        if sep in s:
+            a, b = s.split(sep, 1)
+            return a.strip(), b.strip()
+    return s, ""
+
+
+def _first_img_src_in(li) -> str:
+    for img in li.find_all("img", src=True):
+        src = (img.get("src") or "").strip()
+        if not src or src.startswith("data:"):
+            continue
+        if src.startswith("//"):
+            return "https:" + src
+        if src.startswith("/"):
+            return urljoin(YAHOO_FINANCE, src)
+        if src.startswith("http"):
+            return src.split("#")[0]
+    return ""
+
+
+def _parse_yahoo_finance_story_item(li) -> dict[str, Any] | None:
+    """
+    li.stream-item.story-item — section[data-testid=storyitem], a.titles, h3.clamp, div.publishing, img
+    """
+    section = li.select_one('section[data-testid="storyitem"]') or li.select_one(
+        'section[data-testid="StoryItem"]',
+    )
+    if not section:
+        return None
+    a = None
+    for cand in section.select("a[href]"):
+        classes = cand.get("class") or []
+        if isinstance(classes, str):
+            classes = classes.split()
+        if "titles" in classes:
+            a = cand
+            break
+    if a is None:
+        return None
+    href = (a.get("href") or "").strip()
+    url = _resolve_yahoo_href(href)
+    if not url:
+        return None
+    h3 = section.select_one("h3.clamp") or li.select_one("h3.clamp")
+    title = ""
+    if h3 and h3.get_text(strip=True):
+        title = h3.get_text(strip=True)
+    if not title and a.get("title"):
+        title = a.get("title", "").strip()
+    if not title:
+        title = a.get_text(strip=True) or ""
+    if len(title) < 2:
+        return None
+
+    pub = section.select_one("div.publishing") or li.select_one("div.publishing")
+    pub_t = pub.get_text(" ", strip=True) if pub else ""
+    source, date_hint = _parse_yahoo_publishing_line(pub_t)
+    if not source and pub_t:
+        source = pub_t
+    if not source:
+        source = "Yahoo Finance"
+
+    thumb = _first_img_src_in(li)
+    t_for_sum = title
+    summary = (t_for_sum[:SUMMARY_CHARS] + ("…" if len(t_for_sum) > SUMMARY_CHARS else "")).strip()
+    return {
+        "title": title,
+        "summary": summary,
+        "source": source,
+        "url": _normalize_url(url),
+        "published_at": date_hint,
+        "category": "",
+        "thumbnail_url": thumb,
+    }
+
+
+def _crawl_yahoo_finance_list_url(page_url: str, max_n: int) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    try:
+        html = _fetch(page_url)
+        if not html:
+            return out
+        soup = BeautifulSoup(html, "lxml")
+        seen: set[str] = set()
+        for li in soup.select("li.stream-item.story-item"):
+            row = _parse_yahoo_finance_story_item(li)
+            if not row:
+                continue
+            u = (row.get("url") or "").strip()
+            if not u or u in seen:
+                continue
+            seen.add(u)
+            out.append(row)
+            if len(out) >= max_n:
+                break
+    except Exception as e:
+        logger.warning("_crawl_yahoo_finance_list_url %s: %s", page_url, e)
+    return out
+
+
+def crawl_yahoo_stocks() -> list[dict[str, Any]]:
+    """
+    Most Active 등 주식 마켓 스트림 (요청이 차단될 수 있어 빈 리스트일 수 있음).
+    https://finance.yahoo.com/markets/stocks/most-active/
+    """
+    u = f"{YAHOO_FINANCE}/markets/stocks/most-active/"
+    try:
+        return _crawl_yahoo_finance_list_url(u, YAHOO_MAX_LIST_ITEMS)
+    except Exception as e:
+        logger.exception("crawl_yahoo_stocks 실패: %s", e)
+        return []
+
+
+def crawl_yahoo_tech() -> list[dict[str, Any]]:
+    """
+    Tech 토픽 뉴스 스트림.
+    https://finance.yahoo.com/topic/tech/
+    """
+    u = f"{YAHOO_FINANCE}/topic/tech/"
+    try:
+        return _crawl_yahoo_finance_list_url(u, YAHOO_MAX_LIST_ITEMS)
+    except Exception as e:
+        logger.exception("crawl_yahoo_tech 실패: %s", e)
         return []
 
 
