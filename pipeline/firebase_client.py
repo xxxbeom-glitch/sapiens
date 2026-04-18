@@ -3,6 +3,7 @@ Firestore (database: sapiens) 저장.
 """
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -26,22 +27,28 @@ def _ensure_firebase_app() -> None:
         # 기본 앱이 아직 없음
         pass
 
-    cred_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT", "").strip()
-    if cred_json:
-        cred_dict = json.loads(cred_json, strict=False)
+    b64 = os.environ.get("FIREBASE_SERVICE_ACCOUNT_B64", "").strip()
+    if b64:
+        cred_dict = json.loads(base64.b64decode(b64).decode("utf-8"), strict=False)
         cred = credentials.Certificate(cred_dict)
     else:
-        path = os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH", "").strip()
-        if not path or not os.path.isfile(path):
-            raise FileNotFoundError(
-                "Firebase 자격 증명이 필요합니다. "
-                "RunPod 등: 환경변수 FIREBASE_SERVICE_ACCOUNT 에 서비스 계정 JSON 전체를 문자열로 설정하거나, "
-                "로컬: FIREBASE_SERVICE_ACCOUNT_PATH 에 유효한 JSON 파일 경로를 설정하세요."
-            )
-        with open(path, encoding="utf-8") as f:
-            content = f.read()
-        cred_dict = json.loads(content, strict=False)
-        cred = credentials.Certificate(cred_dict)
+        cred_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT", "").strip()
+        if cred_json:
+            cred_dict = json.loads(cred_json, strict=False)
+            cred = credentials.Certificate(cred_dict)
+        else:
+            path = os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH", "").strip()
+            if not path or not os.path.isfile(path):
+                raise FileNotFoundError(
+                    "Firebase 자격 증명이 필요합니다. 우선순위: "
+                    "FIREBASE_SERVICE_ACCOUNT_B64 (base64 인코딩 JSON), "
+                    "FIREBASE_SERVICE_ACCOUNT (평문 JSON 문자열), "
+                    "FIREBASE_SERVICE_ACCOUNT_PATH (JSON 파일 경로)."
+                )
+            with open(path, encoding="utf-8") as f:
+                content = f.read()
+            cred_dict = json.loads(content, strict=False)
+            cred = credentials.Certificate(cred_dict)
     try:
         firebase_admin.initialize_app(cred)
     except ValueError as e:
