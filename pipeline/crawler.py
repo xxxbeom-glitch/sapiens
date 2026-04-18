@@ -341,7 +341,15 @@ def crawl_tossinvest_news() -> dict[str, list[dict[str, Any]]]:
                 )
                 page = context.new_page()
                 page.goto(TOSS_INVEST_NEWS_URL, wait_until="domcontentloaded", timeout=90000)
+                page.wait_for_timeout(5000)
+                # '지원하지 않는 브라우저' / 크롬 다운로드 안내 등 팝업이 있으면 ESC로 닫기
+                try:
+                    page.keyboard.press("Escape")
+                except Exception:
+                    pass
                 page.wait_for_timeout(3000)
+                # 탭(인기뉴스 등)이 실제로 그려질 때까지 대기
+                page.wait_for_selector("text=인기뉴스", timeout=10000)
 
                 for key, aliases in tab_jobs:
                     clicked = False
