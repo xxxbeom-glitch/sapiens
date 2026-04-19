@@ -37,6 +37,8 @@ MAX_PER_SECTION = 10
 MAX_TOSS_NEWS = 20
 SUMMARY_CHARS = 200
 ARTICLE_BODY_MAX_CHARS = 2000
+# 브리핑(한경·매경 신문) 저장 후보: 본문이 이 길이 미만이면 제외 (summarizer briefing_newspaper 기준과 동일)
+BRIEFING_NEWSPAPER_MIN_BODY_CHARS = 200
 NAVER_ARTICLE_BODY_SELECTORS = (
     "#dic_area",
     "div.article_body",
@@ -218,6 +220,37 @@ def _attach_naver_article_bodies(rows: list[dict[str, Any]], pause_sec: float = 
         row["body"] = _fetch_naver_article_body(row) if u else ""
         if pause_sec > 0:
             time.sleep(pause_sec)
+
+
+def _filter_briefing_newspaper_rows_by_body(
+    rows: list[dict[str, Any]],
+    *,
+    press_code: str = "",
+) -> list[dict[str, Any]]:
+    """
+    브리핑 신문(한경·매경) 전용: 저장·요약 파이프라인에 넘기기 전 본문 검사.
+    - body가 None이거나 공백만인 항목 제거
+    - strip 이후 길이가 BRIEFING_NEWSPAPER_MIN_BODY_CHARS 미만 제거
+    """
+    kept: list[dict[str, Any]] = []
+    for row in rows:
+        raw = row.get("body")
+        if raw is None:
+            continue
+        text = str(raw).strip()
+        if not text or len(text) < BRIEFING_NEWSPAPER_MIN_BODY_CHARS:
+            continue
+        kept.append(row)
+    dropped = len(rows) - len(kept)
+    if dropped:
+        logger.info(
+            "브리핑 신문 본문 필터: 제거 %d건(본문 없음 또는 %d자 미만), 남음 %d건, press=%s",
+            dropped,
+            BRIEFING_NEWSPAPER_MIN_BODY_CHARS,
+            len(kept),
+            press_code or "?",
+        )
+    return kept
 
 
 def _attach_yahoo_article_bodies(rows: list[dict[str, Any]], pause_sec: float = 0.06) -> None:
@@ -1155,12 +1188,21 @@ def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> li
             rows.sort(key=lambda r: (r.get("paper_number", 999), r.get("detail_position", 99)))
             # 뉴스탭(crawl_naver_realtime 등)과 동일: 각 row에 `body` 채움 → 브리핑 요약에 본문 전달
             _attach_naver_article_bodies(rows)
-            return rows
+            # 한경·매경 공통: 본문 없음·짧은 기사는 풀에 넣지 않음 (briefing_hankyung_pool / briefing_maeil_pool 동일 기준)
+            filtered = _filter_briefing_newspaper_rows_by_body(rows, press_code=press_code)
+            if filtered:
+                return filtered
+            logger.info(
+                "브리핑 신문: 본문 필터로 당일 후보 전부 제거 → 다음 날짜 시도 press=%s %s(%s)",
+                press_code,
+                date_try_label,
+                date_str,
+            )
     return []
 
 
 def crawl_hankyung_newspaper() -> list[dict[str, Any]]:
-    """NAVER 뉴스 — 한국경제 신문 스탠드 (최대 30). 파이프라인은 면·면 내 순 정렬 후 상위 5건만 briefing/hankyung에 저장."""
+    """NAVER 뉴스 — 한국경제 신문 스탠드 (최대 30). 본문 200자 미만·빈 본문은 제외. 파이프라인은 면·면 내 순 정렬 후 상위 5건만 briefing/hankyung에 저장."""
     try:
         return _crawl_naver_newspaper(
             "015",
@@ -1173,7 +1215,7 @@ def crawl_hankyung_newspaper() -> list[dict[str, Any]]:
 
 
 def crawl_maeil_newspaper() -> list[dict[str, Any]]:
-    """NAVER 뉴스 — 매일경제 신문 스탠드 (최대 30). 파이프라인은 면·면 내 순 정렬 후 상위 5건만 briefing/maeil에 저장."""
+    """NAVER 뉴스 — 매일경제 신문 스탠드 (최대 30). 본문 200자 미만·빈 본문은 제외. 파이프라인은 면·면 내 순 정렬 후 상위 5건만 briefing/maeil에 저장."""
     try:
         return _crawl_naver_newspaper(
             "009",
@@ -1340,8 +1382,8 @@ def _naver_theme_stock_change_pct(fluctuations_ratio: Any, up_down_gb: Any) -> s
 
 def _naver_theme_stocks_from_api(payload: Any, limit: int) -> list[dict[str, str]]:
     """
-    테마 종목 JSON → [{"name", "price", "change"}, ...]
-    최상위 리스트 각 항목: itemname, closePrice, fluctuationsRatio, upDownGb 등.
+    테마 종목 JSON → [{"name", "price", "change", "code"(있으면)}, ...]
+    최상위 리스트 각 항목: itemname, closePrice, fluctuationsRatio, upDownGb, itemCode 등.
     """
     rows: list[dict[str, str]] = []
     for item in _unwrap_json_array(payload):
@@ -1378,13 +1420,30 @@ def _naver_theme_stocks_from_api(payload: Any, limit: int) -> list[dict[str, str
                 change = _naver_theme_format_change_rate(
                     item.get("prdyCtrt") or item.get("changeRate") or item.get("rate") or item.get("chgRate")
                 )
-        rows.append(
-            {
-                "name": name,
-                "price": _naver_theme_format_price(price_raw),
-                "change": change,
-            }
+        code_raw = (
+            item.get("itemCode")
+            or item.get("itemcode")
+            or item.get("stockCd")
+            or item.get("stockCode")
+            or item.get("isuCd")
+            or item.get("isuSrtCd")
+            or item.get("code")
+            or item.get("stkCd")
+            or item.get("itemCd")
         )
+        code_str = ""
+        if code_raw is not None and str(code_raw).strip() != "":
+            digits = "".join(ch for ch in str(code_raw).strip() if ch.isdigit())
+            if digits:
+                code_str = digits.zfill(6) if len(digits) <= 6 else digits
+        row: dict[str, str] = {
+            "name": name,
+            "price": _naver_theme_format_price(price_raw),
+            "change": change,
+        }
+        if code_str:
+            row["code"] = code_str
+        rows.append(row)
         if len(rows) >= limit:
             break
     return rows
@@ -1393,7 +1452,7 @@ def _naver_theme_stocks_from_api(payload: Any, limit: int) -> list[dict[str, str
 def crawl_naver_stock_themes() -> list[dict[str, Any]]:
     """
     네이버 증권 stock.naver.com API — 국내 테마 상위 NAVER_STOCK_THEME_MAX개 및 테마별 종목 최대 NAVER_STOCK_THEME_STOCKS_MAX개.
-    반환: [{"theme_name", "change_rate", "stocks": [{"name","price","change"}, ...]}, ...]
+    반환: [{"theme_name", "change_rate", "stocks": [{"name","price","change","code"}, ...]}, ...]
     """
     try:
         raw_list = _fetch_stock_naver_json(NAVER_STOCK_THEME_LIST_API)

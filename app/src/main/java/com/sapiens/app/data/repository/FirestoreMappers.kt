@@ -1,6 +1,7 @@
 package com.sapiens.app.data.repository
 
 import android.util.Log
+import java.util.Locale
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.MarketDirection
 import com.sapiens.app.data.model.MarketIndicator
@@ -119,23 +120,81 @@ private fun parseDirection(raw: Any?): MarketDirection = when (raw) {
 }
 
 private fun Map<*, *>.toMarketTheme(): MarketTheme? {
-    val themeName = (this["theme_name"] as? String)?.trim().orEmpty()
+    val themeName = stringField(this, "theme_name", "themeName")?.trim().orEmpty()
     if (themeName.isBlank()) return null
-    val changeRate = (this["change_rate"] as? String).orEmpty()
-    val stocksRaw = this["stocks"] as? List<*>
-    val stocks = stocksRaw?.mapNotNull { (it as? Map<*, *>)?.toThemeStock() }.orEmpty()
+    val changeRate = stringField(this, "change_rate", "changeRate").orEmpty()
+    val stocksRaw = this["stocks"] ?: this["stockList"] ?: this["items"]
+    val stocks = when (stocksRaw) {
+        is List<*> -> stocksRaw.mapNotNull { (it as? Map<*, *>)?.toThemeStock() }
+        else -> {
+            if (stocksRaw != null) {
+                Log.w("FirestoreMappers", "parseMarketThemes: stocks 필드가 List가 아님 type=${stocksRaw::class.java.name}")
+            }
+            emptyList()
+        }
+    }
     return MarketTheme(themeName = themeName, changeRate = changeRate, stocks = stocks)
 }
 
+/** Firestore/파이프라인 snake·camel 혼용 및 숫자 price 대응. code 없어도 종목명이 있으면 행 유지(로고만 생략). */
 private fun Map<*, *>.toThemeStock(): ThemeStock? {
-    val name = (this["name"] as? String)?.trim().orEmpty()
+    val name = stringField(this, "name", "itemname", "itemName", "stockName", "stockNm", "nm")?.trim().orEmpty()
     if (name.isBlank()) return null
-    val code = when (val c = this["code"]) {
-        is String -> c.trim()
-        is Number -> c.toLong().toString()
-        else -> return null
-    }.ifBlank { return null }
-    val price = (this["price"] as? String)?.ifBlank { "—" } ?: "—"
-    val change = (this["change"] as? String)?.ifBlank { "0%" } ?: "0%"
-    return ThemeStock(name = name, price = price, change = change, code = code)
+    val code = normalizeKrxStockCode(
+        stringField(this, "code", "itemCode", "itemcode", "stockCd", "stockCode", "isuCd", "isuSrtCd", "ticker", "symbol")
+            ?: numberFieldAsString(this, "code", "itemCode", "stockCd", "stockCode")
+    )
+    val price = stringField(this, "price", "dealPrice", "closePrice", "prpr", "now")
+        ?: numberFieldAsString(this, "price", "closePrice", "prpr", "now", "dealPrice")
+        ?: "—"
+    val priceDisplay = price.trim().ifBlank { "—" }
+    val change = stringField(this, "change", "chg", "fluctuationsRatio")
+        ?: numberFieldAsString(this, "change", "fluctuationsRatio", "prdyCtrt")
+        ?: "0%"
+    val changeDisplay = change.trim().ifBlank { "0%" }
+    return ThemeStock(name = name, price = priceDisplay, change = changeDisplay, code = code)
+}
+
+private fun stringField(m: Map<*, *>, vararg keys: String): String? {
+    for (k in keys) {
+        when (val v = m[k]) {
+            is String -> if (v.isNotBlank()) return v
+            else -> {}
+        }
+    }
+    return null
+}
+
+private fun numberFieldAsString(m: Map<*, *>, vararg keys: String): String? {
+    for (k in keys) {
+        when (val v = m[k]) {
+            is Number -> return formatThemeNumberForDisplay(v)
+            is String -> {
+                val t = v.trim()
+                if (t.isNotEmpty() && t.any { it.isDigit() }) return t
+            }
+            else -> {}
+        }
+    }
+    return null
+}
+
+private fun formatThemeNumberForDisplay(n: Number): String {
+    val d = n.toDouble()
+    if (d.isNaN()) return n.toString()
+    val longVal = d.toLong()
+    if (kotlin.math.abs(d - longVal.toDouble()) < 1e-6) {
+        return String.format(Locale.KOREA, "%,d", longVal)
+    }
+    return String.format(Locale.KOREA, "%.2f", d)
+}
+
+/** 6자리 내 숫자면 앞에 0 패딩, 그 외는 trim 그대로. */
+private fun normalizeKrxStockCode(raw: String?): String {
+    if (raw.isNullOrBlank()) return ""
+    val t = raw.trim()
+    val digits = t.filter { it.isDigit() }
+    if (digits.isEmpty()) return t
+    if (digits.length in 1..6) return digits.padStart(6, '0')
+    return t
 }

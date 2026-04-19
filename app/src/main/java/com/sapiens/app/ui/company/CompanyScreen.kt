@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -238,15 +239,33 @@ private fun ThemeStockRow(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.weight(1f)
         ) {
-            AsyncImage(
-                model = stock.logoUrl(),
-                contentDescription = stock.name,
-                imageLoader = imageLoader,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape),
-                contentScale = ContentScale.Crop
-            )
+            val logo = stock.logoUrl()
+            if (logo.isNotEmpty()) {
+                AsyncImage(
+                    model = logo,
+                    contentDescription = stock.name,
+                    imageLoader = imageLoader,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(TextSecondary.copy(alpha = 0.25f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = stock.name.firstOrNull()?.toString().orEmpty().ifBlank { "·" },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextPrimary,
+                        maxLines = 1
+                    )
+                }
+            }
             Text(
                 text = stock.name,
                 style = MaterialTheme.typography.bodyMedium,

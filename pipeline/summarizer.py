@@ -10,11 +10,13 @@ import re
 import time
 from typing import Any
 
+from google import genai
+
 logger = logging.getLogger(__name__)
 
-MODEL = "gemini-2.5-pro-exp-03-25"
+MODEL = "gemini-2.0-flash"
 
-_gemini_model: Any = None
+_gemini_client: Any = None
 SYSTEM = (
     "당신은 한국 투자자를 위한 금융 뉴스 에디터입니다.\n"
     "뉴스를 분석해서 핵심 내용을 명확하고 구체적으로 요약하세요.\n"
@@ -45,26 +47,24 @@ def _extract_json(text: str) -> dict[str, Any]:
     return json.loads(text)
 
 
-def _get_gemini_model() -> Any:
-    global _gemini_model
-    if _gemini_model is not None:
-        return _gemini_model
-    import google.generativeai as genai
-
+def _get_gemini_client() -> Any:
+    global _gemini_client
+    if _gemini_client is not None:
+        return _gemini_client
     key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not key:
         raise RuntimeError("GEMINI_API_KEY 가 설정되어 있어야 합니다.")
-    genai.configure(api_key=key)
-    _gemini_model = genai.GenerativeModel(MODEL)
-    return _gemini_model
+    _gemini_client = genai.Client(api_key=key)
+    return _gemini_client
 
 
 def _call_gemini(user_content: str) -> str:
-    model = _get_gemini_model()
+    client = _get_gemini_client()
     prompt = f"{SYSTEM}\n\n{user_content}"
-    response = model.generate_content(
-        prompt,
-        generation_config={"max_output_tokens": 2048},
+    response = client.models.generate_content(
+        model=MODEL,
+        contents=prompt,
+        config={"max_output_tokens": 2048},
     )
     try:
         text = response.text
