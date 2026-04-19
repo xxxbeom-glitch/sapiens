@@ -1048,7 +1048,10 @@ def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> li
         except Exception as e:
             logger.warning("_crawl_naver_newspaper 요청 실패 press=%s url=%s: %s", press_code, api_url, e)
 
-        rows = _parse_payload(raw_json, source_label, max_n) if raw_json is not None else []
+        payload = raw_json
+        logger.info("RAW PAYLOAD 앞 500자: %s", str(payload)[:500])
+
+        rows = _parse_payload(payload, source_label, max_n) if payload is not None else []
         logger.info(
             "_crawl_naver_newspaper press=%s source=%s 날짜시도=%s(%s) url=%s status=%s articles=%d",
             press_code,
