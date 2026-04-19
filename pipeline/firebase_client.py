@@ -77,10 +77,22 @@ def _get_db() -> firestore.Client:
     return _db
 
 
-def save_morning_articles(articles: List[dict[str, Any]]) -> None:
-    """briefing/morning 문서에 articles + updated_at 저장."""
+def save_briefing_hankyung_articles(articles: List[dict[str, Any]]) -> None:
+    """briefing/hankyung 문서에 articles + updated_at 저장."""
     db = _get_db()
-    db.collection("briefing").document("morning").set(
+    db.collection("briefing").document("hankyung").set(
+        {
+            "articles": articles,
+            "updated_at": SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+
+
+def save_briefing_maeil_articles(articles: List[dict[str, Any]]) -> None:
+    """briefing/maeil 문서에 articles + updated_at 저장."""
+    db = _get_db()
+    db.collection("briefing").document("maeil").set(
         {
             "articles": articles,
             "updated_at": SERVER_TIMESTAMP,

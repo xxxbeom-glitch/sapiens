@@ -38,8 +38,24 @@ class NewsRepositoryImpl(
         appContext = FirebaseApp.getInstance().applicationContext
     )
 
-    override fun getMorningArticles(): Flow<List<Article>> = callbackFlow {
-        val reg = firestore.collection(COLLECTION_BRIEFING).document(DOC_MORNING)
+    override fun getBriefingHankyungArticles(): Flow<List<Article>> = callbackFlow {
+        val reg = firestore.collection(COLLECTION_BRIEFING).document(DOC_HANKYUNG)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                if (snapshot == null) {
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                trySend(snapshot.parseArticles("articles"))
+            }
+        awaitClose { reg.remove() }
+    }.distinctUntilChanged()
+
+    override fun getBriefingMaeilArticles(): Flow<List<Article>> = callbackFlow {
+        val reg = firestore.collection(COLLECTION_BRIEFING).document(DOC_MAEIL)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     trySend(emptyList())
@@ -321,7 +337,8 @@ class NewsRepositoryImpl(
         private const val DATABASE_ID = "sapiens"
         private const val COLLECTION_BRIEFING = "briefing"
         private const val COLLECTION_NEWS = "news"
-        private const val DOC_MORNING = "morning"
+        private const val DOC_HANKYUNG = "hankyung"
+        private const val DOC_MAEIL = "maeil"
         private const val DOC_US_MARKET = "us_market"
         private const val PREFS_MARKET_CACHE = "market_index_cache"
         private const val PREF_LAST_FETCH_MILLIS = "last_fetch_millis"

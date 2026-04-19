@@ -26,10 +26,13 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Icon
+import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,6 +50,7 @@ import com.sapiens.app.data.model.MarketIndex
 import com.sapiens.app.data.model.MarketIndicator
 import com.sapiens.app.ui.common.categoryChipColors
 import com.sapiens.app.ui.theme.Accent
+import com.sapiens.app.ui.theme.Background
 import com.sapiens.app.ui.theme.Card
 import com.sapiens.app.ui.theme.CardPaddingBottom
 import com.sapiens.app.ui.theme.CardPaddingHorizontal
@@ -57,6 +61,7 @@ import com.sapiens.app.ui.theme.MarketUp
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun SectionLabel(
@@ -95,7 +100,7 @@ fun MorningSourceCard(
     modifier: Modifier = Modifier
 ) {
     if (articles.isEmpty()) return
-    val topArticles = articles.take(4)
+    val topArticles = articles.take(10)
     val first = topArticles.first()
     val publishedAt = first.time.ifBlank { "-" }
     Surface(
@@ -186,30 +191,87 @@ fun MorningSourceCard(
 }
 
 @Composable
-fun MorningTopArticlesCard(
-    articles: List<Article>,
+fun DomesticNewspapersBriefingCard(
+    hankyungArticles: List<Article>,
+    maeilArticles: List<Article>,
     onClickArticle: (Article) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (articles.isEmpty()) return
-    val topArticles = articles.take(8)
-    val first = topArticles.first()
-    Card(
+    val pages = listOf(hankyungArticles.take(5), maeilArticles.take(5))
+    if (pages[0].isEmpty() && pages[1].isEmpty()) return
+
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
+    val scope = rememberCoroutineScope()
+    val tabLabels = listOf("한국경제", "매일경제")
+
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(18.dp)
+            .padding(horizontal = 16.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .background(Card)
-                .padding(
-                    start = CardPaddingHorizontal,
-                    end = CardPaddingHorizontal,
-                    top = CardPaddingVertical,
-                    bottom = CardPaddingBottom
-                )
+        PrimaryTabRow(
+            selectedTabIndex = pagerState.currentPage,
+            containerColor = Background,
+            contentColor = Accent
         ) {
+            tabLabels.forEachIndexed { index, label ->
+                Tab(
+                    selected = pagerState.currentPage == index,
+                    onClick = {
+                        scope.launch { pagerState.animateScrollToPage(index) }
+                    },
+                    text = {
+                        Text(
+                            text = label,
+                            color = if (pagerState.currentPage == index) TextPrimary else TextSecondary
+                        )
+                    }
+                )
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp)
+        ) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxWidth()
+            ) { page ->
+                NewspaperBriefingFiveList(
+                    articles = pages[page],
+                    onClickArticle = onClickArticle
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NewspaperBriefingFiveList(
+    articles: List<Article>,
+    onClickArticle: (Article) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .background(Card)
+            .padding(
+                start = CardPaddingHorizontal,
+                end = CardPaddingHorizontal,
+                top = CardPaddingVertical,
+                bottom = CardPaddingBottom
+            )
+    ) {
+        if (articles.isEmpty()) {
+            Text(
+                text = "불러온 기사가 없습니다.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondary,
+                modifier = Modifier.padding(vertical = 16.dp)
+            )
+        } else {
+            val topArticles = articles.take(5)
+            val first = topArticles.first()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -227,7 +289,7 @@ fun MorningTopArticlesCard(
                         lineHeight = 34.sp
                     ),
                     color = TextPrimary,
-                    maxLines = 3,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }

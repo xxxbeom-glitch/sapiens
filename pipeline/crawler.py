@@ -906,7 +906,7 @@ def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> li
 
 
 def crawl_hankyung_newspaper() -> list[dict[str, Any]]:
-    """NAVER 뉴스 — 한국경제 신문 스탠드 (최대 30)."""
+    """NAVER 뉴스 — 한국경제 신문 스탠드 (최대 30). 파이프라인은 면·면 내 순 정렬 후 상위 5건만 briefing/hankyung에 저장."""
     try:
         return _crawl_naver_newspaper(
             "015",
@@ -919,7 +919,7 @@ def crawl_hankyung_newspaper() -> list[dict[str, Any]]:
 
 
 def crawl_maeil_newspaper() -> list[dict[str, Any]]:
-    """NAVER 뉴스 — 매일경제 신문 스탠드 (최대 30)."""
+    """NAVER 뉴스 — 매일경제 신문 스탠드 (최대 30). 파이프라인은 면·면 내 순 정렬 후 상위 5건만 briefing/maeil에 저장."""
     try:
         return _crawl_naver_newspaper(
             "009",

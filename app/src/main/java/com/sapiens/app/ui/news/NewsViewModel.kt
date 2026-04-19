@@ -7,9 +7,11 @@ import com.sapiens.app.data.mock.MockData
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.repository.NewsFeedType
 import com.sapiens.app.data.repository.NewsRepository
+import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
@@ -43,26 +45,43 @@ class NewsViewModel(
                 repository.getNewsFeed(NewsFeedType.MAIN)
             ) { realtime, popular, main ->
                 Triple(realtime, popular, main)
-            }.collect { (realtime, popular, main) ->
-                _realtimeNews.value = realtime.ifEmpty { MockData.NEWS_REALTIME }
-                _popularNews.value = popular.ifEmpty { MockData.NEWS_POPULAR }
-                _mainNews.value = main.ifEmpty { MockData.NEWS_MAIN }
-                _isLoading.value = false
             }
+                .catch { e ->
+                    Log.w(TAG, "domestic feeds combine", e)
+                    emit(Triple(emptyList(), emptyList(), emptyList()))
+                }
+                .collect { (realtime, popular, main) ->
+                    _realtimeNews.value = realtime.ifEmpty { MockData.NEWS_REALTIME }
+                    _popularNews.value = popular.ifEmpty { MockData.NEWS_POPULAR }
+                    _mainNews.value = main.ifEmpty { MockData.NEWS_MAIN }
+                    _isLoading.value = false
+                }
         }
         viewModelScope.launch {
-            repository.getNewsFeed(NewsFeedType.OVERSEAS_STOCKS).collect { list ->
-                _overseasStocks.value = list
-            }
+            repository.getNewsFeed(NewsFeedType.OVERSEAS_STOCKS)
+                .catch { e ->
+                    Log.w(TAG, "overseas_stocks", e)
+                    emit(emptyList())
+                }
+                .collect { list ->
+                    _overseasStocks.value = list
+                }
         }
         viewModelScope.launch {
-            repository.getNewsFeed(NewsFeedType.OVERSEAS_TECH).collect { list ->
-                _overseasTech.value = list
-            }
+            repository.getNewsFeed(NewsFeedType.OVERSEAS_TECH)
+                .catch { e ->
+                    Log.w(TAG, "overseas_tech", e)
+                    emit(emptyList())
+                }
+                .collect { list ->
+                    _overseasTech.value = list
+                }
         }
     }
 
     companion object {
+        private const val TAG = "NewsViewModel"
+
         fun factory(repository: NewsRepository): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")

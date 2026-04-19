@@ -6,7 +6,11 @@ import com.sapiens.app.data.model.MarketIndexSnapshot
 import kotlinx.coroutines.flow.Flow
 
 interface NewsRepository {
-    fun getMorningArticles(): Flow<List<Article>>
+    /** Firestore `briefing/hankyung` 문서의 `articles`. */
+    fun getBriefingHankyungArticles(): Flow<List<Article>>
+
+    /** Firestore `briefing/maeil` 문서의 `articles`. */
+    fun getBriefingMaeilArticles(): Flow<List<Article>>
     fun getUsArticles(): Flow<List<Article>>
     fun getMarketIndicators(): Flow<List<MarketIndicator>>
     fun getRepresentativeIndices(): Flow<MarketIndexSnapshot>

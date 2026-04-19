@@ -14,6 +14,50 @@ from typing import Any
 
 logger = logging.getLogger("pipeline")
 
+BRIEFING_NEWSPAPER_N = 5
+
+
+def _sorted_newspaper_top(rows: list[dict[str, Any]], n: int) -> list[dict[str, Any]]:
+    if not rows:
+        return []
+    return sorted(
+        rows,
+        key=lambda r: (int(r.get("paper_number", 999)), int(r.get("detail_position", 99))),
+    )[:n]
+
+
+def _summarize_newspaper_pool_for_briefing(
+    client: Any, summarizer: Any, pool: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """요약 실패 시 스텁으로 merge. pool 길이만큼(최대 5) 순서 유지."""
+    stub = {"headline": "", "category": "", "summary_points": []}
+    summarized = summarizer.summarize_batch(client, pool)
+    by_url: dict[str, dict[str, Any]] = {}
+    for row in summarized:
+        r = dict(row)
+        ai = r.pop("_ai", None)
+        if ai:
+            u = (r.get("url") or "").strip()
+            if u:
+                by_url[u] = ai
+    out: list[dict[str, Any]] = []
+    seen_url: set[str] = set()
+    for row in pool:
+        u = (row.get("url") or "").strip()
+        if u and u in seen_url:
+            continue
+        ai = by_url.get(u) if u else None
+        if ai is None:
+            ai = stub
+            logger.warning(
+                "briefing 신문 요약 폴백: %s",
+                (row.get("title") or "")[:80],
+            )
+        out.append(summarizer.merge_to_firestore_article(dict(row), ai))
+        if u:
+            seen_url.add(u)
+    return out
+
 
 def _build_client() -> Any:
     import anthropic
@@ -53,12 +97,8 @@ def run() -> None:
     yahoo_merged: list[dict] = list(overseas_stocks) + list(overseas_tech)
     newspaper_hankyung = crawler.crawl_hankyung_newspaper()
     newspaper_maeil = crawler.crawl_maeil_newspaper()
-    newspaper_merged: list[dict] = list(newspaper_hankyung) + list(newspaper_maeil)
-    newspaper_merged.sort(
-        key=lambda r: (int(r.get("paper_number", 999)), int(r.get("detail_position", 99)))
-    )
-    newspaper_merged = crawler.dedupe_similar_titles_ordered(newspaper_merged, 0.8)
-    newspaper_merged = newspaper_merged[:8]
+    pool_hankyung = _sorted_newspaper_top(newspaper_hankyung, BRIEFING_NEWSPAPER_N)
+    pool_maeil = _sorted_newspaper_top(newspaper_maeil, BRIEFING_NEWSPAPER_N)
 
     # 3) 시장 지표
     indicators = crawler.crawl_market_indicators()
@@ -70,7 +110,8 @@ def run() -> None:
         "overseas_stocks": len(overseas_stocks),
         "overseas_tech": len(overseas_tech),
         "yahoo_merged": len(yahoo_merged),
-        "newspaper_merged": len(newspaper_merged),
+        "briefing_hankyung_pool": len(pool_hankyung),
+        "briefing_maeil_pool": len(pool_maeil),
         "indicators": len(indicators),
     }
     logger.info("크롤 완료: %s", counts)
@@ -94,12 +135,9 @@ def run() -> None:
         if ai:
             fs_main.append(summarizer.merge_to_firestore_article(row, ai))
 
-    # 아침 브리핑(한국경제+매일경제 신문) → briefing/morning/articles
-    fs_morning: list[dict] = []
-    for row in summarizer.summarize_batch(client, newspaper_merged):
-        ai = row.pop("_ai", None)
-        if ai:
-            fs_morning.append(summarizer.merge_to_firestore_article(row, ai))
+    # 한경·매경 신문 브리핑 → briefing/hankyung, briefing/maeil (각 상위 5건, 언론사 간 중복 제거 없음)
+    fs_hankyung = _summarize_newspaper_pool_for_briefing(client, summarizer, pool_hankyung)
+    fs_maeil = _summarize_newspaper_pool_for_briefing(client, summarizer, pool_maeil)
 
     # Yahoo: 스톡/테크 각각 전체 요약 → news/overseas_* (기존과 동일)
     fs_overseas_stocks: list[dict] = []
@@ -137,7 +175,8 @@ def run() -> None:
         logger.warning("시황 요약 생성 실패: %s", e)
 
     # 5) Firestore
-    firebase_client.save_morning_articles(fs_morning)
+    firebase_client.save_briefing_hankyung_articles(fs_hankyung)
+    firebase_client.save_briefing_maeil_articles(fs_maeil)
     firebase_client.save_overseas_stocks_articles(fs_overseas_stocks)
     firebase_client.save_overseas_tech_articles(fs_overseas_tech)
     firebase_client.save_us_market_articles(fs_us_market)
@@ -179,7 +218,8 @@ def run() -> None:
         len(fs_realtime)
         + len(fs_popular)
         + len(fs_main)
-        + len(fs_morning)
+        + len(fs_hankyung)
+        + len(fs_maeil)
         + len(fs_overseas_stocks)
         + len(fs_overseas_tech)
         + len(fs_us_market)

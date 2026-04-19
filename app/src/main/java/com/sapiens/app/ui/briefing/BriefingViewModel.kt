@@ -24,8 +24,11 @@ class BriefingViewModel(
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    private val _morningArticles = MutableStateFlow(MockData.morningArticles)
-    val morningArticles: StateFlow<List<Article>> = _morningArticles.asStateFlow()
+    private val _hankyungBriefingArticles = MutableStateFlow(MockData.briefingHankyungArticles)
+    val hankyungBriefingArticles: StateFlow<List<Article>> = _hankyungBriefingArticles.asStateFlow()
+
+    private val _maeilBriefingArticles = MutableStateFlow(MockData.briefingMaeilArticles)
+    val maeilBriefingArticles: StateFlow<List<Article>> = _maeilBriefingArticles.asStateFlow()
 
     private val _usArticles = MutableStateFlow(MockData.usArticles)
     val usArticles: StateFlow<List<Article>> = _usArticles.asStateFlow()
@@ -42,13 +45,16 @@ class BriefingViewModel(
     init {
         viewModelScope.launch {
             combine(
-                repository.getMorningArticles(),
+                repository.getBriefingHankyungArticles(),
+                repository.getBriefingMaeilArticles(),
                 repository.getUsArticles(),
                 repository.getMarketIndicators()
-            ) { morning, us, indicators ->
-                Triple(morning, us, indicators)
-            }.collect { (morning, us, indicators) ->
-                _morningArticles.value = morning.ifEmpty { MockData.morningArticles }
+            ) { hankyung, maeil, us, indicators ->
+                Triple(hankyung to maeil, us, indicators)
+            }.collect { (papers, us, indicators) ->
+                val (hankyung, maeil) = papers
+                _hankyungBriefingArticles.value = hankyung.ifEmpty { MockData.briefingHankyungArticles }
+                _maeilBriefingArticles.value = maeil.ifEmpty { MockData.briefingMaeilArticles }
                 _usArticles.value = us.ifEmpty { MockData.usArticles }
                 _marketIndicators.value = indicators.ifEmpty { MockData.marketIndicators }
                 _isLoading.value = false

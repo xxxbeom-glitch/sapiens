@@ -19,7 +19,6 @@ import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -106,27 +105,27 @@ fun NewsScreen(
     val overseasTech by viewModel.overseasTech.collectAsState()
 
     var selectedArticle by remember { mutableStateOf<Article?>(null) }
-    var selectedTabIndex by remember { mutableIntStateOf(0) }
-
-    LaunchedEffect(isOverseas) {
-        selectedTabIndex = 0
-    }
+    // 국내(3탭)·해외(2탭) 인덱스를 분리해 두지 않으면, 국내 3번째 탭에서 해외로 바꿀 때
+    // 한 프레임이라도 selectedTabIndex(2) >= 해외 tabCount(2)가 되어 PrimaryTabRow가 크래시난다.
+    var domesticTabIndex by remember { mutableIntStateOf(0) }
+    var overseasTabIndex by remember { mutableIntStateOf(0) }
 
     val tabLabels = if (isOverseas) overseasTabLabels else domesticTabLabels
+    val selectedTabIndex = if (isOverseas) overseasTabIndex else domesticTabIndex
 
     val currentItems = when {
-        isOverseas -> when (selectedTabIndex) {
+        isOverseas -> when (overseasTabIndex) {
             0 -> overseasStocks
             1 -> overseasTech
             else -> overseasStocks
         }
-        else -> when (selectedTabIndex) {
+        else -> when (domesticTabIndex) {
             0 -> realtimeNews
             1 -> popularNews
             else -> mainNews
         }
     }
-    val showRank = !isOverseas && selectedTabIndex == 1
+    val showRank = !isOverseas && domesticTabIndex == 1
     val displayItems = if (isOverseas) currentItems.map { it.withKoreanHeadlineFallback() } else currentItems
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -154,7 +153,9 @@ fun NewsScreen(
                         val selected = selectedTabIndex == index
                         Tab(
                             selected = selected,
-                            onClick = { selectedTabIndex = index },
+                            onClick = {
+                                if (isOverseas) overseasTabIndex = index else domesticTabIndex = index
+                            },
                             text = {
                                 Text(
                                     text = label,
@@ -175,7 +176,9 @@ fun NewsScreen(
                 ) {
                     itemsIndexed(
                         items = displayItems,
-                        key = { index, article -> "$index-${article.headline}" }
+                        key = { index, article ->
+                            "${index}_${article.headline}_${article.time}_${article.source}"
+                        }
                     ) { index, article ->
                         NewsFeedRow(
                             item = article,

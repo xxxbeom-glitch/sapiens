@@ -8,12 +8,22 @@ import com.google.firebase.firestore.DocumentSnapshot
 
 internal fun DocumentSnapshot.parseArticles(field: String = "articles"): List<Article> {
     if (!exists()) return emptyList()
-    return get(field).asArticleList()
+    return try {
+        get(field).asArticleList()
+    } catch (e: Exception) {
+        Log.e("FirestoreMappers", "parseArticles id=${id} field=$field", e)
+        emptyList()
+    }
 }
 
 internal fun DocumentSnapshot.parseIndicators(field: String = "indicators"): List<MarketIndicator> {
     if (!exists()) return emptyList()
-    return get(field).asIndicatorList()
+    return try {
+        get(field).asIndicatorList()
+    } catch (e: Exception) {
+        Log.e("FirestoreMappers", "parseIndicators id=${id} field=$field", e)
+        emptyList()
+    }
 }
 
 @Suppress("UNCHECKED_CAST")

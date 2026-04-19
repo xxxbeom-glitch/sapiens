@@ -11,64 +11,31 @@ import com.sapiens.app.data.model.YearFinancialValue
 import com.sapiens.app.data.model.USReport
 
 object MockData {
-    val morningArticles = listOf(
+    val briefingHankyungArticles: List<Article> = (1..5).map { i ->
         Article(
             source = "한국경제",
             sourceColor = "kr",
-            headline = "반도체 수출 3개월 연속 증가, AI 서버 수요가 상승 견인",
-            summary = "4월 반도체 수출이 전년 대비 18.4% 증가하며 회복세가 뚜렷해졌다. 메모리 가격 반등과 AI 서버 수요 확대가 주요 동력으로 작용했다.",
-            time = "오전 6:42",
+            headline = "데모 한국경제 신문 기사 제목 $i",
+            summary = "Firestore briefing/hankyung 이 비었을 때 표시됩니다.",
+            time = "오전 6:${(40 + i).toString().padStart(2, '0')}",
             category = "경제",
-            summaryPoints = listOf(
-                "산업통상자원부 집계에서 4월 반도체 수출은 117억달러로 전년 동월 대비 18.4% 늘었고, 전체 수출 증가율(9.1%)의 두 배를 웃돌며 지수 반등을 주도했습니다.",
-                "HBM과 DDR5 중심의 서버 메모리 ASP가 전분기 대비 7~9% 상승한 것이 배경으로, 미국 하이퍼스케일러의 AI 설비투자 확대가 주문 가시성을 높였습니다.",
-                "수출 개선이 2분기에도 이어지면 무역수지 흑자 폭 확대와 원화 변동성 완화에 기여할 수 있어 코스피 반도체 밸류에이션 상단 재평가 가능성이 거론됩니다."
-            ),
-            tag = "ECON"
-        ),
+            summaryPoints = listOf("파이프라인 실행 후 실제 한국경제 기사가 동기화됩니다."),
+            tag = "HK"
+        )
+    }
+
+    val briefingMaeilArticles: List<Article> = (1..5).map { i ->
         Article(
             source = "매일경제",
             sourceColor = "kr",
-            headline = "금리 인하 기대 확산에 코스피 2850선 돌파 흐름 지속",
-            summary = "연준 6월 인하 가능성이 높아지며 외국인 매수세가 유입됐다. 전기차·2차전지 섹터가 지수 상승을 주도했다.",
-            time = "오전 7:10",
+            headline = "데모 매일경제 신문 기사 제목 $i",
+            summary = "Firestore briefing/maeil 이 비었을 때 표시됩니다.",
+            time = "오전 7:${(10 + i).toString().padStart(2, '0')}",
             category = "매크로",
-            summaryPoints = listOf(
-                "코스피는 장중 2,850선을 돌파하며 6거래일 연속 상승했고, 외국인은 현·선물 합산 8,400억원 순매수로 지수 상승의 60% 이상을 설명했습니다.",
-                "미국 4월 CPI가 전월 대비 0.2%로 둔화되며 연준 6월 인하 확률이 CME 기준 64%까지 오른 점이 위험자산 선호를 자극한 핵심 배경입니다.",
-                "원/달러 환율이 1,360원대 중반으로 내려오면서 수입물가 부담이 완화될 수 있지만, 미 고용 지표 반등 시 금리 기대가 빠르게 되돌려질 리스크도 남아 있습니다."
-            ),
-            tag = "MARKET"
-        ),
-        Article(
-            source = "조선비즈",
-            sourceColor = "kr",
-            headline = "서울 아파트 거래량 2년래 최고, 강남권 회복세 뚜렷",
-            summary = "4월 서울 아파트 매매 거래가 5,200건을 넘어서며 2024년 2월 이후 최고치를 기록했다. 강남3구와 마용성 중심으로 회복세가 뚜렷하다.",
-            time = "오전 7:28",
-            category = "부동산",
-            summaryPoints = listOf(
-                "서울부동산정보광장 기준 4월 거래 신고 건수는 5,200건을 넘어 최근 2년 최고치를 기록했고, 강남·서초·송파 비중이 전체의 27%로 확대됐습니다.",
-                "전세가율 회복과 대출 금리 하락이 매수 심리를 되살렸으며, 신축 선호가 강화되면서 준공 10년 이하 단지의 거래 단가가 평균 4.3% 더 높게 형성됐습니다.",
-                "거래량 회복이 실거래가 상승으로 연결되면 건설·리츠 종목에는 우호적이지만, 가계부채 재확대 시 규제 강화가 재개될 가능성도 동시에 커집니다."
-            ),
-            tag = "REAL ESTATE"
-        ),
-        Article(
-            source = "연합뉴스",
-            sourceColor = "kr",
-            headline = "삼성전자 2나노 파운드리 양산 시작, 고객사 수주 기대 확대",
-            summary = "삼성전자가 화성 캠퍼스에서 2나노 공정 양산을 시작했다. 주요 고객사로 퀄컴과 테슬라가 거론되고 있다.",
-            time = "오전 7:45",
-            category = "IT",
-            summaryPoints = listOf(
-                "삼성전자는 화성 라인에서 2nm GAA 공정 초기 양산을 시작했고, 초기 월 생산능력은 1.5만장 규모로 2026년 상반기 2배 확대가 목표로 제시됐습니다.",
-                "퀄컴·테슬라향 물량 수주 가능성이 거론되며 파운드리 가동률 개선 기대가 커졌고, 경쟁사 대비 전력 효율 15% 개선 수치가 마케팅 포인트로 부각됐습니다.",
-                "초기 수율이 계획보다 5%p만 낮아도 감가 부담이 확대될 수 있어 단기 변동성은 남아 있으나, 성공 시 시스템반도체 생태계 확장 효과가 큽니다."
-            ),
-            tag = "TECH"
+            summaryPoints = listOf("파이프라인 실행 후 실제 매일경제 기사가 동기화됩니다."),
+            tag = "MK"
         )
-    )
+    }
 
     val marketIndicators = listOf(
         MarketIndicator(name = "다우존스", value = "39,582.10", change = "+0.84%", direction = MarketDirection.UP),
