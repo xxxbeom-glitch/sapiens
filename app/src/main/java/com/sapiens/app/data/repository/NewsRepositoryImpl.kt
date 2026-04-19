@@ -7,6 +7,7 @@ import com.sapiens.app.data.model.MarketDirection
 import com.sapiens.app.data.model.MarketIndicator
 import com.sapiens.app.data.model.MarketIndex
 import com.sapiens.app.data.model.MarketIndexSnapshot
+import com.sapiens.app.data.model.MarketTheme
 import com.sapiens.app.data.mock.MockData
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.FirebaseFirestore
@@ -118,6 +119,22 @@ class NewsRepositoryImpl(
                     return@addSnapshotListener
                 }
                 trySend(snapshot.parseArticles("articles"))
+            }
+        awaitClose { reg.remove() }
+    }.distinctUntilChanged()
+
+    override fun getMarketThemes(): Flow<List<MarketTheme>> = callbackFlow {
+        val reg = firestore.collection(COLLECTION_MARKET).document(DOC_MARKET_THEMES)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                if (snapshot == null) {
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                trySend(snapshot.parseMarketThemes("themes"))
             }
         awaitClose { reg.remove() }
     }.distinctUntilChanged()
@@ -337,6 +354,8 @@ class NewsRepositoryImpl(
         private const val DATABASE_ID = "sapiens"
         private const val COLLECTION_BRIEFING = "briefing"
         private const val COLLECTION_NEWS = "news"
+        private const val COLLECTION_MARKET = "market"
+        private const val DOC_MARKET_THEMES = "themes"
         private const val DOC_HANKYUNG = "hankyung"
         private const val DOC_MAEIL = "maeil"
         private const val DOC_US_MARKET = "us_market"

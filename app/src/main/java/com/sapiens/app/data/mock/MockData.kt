@@ -7,6 +7,8 @@ import com.sapiens.app.data.model.FinancialSeries
 import com.sapiens.app.data.model.MarketDirection
 import com.sapiens.app.data.model.MarketIndex
 import com.sapiens.app.data.model.MarketIndicator
+import com.sapiens.app.data.model.MarketTheme
+import com.sapiens.app.data.model.ThemeStock
 import com.sapiens.app.data.model.YearFinancialValue
 import com.sapiens.app.data.model.USReport
 
@@ -78,6 +80,40 @@ object MockData {
         MarketIndex("원자재", "금", "2,418.90", "+0.52%", "2,406.39", MarketDirection.UP),
         MarketIndex("원자재", "WTI 유가", "82.14", "−1.08%", "83.04", MarketDirection.DOWN),
         MarketIndex("미국", "다우존스", "39,582.10", "+0.84%", "39,251.44", MarketDirection.UP)
+    )
+
+    /** Firestore `market/themes` 비어 있을 때 국내 탭 데모용. */
+    val marketThemes = listOf(
+        MarketTheme(
+            themeName = "스페이스X(SpaceX)",
+            changeRate = "+8.38%",
+            stocks = listOf(
+                ThemeStock("와이제이링크", "5,920", "+29.82%", "209640"),
+                ThemeStock("케이엔알시스템", "12,400", "+8.12%", "199430"),
+                ThemeStock("한화에어로스페이스", "520,000", "+3.45%", "012450"),
+                ThemeStock("비에이치아이", "42,100", "+1.20%", "083650"),
+                ThemeStock("조정 종목", "10,000", "-2.10%", "005930")
+            )
+        ),
+        MarketTheme(
+            themeName = "2차전지·소재",
+            changeRate = "-1.05%",
+            stocks = listOf(
+                ThemeStock("에코프로비엠", "98,700", "+4.52%", "247540"),
+                ThemeStock("LG에너지솔루션", "410,000", "+1.88%", "373220"),
+                ThemeStock("포스코퓨처엠", "312,000", "+0.65%", "003670"),
+                ThemeStock("SK이노베이션", "115,500", "-0.43%", "096770")
+            )
+        ),
+        MarketTheme(
+            themeName = "반도체 장비",
+            changeRate = "+2.31%",
+            stocks = listOf(
+                ThemeStock("원익IPS", "42,300", "+6.11%", "240810"),
+                ThemeStock("주성엔지니어링", "28,900", "+2.40%", "036930"),
+                ThemeStock("테스", "32,150", "+1.10%", "095610")
+            )
+        )
     )
 
     val usReport = USReport(

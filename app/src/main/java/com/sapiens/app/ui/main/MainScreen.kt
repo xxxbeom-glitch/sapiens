@@ -40,6 +40,7 @@ import com.sapiens.app.ui.briefing.BriefingScreen
 import com.sapiens.app.ui.briefing.BriefingViewModel
 import com.sapiens.app.ui.company.CompanySearchBottomSheet
 import com.sapiens.app.ui.company.CompanyScreen
+import com.sapiens.app.ui.company.CompanyViewModel
 import com.sapiens.app.ui.my.MyScreen
 import com.sapiens.app.ui.news.NewsRegionToggle
 import com.sapiens.app.ui.news.NewsScreen
@@ -74,6 +75,7 @@ fun MainScreen(
     val newsRepository = remember { NewsRepositoryImpl() }
     val briefingViewModel: BriefingViewModel = viewModel(factory = BriefingViewModel.factory(newsRepository))
     val newsViewModel: NewsViewModel = viewModel(factory = NewsViewModel.factory(newsRepository))
+    val companyViewModel: CompanyViewModel = viewModel(factory = CompanyViewModel.factory(newsRepository))
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -108,6 +110,7 @@ fun MainScreen(
                     isOverseas = isOverseasNews
                 )
                 2 -> CompanyScreen(
+                    viewModel = companyViewModel,
                     addedCompanies = addedCompanies
                 )
                 else -> MyScreen(

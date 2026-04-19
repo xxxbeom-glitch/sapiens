@@ -4,6 +4,8 @@ import android.util.Log
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.MarketDirection
 import com.sapiens.app.data.model.MarketIndicator
+import com.sapiens.app.data.model.MarketTheme
+import com.sapiens.app.data.model.ThemeStock
 import com.google.firebase.firestore.DocumentSnapshot
 
 internal fun DocumentSnapshot.parseArticles(field: String = "articles"): List<Article> {
@@ -26,6 +28,16 @@ internal fun DocumentSnapshot.parseIndicators(field: String = "indicators"): Lis
     }
 }
 
+internal fun DocumentSnapshot.parseMarketThemes(field: String = "themes"): List<MarketTheme> {
+    if (!exists()) return emptyList()
+    return try {
+        get(field).asThemeList()
+    } catch (e: Exception) {
+        Log.e("FirestoreMappers", "parseMarketThemes id=${id} field=$field", e)
+        emptyList()
+    }
+}
+
 @Suppress("UNCHECKED_CAST")
 private fun Any?.asArticleList(): List<Article> {
     if (this !is List<*>) return emptyList()
@@ -36,6 +48,12 @@ private fun Any?.asArticleList(): List<Article> {
 private fun Any?.asIndicatorList(): List<MarketIndicator> {
     if (this !is List<*>) return emptyList()
     return this.mapNotNull { (it as? Map<*, *>)?.toMarketIndicator() }
+}
+
+@Suppress("UNCHECKED_CAST")
+private fun Any?.asThemeList(): List<MarketTheme> {
+    if (this !is List<*>) return emptyList()
+    return this.mapNotNull { (it as? Map<*, *>)?.toMarketTheme() }
 }
 
 private fun Map<*, *>.toArticle(): Article? {
@@ -98,4 +116,26 @@ private fun parseDirection(raw: Any?): MarketDirection = when (raw) {
         else -> MarketDirection.FLAT
     }
     else -> MarketDirection.FLAT
+}
+
+private fun Map<*, *>.toMarketTheme(): MarketTheme? {
+    val themeName = (this["theme_name"] as? String)?.trim().orEmpty()
+    if (themeName.isBlank()) return null
+    val changeRate = (this["change_rate"] as? String).orEmpty()
+    val stocksRaw = this["stocks"] as? List<*>
+    val stocks = stocksRaw?.mapNotNull { (it as? Map<*, *>)?.toThemeStock() }.orEmpty()
+    return MarketTheme(themeName = themeName, changeRate = changeRate, stocks = stocks)
+}
+
+private fun Map<*, *>.toThemeStock(): ThemeStock? {
+    val name = (this["name"] as? String)?.trim().orEmpty()
+    if (name.isBlank()) return null
+    val code = when (val c = this["code"]) {
+        is String -> c.trim()
+        is Number -> c.toLong().toString()
+        else -> return null
+    }.ifBlank { return null }
+    val price = (this["price"] as? String)?.ifBlank { "—" } ?: "—"
+    val change = (this["change"] as? String)?.ifBlank { "0%" } ?: "0%"
+    return ThemeStock(name = name, price = price, change = change, code = code)
 }

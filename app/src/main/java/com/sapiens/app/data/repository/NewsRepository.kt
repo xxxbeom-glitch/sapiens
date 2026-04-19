@@ -3,6 +3,7 @@ package com.sapiens.app.data.repository
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.MarketIndicator
 import com.sapiens.app.data.model.MarketIndexSnapshot
+import com.sapiens.app.data.model.MarketTheme
 import kotlinx.coroutines.flow.Flow
 
 interface NewsRepository {
@@ -15,6 +16,9 @@ interface NewsRepository {
     fun getMarketIndicators(): Flow<List<MarketIndicator>>
     fun getRepresentativeIndices(): Flow<MarketIndexSnapshot>
     fun getNewsFeed(type: NewsFeedType): Flow<List<Article>>
+
+    /** Firestore `market/themes` 문서의 `themes` 배열. */
+    fun getMarketThemes(): Flow<List<MarketTheme>>
 }
 
 /**

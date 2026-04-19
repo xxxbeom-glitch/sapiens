@@ -1,15 +1,21 @@
 package com.sapiens.app.ui.company
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -18,7 +24,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -26,12 +32,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.ImageLoader
+import coil.compose.AsyncImage
+import coil.decode.SvgDecoder
 import com.sapiens.app.data.mock.MockData
 import com.sapiens.app.data.model.Company
+import com.sapiens.app.data.model.MarketTheme
+import com.sapiens.app.data.model.ThemeStock
+import com.sapiens.app.data.model.logoUrl
+import com.sapiens.app.data.model.stocksForDisplay
 import com.sapiens.app.ui.common.CompanyBottomSheet
 import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.Background
@@ -45,21 +62,20 @@ private val companyTabs = listOf("국내", "해외")
 private val domesticTickers = setOf("005930", "000660", "035420", "051910")
 private val foreignTickers = setOf("NVDA", "AAPL", "TSLA")
 
+private val rateDownBlue = Color(0xFF007AFF)
+
 @Composable
 fun CompanyScreen(
+    viewModel: CompanyViewModel,
     addedCompanies: List<Company>
 ) {
+    val marketThemes by viewModel.marketThemes.collectAsState()
     var selectedCompany by remember { mutableStateOf<Company?>(null) }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
 
-    val baseDomestic = MockData.companyList.filter { it.ticker in domesticTickers }
     val baseForeign = MockData.companyList.filter { it.ticker in foreignTickers }
-    val addedDomestic = addedCompanies.filter { isDomesticCompany(it) }
     val addedForeign = addedCompanies.filter { !isDomesticCompany(it) }
-
-    val domesticItems = (baseDomestic + addedDomestic).distinctBy { it.ticker }
     val foreignItems = (baseForeign + addedForeign).distinctBy { it.ticker }
-    val currentItems = if (selectedTabIndex == 0) domesticItems else foreignItems
 
     Column(
         modifier = Modifier
@@ -86,27 +102,45 @@ fun CompanyScreen(
             }
         }
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = RowVertical)
-        ) {
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .background(Card, RoundedCornerShape(18.dp))
-                ) {
-                    currentItems.forEachIndexed { index, company ->
-                        CompanyRow(
-                            company = company,
-                            onClick = { selectedCompany = company }
-                        )
-                        if (index < currentItems.lastIndex) {
-                            HorizontalDivider(
-                                color = TextSecondary.copy(alpha = 0.2f),
-                                modifier = Modifier.padding(start = 16.dp)
+        if (selectedTabIndex == 0) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = RowVertical),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(
+                    items = marketThemes,
+                    key = { it.themeName }
+                ) { theme ->
+                    DomesticThemeCard(
+                        theme = theme,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = RowVertical)
+            ) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .background(Card, RoundedCornerShape(18.dp))
+                    ) {
+                        foreignItems.forEachIndexed { index, company ->
+                            CompanyRow(
+                                company = company,
+                                onClick = { selectedCompany = company }
                             )
+                            if (index < foreignItems.lastIndex) {
+                                HorizontalDivider(
+                                    color = TextSecondary.copy(alpha = 0.2f),
+                                    modifier = Modifier.padding(start = 16.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -119,6 +153,132 @@ fun CompanyScreen(
             company = company,
             onDismissRequest = { selectedCompany = null }
         )
+    }
+}
+
+@Composable
+private fun rememberSvgImageLoader(): ImageLoader {
+    val context = LocalContext.current
+    return remember(context) {
+        ImageLoader.Builder(context)
+            .components { add(SvgDecoder.Factory()) }
+            .build()
+    }
+}
+
+@Composable
+private fun DomesticThemeCard(
+    theme: MarketTheme,
+    modifier: Modifier = Modifier
+) {
+    val svgLoader = rememberSvgImageLoader()
+    val displayStocks = theme.stocksForDisplay()
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = Card,
+        border = BorderStroke(1.dp, TextSecondary.copy(alpha = 0.2f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = CardPaddingHorizontal, vertical = RowVertical)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "#${theme.themeName}",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = theme.changeRate,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = rateTextColor(theme.changeRate),
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.End
+                )
+            }
+
+            if (displayStocks.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                displayStocks.forEachIndexed { index, stock ->
+                    ThemeStockRow(stock = stock, imageLoader = svgLoader)
+                    if (index < displayStocks.lastIndex) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 10.dp),
+                            color = TextSecondary.copy(alpha = 0.2f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeStockRow(
+    stock: ThemeStock,
+    imageLoader: ImageLoader
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            AsyncImage(
+                model = stock.logoUrl(),
+                contentDescription = stock.name,
+                imageLoader = imageLoader,
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop
+            )
+            Text(
+                text = stock.name,
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextPrimary,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = stock.price,
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextPrimary,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = stock.change,
+                style = MaterialTheme.typography.labelMedium,
+                color = rateTextColor(stock.change)
+            )
+        }
+    }
+}
+
+@Composable
+private fun rateTextColor(rate: String): Color {
+    val t = rate.trim()
+    return when {
+        t.startsWith("+") -> MaterialTheme.colorScheme.error
+        t.startsWith("-") || t.startsWith("−") || t.startsWith("–") -> rateDownBlue
+        else -> TextSecondary
     }
 }
 
