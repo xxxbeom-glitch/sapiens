@@ -1153,6 +1153,8 @@ def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> li
         )
         if rows:
             rows.sort(key=lambda r: (r.get("paper_number", 999), r.get("detail_position", 99)))
+            # 뉴스탭(crawl_naver_realtime 등)과 동일: 각 row에 `body` 채움 → 브리핑 요약에 본문 전달
+            _attach_naver_article_bodies(rows)
             return rows
     return []
 
