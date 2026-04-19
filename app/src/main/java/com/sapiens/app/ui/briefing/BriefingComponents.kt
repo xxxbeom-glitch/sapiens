@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -58,6 +59,11 @@ import com.sapiens.app.ui.theme.MarketUp
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
+
+/** 국내 주요뉴스 페이저: 페이지마다 동일 높이(스와이프 시 상하 점프 방지). 칩+2줄 헤드라인+소제목 4줄+패딩 기준. */
+private val DomesticBriefingPagerFixedHeight = 332.dp
+
+private val DomesticBriefingCardShape = RoundedCornerShape(18.dp)
 
 @Composable
 fun SectionLabel(
@@ -203,17 +209,25 @@ fun DomesticNewspapersBriefingCard(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(18.dp)
+        shape = DomesticBriefingCardShape
     ) {
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxWidth()
-        ) { page ->
-            NewspaperBriefingFiveList(
-                articles = pages[page],
-                publisherChipLabel = publisherLabels[page],
-                onClickArticle = onClickArticle
-            )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(DomesticBriefingPagerFixedHeight)
+                .clip(DomesticBriefingCardShape)
+        ) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                NewspaperBriefingFiveList(
+                    articles = pages[page],
+                    publisherChipLabel = publisherLabels[page],
+                    onClickArticle = onClickArticle,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
     }
 }
@@ -238,24 +252,26 @@ private fun BriefingPublisherChip(label: String) {
 private fun NewspaperBriefingFiveList(
     articles: List<Article>,
     publisherChipLabel: String,
-    onClickArticle: (Article) -> Unit
+    onClickArticle: (Article) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = Modifier
+        modifier = modifier
+            .fillMaxSize()
             .background(Card)
             .padding(
                 start = CardPaddingHorizontal,
                 end = CardPaddingHorizontal,
                 top = CardPaddingVertical,
                 bottom = CardPaddingBottom
-            )
+            ),
+        verticalArrangement = if (articles.isEmpty()) Arrangement.Center else Arrangement.Top
     ) {
         if (articles.isEmpty()) {
             Text(
                 text = "불러온 기사가 없습니다.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
-                modifier = Modifier.padding(vertical = 16.dp)
+                color = TextSecondary
             )
         } else {
             val topArticles = articles.take(5)
@@ -599,14 +615,48 @@ fun USMajorArticlesCard(
                     bottom = CardPaddingBottom
                 )
         ) {
-            Text(
-                text = "주요 기사",
-                style = MaterialTheme.typography.titleSmall,
-                color = TextPrimary
-            )
+            if (articles.isEmpty()) {
+                Text(
+                    text = "불러온 기사가 없습니다.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(vertical = 16.dp)
+                )
+            } else {
+                val first = articles.first()
+                BriefingPublisherChip(label = first.source.ifBlank { "해외" })
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { onClickArticle(first) },
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Text(
+                        text = first.headline,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontSize = 24.sp,
+                            lineHeight = 34.sp
+                        ),
+                        color = TextPrimary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
 
-            Column(modifier = Modifier.padding(top = 4.dp)) {
-                articles.forEachIndexed { index, article ->
+                if (articles.size > 1) {
+                    HorizontalDivider(
+                        color = TextSecondary.copy(alpha = 0.2f),
+                        thickness = 0.5.dp,
+                        modifier = Modifier.padding(top = 10.dp)
+                    )
+                }
+
+                articles.drop(1).forEachIndexed { index, article ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -614,20 +664,23 @@ fun USMajorArticlesCard(
                                 indication = null,
                                 interactionSource = remember { MutableInteractionSource() }
                             ) { onClickArticle(article) }
-                            .padding(vertical = 12.dp),
+                            .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = article.headline,
+                            modifier = Modifier.weight(1f),
                             style = MaterialTheme.typography.bodyLarge,
                             color = TextPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-
-                    if (index < articles.lastIndex) {
-                        HorizontalDivider(color = TextSecondary.copy(alpha = 0.2f))
+                    if (index < articles.drop(1).lastIndex) {
+                        HorizontalDivider(
+                            color = TextSecondary.copy(alpha = 0.2f),
+                            thickness = 0.5.dp
+                        )
                     }
                 }
             }

@@ -129,6 +129,7 @@ private fun Map<*, *>.toMarketTheme(): MarketTheme? {
     val themeName = stringField(this, "theme_name", "themeName")?.trim().orEmpty()
     if (themeName.isBlank()) return null
     val changeRate = stringField(this, "change_rate", "changeRate").orEmpty()
+    val themeNo = longField(this, "no", "theme_no", "themeNo")
     val stocksRaw = this["stocks"] ?: this["stockList"] ?: this["items"]
     val stocks = when (stocksRaw) {
         is List<*> -> stocksRaw.mapNotNull { (it as? Map<*, *>)?.toThemeStock() }
@@ -139,7 +140,13 @@ private fun Map<*, *>.toMarketTheme(): MarketTheme? {
             emptyList()
         }
     }
-    return MarketTheme(themeName = themeName, changeRate = changeRate, stocks = stocks)
+    return MarketTheme(
+        themeName = themeName,
+        changeRate = changeRate,
+        stocks = stocks,
+        themeNo = themeNo,
+        categoryInfo = "",
+    )
 }
 
 /** Firestore/파이프라인 snake·camel 혼용 및 숫자 price 대응. code 없어도 종목명이 있으면 행 유지(로고만 생략). */
@@ -159,6 +166,17 @@ private fun Map<*, *>.toThemeStock(): ThemeStock? {
         ?: "0%"
     val changeDisplay = change.trim().ifBlank { "0%" }
     return ThemeStock(name = name, price = priceDisplay, change = changeDisplay, code = code)
+}
+
+private fun longField(m: Map<*, *>, vararg keys: String): Long? {
+    for (k in keys) {
+        when (val v = m[k]) {
+            is Number -> return v.toLong()
+            is String -> v.trim().toLongOrNull()?.let { return it }
+            else -> {}
+        }
+    }
+    return null
 }
 
 private fun stringField(m: Map<*, *>, vararg keys: String): String? {

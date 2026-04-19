@@ -33,8 +33,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.sapiens.app.BuildConfig
 import com.sapiens.app.R
 import com.sapiens.app.data.mock.MockData
+import com.sapiens.app.data.stock.StockDetailRepositoryImpl
 import com.sapiens.app.data.model.Company
 import com.sapiens.app.data.repository.FeedbackRepositoryImpl
 import com.sapiens.app.data.repository.NewsRepositoryImpl
@@ -44,6 +46,8 @@ import com.sapiens.app.ui.briefing.BriefingViewModel
 import com.sapiens.app.ui.market.MarketSearchBottomSheet
 import com.sapiens.app.ui.market.MarketScreen
 import com.sapiens.app.ui.market.MarketViewModel
+import com.sapiens.app.ui.market.StockDetailBottomSheet
+import com.sapiens.app.ui.market.StockDetailViewModel
 import com.sapiens.app.ui.my.MyScreen
 import com.sapiens.app.ui.news.NewsRegionToggle
 import com.sapiens.app.ui.news.NewsScreen
@@ -74,9 +78,13 @@ fun MainScreen(
     var showMarketSearchSheet by remember { mutableStateOf(false) }
     var isOverseasNews by remember { mutableStateOf(false) }
     val addedCompanies = remember { mutableStateListOf<Company>() }
+    var stockDetailCode by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
     val newsRepository = remember { NewsRepositoryImpl() }
+    val stockDetailRepository = remember {
+        StockDetailRepositoryImpl(BuildConfig.PUBLIC_DATA_API_KEY)
+    }
     val bookmarksRepository = remember { ArticleBookmarksRepository(context.applicationContext) }
     val feedbackRepository = remember { FeedbackRepositoryImpl() }
     val briefingViewModel: BriefingViewModel = viewModel(factory = BriefingViewModel.factory(newsRepository))
@@ -88,6 +96,8 @@ fun MainScreen(
         )
     )
     val marketViewModel: MarketViewModel = viewModel(factory = MarketViewModel.factory(newsRepository))
+    val stockDetailViewModel: StockDetailViewModel =
+        viewModel(factory = StockDetailViewModel.factory(stockDetailRepository))
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -126,7 +136,8 @@ fun MainScreen(
                 )
                 2 -> MarketScreen(
                     viewModel = marketViewModel,
-                    addedCompanies = addedCompanies
+                    addedCompanies = addedCompanies,
+                    onThemeStockNameClick = { code -> stockDetailCode = code }
                 )
                 else -> MyScreen(
                     isDarkTheme = isDarkTheme,
@@ -136,6 +147,17 @@ fun MainScreen(
                 )
             }
         }
+    }
+
+    stockDetailCode?.let { code ->
+        StockDetailBottomSheet(
+            stockCode = code,
+            viewModel = stockDetailViewModel,
+            onDismissRequest = {
+                stockDetailCode = null
+                stockDetailViewModel.reset()
+            }
+        )
     }
 
     if (showMarketSearchSheet) {

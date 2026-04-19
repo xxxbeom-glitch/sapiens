@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,7 +16,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
@@ -32,6 +32,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,9 +51,20 @@ import com.sapiens.app.ui.theme.SummaryPointSpacing
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
 
-private val NewsButtonCorner = 6.dp
-private val NewsButtonHeight = 56.dp
-private val NewsFooterButtonsSpacing = 12.dp
+private val NewsButtonCorner = 12.dp
+private val NewsButtonHeight = 64.dp
+private val NewsFooterButtonsSpacing = 6.dp
+
+/** 포인트 컬러 대비 눌림 시 약 6% 어둡게 */
+private fun Color.darkenTowardsBlack(fraction: Float): Color {
+    val f = fraction.coerceIn(0f, 1f)
+    return Color(
+        red = red * (1f - f),
+        green = green * (1f - f),
+        blue = blue * (1f - f),
+        alpha = alpha
+    )
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -215,46 +227,42 @@ fun ArticleBottomSheet(
                             style = MaterialTheme.typography.labelLarge
                         )
                     }
-                    if (isBookmarked) {
-                        Button(
-                            onClick = onBookmarkToggle,
-                            modifier = Modifier
-                                .height(NewsButtonHeight)
-                                .wrapContentWidth(),
-                            shape = RoundedCornerShape(NewsButtonCorner),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Accent,
-                                contentColor = Color.White
-                            )
-                        ) {
-                            Text(
-                                text = "저장됨",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    } else {
-                        Button(
-                            onClick = onBookmarkToggle,
-                            modifier = Modifier
-                                .height(NewsButtonHeight)
-                                .wrapContentWidth(),
-                            shape = RoundedCornerShape(NewsButtonCorner),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.White,
-                                contentColor = Color.Black
-                            )
-                        ) {
-                            Text(
-                                text = "저장",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
+                    NewsSaveBookmarkButton(
+                        onClick = onBookmarkToggle,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(NewsButtonHeight)
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun NewsSaveBookmarkButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val containerColor = if (pressed) Accent.darkenTowardsBlack(0.06f) else Accent
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        interactionSource = interactionSource,
+        shape = RoundedCornerShape(NewsButtonCorner),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = containerColor,
+            contentColor = Color.White
+        ),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
+    ) {
+        Text(
+            text = "저장",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 

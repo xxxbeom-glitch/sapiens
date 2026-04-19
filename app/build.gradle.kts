@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -20,6 +22,14 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        val localProps = Properties()
+        val lp = rootProject.file("local.properties")
+        if (lp.exists()) {
+            lp.inputStream().use { localProps.load(it) }
+        }
+        val publicDataKey = (localProps.getProperty("PUBLIC_DATA_API_KEY") ?: "").trim()
+        buildConfigField("String", "PUBLIC_DATA_API_KEY", "\"${publicDataKey.replace("\"", "\\\"")}\"")
     }
 
     buildTypes {
@@ -37,6 +47,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -67,6 +78,10 @@ dependencies {
     implementation("com.google.firebase:firebase-auth-ktx")
     // Google Sign-In
     implementation("com.google.android.gms:play-services-auth:21.2.0")
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
