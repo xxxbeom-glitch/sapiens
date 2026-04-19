@@ -45,9 +45,9 @@ NAVER_ARTICLE_BODY_SELECTORS = (
 )
 STOCK_NAVER_BASE = "https://stock.naver.com"
 NAVER_STOCK_THEME_MAX = 20
-NAVER_M_STOCK_THEME_LIST_API = (
-    "https://m.stock.naver.com/api/category/market/domestic/theme"
-    f"?page=1&pageSize={NAVER_STOCK_THEME_MAX}"
+NAVER_STOCK_THEME_LIST_API = (
+    "https://stock.naver.com/api/domestic/market/theme/list"
+    f"?startIdx=0&pageSize={NAVER_STOCK_THEME_MAX}&sortType=changeRate"
 )
 NAVER_STOCK_THEME_STOCKS_MAX = 6
 NAVER_STOCK_THEME_FETCH_SLEEP = 0.3
@@ -1183,17 +1183,17 @@ def crawl_maeil_newspaper() -> list[dict[str, Any]]:
         return []
 
 
-def _fetch_m_stock_json(url: str) -> Any | None:
-    """m.stock.naver.com JSON API. 실패 시 None."""
+def _fetch_stock_naver_json(url: str) -> Any | None:
+    """stock.naver.com JSON API. 실패 시 None."""
     req_headers = dict(HEADERS)
-    req_headers["Referer"] = "https://m.stock.naver.com/"
+    req_headers["Referer"] = f"{STOCK_NAVER_BASE}/"
     req_headers.setdefault("Accept", "application/json")
     try:
         r = requests.get(url, headers=req_headers, timeout=REQUEST_TIMEOUT)
         r.raise_for_status()
         return r.json()
     except Exception as e:
-        logger.warning("m.stock JSON 요청 실패 %s: %s", url, e)
+        logger.warning("stock.naver JSON 요청 실패 %s: %s", url, e)
         return None
 
 
@@ -1245,22 +1245,22 @@ def _naver_theme_format_price(val: Any) -> str:
 
 
 def _naver_theme_list_from_api(payload: Any) -> list[dict[str, str]]:
-    """테마 목록 JSON → theme_id, theme_name, change_rate."""
+    """테마 목록 JSON → themeId, themeName, changeRate."""
     out: list[dict[str, str]] = []
     for item in _unwrap_json_array(payload):
         if not isinstance(item, dict):
             continue
         tid = str(
-            item.get("id")
-            or item.get("themeId")
+            item.get("themeId")
+            or item.get("id")
             or item.get("categoryId")
             or item.get("code")
             or item.get("themeCode")
             or ""
         ).strip()
         name = str(
-            item.get("name")
-            or item.get("themeName")
+            item.get("themeName")
+            or item.get("name")
             or item.get("title")
             or item.get("categoryName")
             or item.get("stockGroupName")
@@ -1269,8 +1269,8 @@ def _naver_theme_list_from_api(payload: Any) -> list[dict[str, str]]:
         if not tid or not name:
             continue
         chg = (
-            item.get("fluctuationsRatio")
-            or item.get("changeRate")
+            item.get("changeRate")
+            or item.get("fluctuationsRatio")
             or item.get("priceChangeRate")
             or item.get("rtn")
             or item.get("rate")
@@ -1286,8 +1286,25 @@ def _naver_theme_list_from_api(payload: Any) -> list[dict[str, str]]:
     return out
 
 
+def _naver_theme_format_signed_amount(val: Any) -> str:
+    """전일대비 금액 등 부호 있는 숫자(원 단위 등)."""
+    if val is None or val == "":
+        return ""
+    s = str(val).strip()
+    if "%" in s:
+        return s
+    try:
+        x = float(val)  # type: ignore[arg-type]
+        sign = "+" if x > 0 else ""
+        if abs(x - round(x)) < 1e-6:
+            return f"{sign}{format(int(round(x)), ',')}"
+        return f"{sign}{x:,.2f}"
+    except (TypeError, ValueError):
+        return s
+
+
 def _naver_theme_stocks_from_api(payload: Any, limit: int) -> list[dict[str, str]]:
-    """테마 종목 JSON → name, price, change."""
+    """테마 종목 JSON → stockName, closePrice, fluctuationsRatio | compareToPreviousClosePrice."""
     rows: list[dict[str, str]] = []
     for item in _unwrap_json_array(payload):
         if not isinstance(item, dict):
@@ -1310,18 +1327,21 @@ def _naver_theme_stocks_from_api(payload: Any, limit: int) -> list[dict[str, str
             or item.get("prpr")
             or item.get("currentPrice")
         )
-        chg_raw = (
-            item.get("fluctuationsRatio")
-            or item.get("prdyCtrt")
-            or item.get("changeRate")
-            or item.get("rate")
-            or item.get("chgRate")
-        )
+        fr = item.get("fluctuationsRatio")
+        cp = item.get("compareToPreviousClosePrice")
+        if fr is not None and str(fr).strip() != "":
+            change = _naver_theme_format_change_rate(fr)
+        elif cp is not None and str(cp).strip() != "":
+            change = _naver_theme_format_signed_amount(cp)
+        else:
+            change = _naver_theme_format_change_rate(
+                item.get("prdyCtrt") or item.get("changeRate") or item.get("rate") or item.get("chgRate")
+            )
         rows.append(
             {
                 "name": name,
                 "price": _naver_theme_format_price(price_raw),
-                "change": _naver_theme_format_change_rate(chg_raw),
+                "change": change,
             }
         )
         if len(rows) >= limit:
@@ -1331,11 +1351,11 @@ def _naver_theme_stocks_from_api(payload: Any, limit: int) -> list[dict[str, str
 
 def crawl_naver_stock_themes() -> list[dict[str, Any]]:
     """
-    네이버 증권 모바일 API — 국내 테마 상위 NAVER_STOCK_THEME_MAX개 및 테마별 종목 최대 NAVER_STOCK_THEME_STOCKS_MAX개.
+    네이버 증권 stock.naver.com API — 국내 테마 상위 NAVER_STOCK_THEME_MAX개 및 테마별 종목 최대 NAVER_STOCK_THEME_STOCKS_MAX개.
     반환: [{"theme_name", "change_rate", "stocks": [{"name","price","change"}, ...]}, ...]
     """
     try:
-        raw_list = _fetch_m_stock_json(NAVER_M_STOCK_THEME_LIST_API)
+        raw_list = _fetch_stock_naver_json(NAVER_STOCK_THEME_LIST_API)
         if raw_list is None:
             return []
         logger.info("테마 목록 API 응답 앞 500자: %s", str(raw_list)[:500])
@@ -1347,17 +1367,17 @@ def crawl_naver_stock_themes() -> list[dict[str, Any]]:
         metas = metas[:NAVER_STOCK_THEME_MAX]
 
         out: list[dict[str, Any]] = []
-        for i, meta in enumerate(metas):
+        for meta in metas:
+            time.sleep(NAVER_STOCK_THEME_FETCH_SLEEP)
             theme_id = meta["theme_id"]
             theme_name = meta["theme_name"]
             change_rate = meta["change_rate"]
             stocks_url = (
-                "https://m.stock.naver.com/api/category/market/domestic/theme/"
-                f"{theme_id}/stocks?page=1&pageSize={NAVER_STOCK_THEME_STOCKS_MAX}"
+                "https://stock.naver.com/api/domestic/market/theme/"
+                f"{theme_id}/stocklist?marketType=ALL&orderType=priceTop&startIdx=0"
+                f"&pageSize={NAVER_STOCK_THEME_STOCKS_MAX}"
             )
-            if i > 0:
-                time.sleep(NAVER_STOCK_THEME_FETCH_SLEEP)
-            raw_stocks = _fetch_m_stock_json(stocks_url)
+            raw_stocks = _fetch_stock_naver_json(stocks_url)
             stocks = (
                 _naver_theme_stocks_from_api(raw_stocks, NAVER_STOCK_THEME_STOCKS_MAX)
                 if raw_stocks is not None
