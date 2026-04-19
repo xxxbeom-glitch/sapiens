@@ -1029,7 +1029,10 @@ def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> li
         date_try_label = date_try_labels[days_back]
 
         req_headers = dict(HEADERS)
-        req_headers["Referer"] = f"{NAVER_MEDIA}/press/{press_code}/newspaper"
+        req_headers["Referer"] = f"https://media.naver.com/press/{press_code}/newspaper"
+        req_headers["User-Agent"] = (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        )
 
         status_code: int | None = None
         raw_json: Any = None
