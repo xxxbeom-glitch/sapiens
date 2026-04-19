@@ -130,6 +130,18 @@ def save_market_indicators(indicators: List[dict[str, Any]]) -> None:
     )
 
 
+def save_market_themes(themes: List[dict[str, Any]]) -> None:
+    """market/themes 문서에 테마 랭킹·종목 목록 + updated_at 저장."""
+    db = _get_db()
+    db.collection("market").document("themes").set(
+        {
+            "themes": themes,
+            "updated_at": SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+
+
 def save_company_data(ticker: str, data: dict[str, Any]) -> None:
     """companies/{ticker} 문서에 병합 저장 + updated_at."""
     db = _get_db()

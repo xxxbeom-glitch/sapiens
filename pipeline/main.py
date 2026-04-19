@@ -100,8 +100,9 @@ def run() -> None:
     pool_hankyung = _sorted_newspaper_top(newspaper_hankyung, BRIEFING_NEWSPAPER_N)
     pool_maeil = _sorted_newspaper_top(newspaper_maeil, BRIEFING_NEWSPAPER_N)
 
-    # 3) 시장 지표
+    # 3) 시장 지표 + 네이버 테마
     indicators = crawler.crawl_market_indicators()
+    naver_themes = crawler.crawl_naver_stock_themes()
 
     counts = {
         "realtime": len(domestic["realtime"]),
@@ -113,6 +114,7 @@ def run() -> None:
         "briefing_hankyung_pool": len(pool_hankyung),
         "briefing_maeil_pool": len(pool_maeil),
         "indicators": len(indicators),
+        "theme_count": len(naver_themes),
     }
     logger.info("크롤 완료: %s", counts)
 
@@ -181,6 +183,7 @@ def run() -> None:
     firebase_client.save_overseas_tech_articles(fs_overseas_tech)
     firebase_client.save_us_market_articles(fs_us_market)
     firebase_client.save_market_indicators(indicators)
+    firebase_client.save_market_themes(naver_themes)
     firebase_client.save_news_feed(fs_realtime, "realtime")
     firebase_client.save_news_feed(fs_popular, "popular")
     firebase_client.save_news_feed(fs_main, "main")
