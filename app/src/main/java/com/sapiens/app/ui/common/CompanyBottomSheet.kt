@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -65,15 +64,30 @@ import com.sapiens.app.data.model.Company
 import com.sapiens.app.data.model.FinancialMetric
 import com.sapiens.app.data.model.FinancialSeries
 import com.sapiens.app.ui.theme.Accent
+import com.sapiens.app.ui.theme.AppShapes
 import com.sapiens.app.ui.theme.Card
 import com.sapiens.app.ui.theme.Elevated
 import com.sapiens.app.ui.theme.MarketDown
 import com.sapiens.app.ui.theme.MarketFlat
+import com.sapiens.app.ui.theme.DividerOnMutedSurface
+import com.sapiens.app.ui.theme.Error
+import com.sapiens.app.ui.theme.ErrorContainer
 import com.sapiens.app.ui.theme.MarketUp
 import com.sapiens.app.ui.theme.BottomSheetBottomPadding
+import com.sapiens.app.ui.theme.SapiensTextStyles
 import com.sapiens.app.ui.theme.SheetHorizontal
+import com.sapiens.app.ui.theme.Spacing
+import com.sapiens.app.ui.theme.Success
+import com.sapiens.app.ui.theme.SuccessContainer
+import com.sapiens.app.ui.theme.SurfaceChartInactive
+import com.sapiens.app.ui.theme.SurfaceHairlineOnDark
+import com.sapiens.app.ui.theme.SurfaceMuted
+import com.sapiens.app.ui.theme.SurfaceOpinion
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
+import com.sapiens.app.ui.theme.TextTertiary
+import com.sapiens.app.ui.theme.Warning
+import com.sapiens.app.ui.theme.WarningContainer
 import kotlin.math.abs
 
 private val detailTabs = listOf("기업 정보", "재무제표", "증권가 전망")
@@ -143,8 +157,8 @@ fun CompanyBottomSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
-                    .padding(top = 6.dp)
-                    .height(64.dp)
+                    .padding(top = Spacing.space6)
+                    .height(Spacing.space64)
                     .padding(horizontal = SheetHorizontal),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
@@ -157,11 +171,11 @@ fun CompanyBottomSheet(
                 IconButton(
                     onClick = onDismissRequest,
                     interactionSource = remember { MutableInteractionSource() },
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(Spacing.space48)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(24.dp)
+                            .size(Spacing.space24)
                             .clip(CircleShape)
                             .background(TextSecondary.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
@@ -170,7 +184,7 @@ fun CompanyBottomSheet(
                             imageVector = Icons.Default.Close,
                             contentDescription = "닫기",
                             tint = TextPrimary,
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(Spacing.space14)
                         )
                     }
                 }
@@ -204,15 +218,15 @@ fun CompanyBottomSheet(
                         .verticalScroll(scrollState)
                         .padding(horizontal = SheetHorizontal)
                         .padding(bottom = BottomSheetBottomPadding),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(Spacing.space10)
                 ) {
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(Spacing.space12))
                     when (selectedTab) {
                         0 -> CompanyInfoContent(company)
                         1 -> FinancialContent(company)
                         else -> AnalystAndOpinionContent(company)
                     }
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(Spacing.space12))
                 }
             }
         }
@@ -240,10 +254,10 @@ private fun ColumnScope.CompanyInfoContent(company: Company) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 14.dp)
+                    .padding(vertical = Spacing.space14)
             ) {
                 Text(text = label, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(Spacing.space4))
                 Text(
                     text = value,
                     style = MaterialTheme.typography.bodyMedium,
@@ -272,15 +286,15 @@ private fun ColumnScope.FinancialContent(company: Company) {
         color = TextPrimary
     )
     Column(
-        modifier = Modifier.padding(top = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = Modifier.padding(top = Spacing.space8),
+        verticalArrangement = Arrangement.spacedBy(Spacing.space8)
     ) {
         rows.forEach { rowItems ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(IntrinsicSize.Min),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(Spacing.space8)
             ) {
                 rowItems.forEach { title ->
                     metricMap[title]?.let { metric ->
@@ -294,7 +308,7 @@ private fun ColumnScope.FinancialContent(company: Company) {
         }
     }
 
-    Spacer(modifier = Modifier.height(16.dp))
+    Spacer(modifier = Modifier.height(Spacing.space16))
 
     Text(
         text = "재무 건전성",
@@ -304,10 +318,10 @@ private fun ColumnScope.FinancialContent(company: Company) {
 
     FinancialHealthCard(
         health = health,
-        modifier = Modifier.padding(top = 8.dp)
+        modifier = Modifier.padding(top = Spacing.space8)
     )
 
-    Spacer(modifier = Modifier.height(16.dp))
+    Spacer(modifier = Modifier.height(Spacing.space16))
 
     HealthSummaryCard(
         summary = info.healthSummary,
@@ -345,14 +359,14 @@ private fun FinanceMetricCard(
 
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color(0xFF28282A))
-            .padding(start = 12.dp, end = 12.dp, top = 14.dp, bottom = 10.dp),
+            .clip(AppShapes.cardNested)
+            .background(SurfaceMuted)
+            .padding(start = Spacing.space12, end = Spacing.space12, top = Spacing.space14, bottom = Spacing.space10),
         verticalArrangement = Arrangement.Top
     ) {
         Text(text = metric.title, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-        Spacer(Modifier.height(4.dp))
-        Box(modifier = Modifier.height(36.dp)) {
+        Spacer(Modifier.height(Spacing.space4))
+        Box(modifier = Modifier.height(Spacing.space36)) {
             Text(
                 text = latest,
                 style = MaterialTheme.typography.titleMedium,
@@ -360,11 +374,11 @@ private fun FinanceMetricCard(
                 fontWeight = FontWeight.Bold
             )
         }
-        Spacer(Modifier.height(4.dp))
-        Box(modifier = Modifier.height(20.dp)) {
+        Spacer(Modifier.height(Spacing.space4))
+        Box(modifier = Modifier.height(Spacing.space20)) {
             Text(text = changeText, style = MaterialTheme.typography.labelSmall, color = changeColor)
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(Spacing.space8))
         VerticalBarChart(
             values = listOf(y2023, y2024, y2025, y2026),
             modifier = Modifier.fillMaxWidth()
@@ -384,14 +398,14 @@ private fun VerticalBarChart(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp),
+                .height(Spacing.space48),
             verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(3.dp)
+            horizontalArrangement = Arrangement.spacedBy(Spacing.space3)
         ) {
             values.forEachIndexed { index, value ->
                 val ratio = (value / maxVal).coerceIn(0f, 1f)
                 val barHeight = (40f * ratio).coerceAtLeast(2f).dp
-                val barColor = if (index == 3) Accent else Color(0xFF3C3C3C)
+                val barColor = if (index == 3) Accent else SurfaceChartInactive
 
                 Box(
                     modifier = Modifier
@@ -403,29 +417,22 @@ private fun VerticalBarChart(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(barHeight)
-                            .clip(
-                                RoundedCornerShape(
-                                    topStart = 3.dp,
-                                    topEnd = 3.dp,
-                                    bottomStart = 0.dp,
-                                    bottomEnd = 0.dp
-                                )
-                            )
+                            .clip(AppShapes.barTop)
                             .background(barColor)
                     )
                 }
             }
         }
-        Spacer(Modifier.height(1.dp))
+        Spacer(Modifier.height(Spacing.space1))
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(3.dp)
+            horizontalArrangement = Arrangement.spacedBy(Spacing.space3)
         ) {
             years.forEachIndexed { index, year ->
                 Text(
                     text = year,
                     modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    style = SapiensTextStyles.statCaption9,
                     color = if (index == 3) Accent else TextSecondary,
                     textAlign = TextAlign.Center
                 )
@@ -441,13 +448,13 @@ private fun FinancialHealthCard(
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(Spacing.space8)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(IntrinsicSize.Min),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(Spacing.space8)
         ) {
             HealthCard(
                 name = "부채비율",
@@ -468,7 +475,7 @@ private fun FinancialHealthCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(IntrinsicSize.Min),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(Spacing.space8)
         ) {
             HealthCard(
                 name = "자기자본비율",
@@ -505,12 +512,12 @@ private fun HealthCard(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color(0xFF28282A))
-            .padding(start = 12.dp, end = 12.dp, top = 14.dp, bottom = 10.dp)
+            .clip(AppShapes.cardNested)
+            .background(SurfaceMuted)
+            .padding(start = Spacing.space12, end = Spacing.space12, top = Spacing.space14, bottom = Spacing.space10)
     ) {
         Text(name, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(Spacing.space4))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -524,18 +531,18 @@ private fun HealthCard(
             )
             HealthBadge(status)
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(Spacing.space6))
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(4.dp)
-                .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(2.dp))
+                .height(Spacing.space4)
+                .background(SurfaceHairlineOnDark, AppShapes.hairlineTrack)
         ) {
             Box(
                 Modifier
                     .fillMaxWidth(barRatio.coerceIn(0f, 1f))
-                    .height(4.dp)
-                    .background(healthBarColor(status), RoundedCornerShape(2.dp))
+                    .height(Spacing.space4)
+                    .background(healthBarColor(status), AppShapes.hairlineTrack)
             )
         }
     }
@@ -546,19 +553,19 @@ private fun HealthBadge(status: String) {
     val (bg, fg) = healthStatusColors(status)
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(AppShapes.healthCapsule)
             .background(bg)
-            .padding(horizontal = 8.dp, vertical = 3.dp)
+            .padding(horizontal = Spacing.space8, vertical = Spacing.space3)
     ) {
         Text(text = status, style = MaterialTheme.typography.labelSmall, color = fg)
     }
 }
 
 private fun healthBarColor(status: String): Color = when (status) {
-    "우량", "안정", "풍부" -> Color(0xFF1D9E75)
-    "주의" -> Color(0xFFEF9F27)
-    "위험" -> Color(0xFFE24B4A)
-    else -> Color(0xFF878787)
+    "우량", "안정", "풍부" -> Success
+    "주의" -> Warning
+    "위험" -> Error
+    else -> TextTertiary
 }
 
 @Composable
@@ -570,11 +577,11 @@ private fun HealthSummaryCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF1F1D24))
-            .border(0.5.dp, Accent.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
-            .padding(horizontal = 16.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .clip(AppShapes.panel)
+            .background(SurfaceOpinion)
+            .border(Spacing.hairline, Accent.copy(alpha = 0.2f), AppShapes.panel)
+            .padding(horizontal = Spacing.space16, vertical = Spacing.space18),
+        verticalArrangement = Arrangement.spacedBy(Spacing.space10)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -598,7 +605,7 @@ private fun HealthSummaryCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 2.dp),
+                .padding(top = Spacing.space2),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -609,30 +616,30 @@ private fun HealthSummaryCard(
 }
 
 private fun healthStatusColors(status: String): Pair<Color, Color> = when (status) {
-    "우량", "안정", "풍부" -> Color(0x261D9E75) to Color(0xFF1D9E75)
-    "주의" -> Color(0x26EF9F27) to Color(0xFFEF9F27)
-    "위험" -> Color(0x26E24B4A) to Color(0xFFE24B4A)
-    else -> Color(0x26EF9F27) to Color(0xFFEF9F27)
+    "우량", "안정", "풍부" -> SuccessContainer to Success
+    "주의" -> WarningContainer to Warning
+    "위험" -> ErrorContainer to Error
+    else -> WarningContainer to Warning
 }
 
 @Composable
 private fun ColumnScope.AnalystAndOpinionContent(company: Company) {
     Text("증권가 전망", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
-    Spacer(modifier = Modifier.height(8.dp))
+    Spacer(modifier = Modifier.height(Spacing.space8))
     val analystComments = mockAnalystComments(company.ticker)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color(0xFF28282A))
-            .padding(14.dp)
+            .clip(AppShapes.cardNested)
+            .background(SurfaceMuted)
+            .padding(Spacing.space14)
     ) {
         analystComments.forEachIndexed { index, comment ->
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
+                    .padding(bottom = Spacing.space10),
+                verticalArrangement = Arrangement.spacedBy(Spacing.space3)
             ) {
                 Text(
                     text = "${comment.source} · ${comment.date}",
@@ -648,21 +655,21 @@ private fun ColumnScope.AnalystAndOpinionContent(company: Company) {
                 )
             }
             if (index != analystComments.lastIndex) {
-                HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
-                Spacer(modifier = Modifier.height(10.dp))
+                HorizontalDivider(color = DividerOnMutedSurface)
+                Spacer(modifier = Modifier.height(Spacing.space10))
             }
         }
     }
-    Spacer(modifier = Modifier.height(12.dp))
+    Spacer(modifier = Modifier.height(Spacing.space12))
     val opinion = mockOpinion(company.ticker)
     OpinionRatioBar(opinion)
 }
 
 @Composable
 private fun OpinionRatioBar(opinion: Opinion) {
-    val buyColor = Color(0xFFFF3B30)
-    val holdColor = Color(0xFF878787)
-    val sellColor = Color(0xFF0064FF)
+    val buyColor = MarketUp
+    val holdColor = TextTertiary
+    val sellColor = MarketDown
     val buy = opinion.buy.removeSuffix("%").toFloatOrNull() ?: 0f
     val hold = opinion.hold.removeSuffix("%").toFloatOrNull() ?: 0f
     val sell = opinion.sell.removeSuffix("%").toFloatOrNull() ?: 0f
@@ -675,18 +682,18 @@ private fun OpinionRatioBar(opinion: Opinion) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF1F1D24))
-            .border(0.5.dp, Accent.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .clip(AppShapes.panel)
+            .background(SurfaceOpinion)
+            .border(Spacing.hairline, Accent.copy(alpha = 0.2f), AppShapes.panel)
+            .padding(horizontal = Spacing.space16, vertical = Spacing.space14),
+        verticalArrangement = Arrangement.spacedBy(Spacing.space10)
     ) {
         Text("매수·매도 의견", style = MaterialTheme.typography.labelSmall, color = Accent)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
+                .height(Spacing.space6)
+                .clip(AppShapes.barSegment)
         ) {
             Box(Modifier.weight(buyWeight).fillMaxHeight().background(buyColor))
             Box(Modifier.weight(holdWeight).fillMaxHeight().background(holdColor))

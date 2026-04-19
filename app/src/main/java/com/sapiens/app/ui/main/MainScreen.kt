@@ -54,6 +54,7 @@ import com.sapiens.app.ui.news.NewsScreen
 import com.sapiens.app.ui.news.NewsViewModel
 import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.Background
+import com.sapiens.app.ui.theme.Spacing
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
 
@@ -187,7 +188,7 @@ private fun MainTopAppBar(
     TopAppBar(
         modifier = Modifier
             .statusBarsPadding()
-            .padding(top = 6.dp),
+            .padding(top = Spacing.space6),
         windowInsets = WindowInsets(0, 0, 0, 0),
         title = {
             Text(
@@ -202,7 +203,7 @@ private fun MainTopAppBar(
         actions = {
             when {
                 showNewsRegionToggle -> {
-                    Box(Modifier.padding(end = 4.dp)) {
+                    Box(Modifier.padding(end = Spacing.space4)) {
                         NewsRegionToggle(
                             isOverseas = isOverseasNews,
                             onIsOverseasChange = onOverseasNewsChange

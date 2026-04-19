@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
@@ -39,21 +38,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.ui.theme.Accent
+import com.sapiens.app.ui.theme.AppShapes
 import com.sapiens.app.ui.theme.BottomSheetBottomPadding
 import com.sapiens.app.ui.theme.Card
+import com.sapiens.app.ui.theme.OnPrimaryFixed
+import com.sapiens.app.ui.theme.SheetDragHandleHeight
 import com.sapiens.app.ui.theme.SheetHorizontal
 import com.sapiens.app.ui.theme.SheetTop
+import com.sapiens.app.ui.theme.Spacing
 import com.sapiens.app.ui.theme.SummaryPointSpacing
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
-
-private val NewsButtonCorner = 12.dp
-private val NewsButtonHeight = 64.dp
-private val NewsFooterButtonsSpacing = 6.dp
 
 /** 포인트 컬러 대비 눌림 시 약 6% 어둡게 */
 private fun Color.darkenTowardsBlack(fraction: Float): Color {
@@ -98,10 +96,10 @@ fun ArticleBottomSheet(
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
-                    .padding(top = 8.dp)
-                    .height(5.dp)
+                    .padding(top = Spacing.space8)
+                    .height(SheetDragHandleHeight)
                     .fillMaxWidth(0.12f)
-                    .clip(RoundedCornerShape(99.dp))
+                    .clip(AppShapes.sheetHandle)
                     .background(TextSecondary.copy(alpha = 0.5f))
             )
 
@@ -125,7 +123,7 @@ fun ArticleBottomSheet(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 14.dp),
+                            .padding(top = Spacing.space14),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
@@ -135,13 +133,13 @@ fun ArticleBottomSheet(
                             maxLines = 3,
                             modifier = Modifier.weight(1f)
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(Spacing.space12))
                         Icon(
                             imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
                             contentDescription = if (isBookmarked) "저장됨" else "저장",
                             tint = if (isBookmarked) Accent else TextSecondary,
                             modifier = Modifier
-                                .size(24.dp)
+                                .size(Spacing.space24)
                                 .clickable(
                                     indication = null,
                                     interactionSource = remember { MutableInteractionSource() }
@@ -163,24 +161,24 @@ fun ArticleBottomSheet(
                         maxLines = 3,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 14.dp)
+                            .padding(top = Spacing.space14)
                     )
                 }
             }
 
             HorizontalDivider(
-                modifier = Modifier.padding(top = 14.dp),
+                modifier = Modifier.padding(top = Spacing.space14),
                 color = TextSecondary.copy(alpha = 0.24f)
             )
 
             Column(
-                modifier = Modifier.padding(top = 14.dp),
+                modifier = Modifier.padding(top = Spacing.space14),
                 verticalArrangement = Arrangement.spacedBy(SummaryPointSpacing)
             ) {
                 resolvedPoints.take(4).forEachIndexed { index, point ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.space8),
                         verticalAlignment = Alignment.Top
                     ) {
                         Text(
@@ -204,21 +202,21 @@ fun ArticleBottomSheet(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(NewsFooterButtonsSpacing),
+                        .padding(top = Spacing.space20),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.space6),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedButton(
                         onClick = { if (canOpenOriginal) onOpenOriginalArticle?.invoke() },
                         modifier = Modifier
                             .weight(1f)
-                            .height(NewsButtonHeight),
+                            .height(Spacing.space64),
                         enabled = canOpenOriginal,
-                        shape = RoundedCornerShape(NewsButtonCorner),
-                        border = BorderStroke(1.dp, TextSecondary.copy(alpha = 0.45f)),
+                        shape = AppShapes.button,
+                        border = BorderStroke(Spacing.space1, TextSecondary.copy(alpha = 0.45f)),
                         colors = ButtonDefaults.outlinedButtonColors(
                             containerColor = Color.Transparent,
-                            contentColor = Color.White,
+                            contentColor = TextPrimary,
                             disabledContentColor = TextSecondary.copy(alpha = 0.45f)
                         )
                     ) {
@@ -231,7 +229,7 @@ fun ArticleBottomSheet(
                         onClick = onBookmarkToggle,
                         modifier = Modifier
                             .weight(1f)
-                            .height(NewsButtonHeight)
+                            .height(Spacing.space64)
                     )
                 }
             }
@@ -251,12 +249,15 @@ private fun NewsSaveBookmarkButton(
         onClick = onClick,
         modifier = modifier,
         interactionSource = interactionSource,
-        shape = RoundedCornerShape(NewsButtonCorner),
+        shape = AppShapes.button,
         colors = ButtonDefaults.buttonColors(
             containerColor = containerColor,
-            contentColor = Color.White
+            contentColor = OnPrimaryFixed
         ),
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
+        elevation = ButtonDefaults.buttonElevation(
+            defaultElevation = Spacing.space0,
+            pressedElevation = Spacing.space0
+        )
     ) {
         Text(
             text = "저장",
@@ -271,13 +272,13 @@ private fun CategoryChip(label: String) {
     val (backgroundColor, textColor) = categoryChipColors(label)
     Surface(
         color = backgroundColor,
-        shape = RoundedCornerShape(6.dp)
+        shape = AppShapes.chip
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             color = textColor,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+            modifier = Modifier.padding(horizontal = Spacing.space8, vertical = Spacing.space3)
         )
     }
 }

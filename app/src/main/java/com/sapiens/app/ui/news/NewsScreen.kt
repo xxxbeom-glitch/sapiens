@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.PrimaryTabRow
@@ -32,16 +31,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.stableId
 import com.sapiens.app.ui.common.ArticleBottomSheet
 import com.sapiens.app.ui.common.ArticleBottomSheetKind
 import com.sapiens.app.ui.theme.Accent
+import com.sapiens.app.ui.theme.AppShapes
 import com.sapiens.app.ui.theme.Background
 import com.sapiens.app.ui.theme.Card
+import com.sapiens.app.ui.theme.OnPrimaryFixed
 import com.sapiens.app.ui.theme.RowVertical
+import com.sapiens.app.ui.theme.SapiensTextStyles
+import com.sapiens.app.ui.theme.Spacing
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
 
@@ -55,43 +56,43 @@ fun NewsRegionToggle(
     modifier: Modifier = Modifier
 ) {
     val pillSurface = Card.copy(alpha = 0.5f)
-    val innerH = 24.dp
+    val innerH = Spacing.space24
     Row(
         modifier = modifier
-            .height(30.dp)
-            .clip(RoundedCornerShape(15.dp))
+            .height(Spacing.space30)
+            .clip(AppShapes.pill)
             .background(pillSurface)
-            .padding(3.dp),
+            .padding(Spacing.space3),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .height(innerH)
-                .clip(RoundedCornerShape(10.dp))
+                .clip(AppShapes.pillInner)
                 .background(if (!isOverseas) Accent else Color.Transparent)
                 .clickable { onIsOverseasChange(false) }
-                .padding(horizontal = 12.dp)
+                .padding(horizontal = Spacing.space12)
         ) {
             Text(
                 text = "국내",
-                color = if (!isOverseas) Color.White else TextSecondary,
-                fontSize = 12.sp
+                color = if (!isOverseas) OnPrimaryFixed else TextSecondary,
+                style = SapiensTextStyles.toggleLabel12
             )
         }
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .height(innerH)
-                .clip(RoundedCornerShape(10.dp))
+                .clip(AppShapes.pillInner)
                 .background(if (isOverseas) Accent else Color.Transparent)
                 .clickable { onIsOverseasChange(true) }
-                .padding(horizontal = 12.dp)
+                .padding(horizontal = Spacing.space12)
         ) {
             Text(
                 text = "해외",
-                color = if (isOverseas) Color.White else TextSecondary,
-                fontSize = 12.sp
+                color = if (isOverseas) OnPrimaryFixed else TextSecondary,
+                style = SapiensTextStyles.toggleLabel12
             )
         }
     }
@@ -176,10 +177,10 @@ fun NewsScreen(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 16.dp, vertical = RowVertical)
-                        .clip(RoundedCornerShape(18.dp))
+                        .padding(horizontal = Spacing.space16, vertical = RowVertical)
+                        .clip(AppShapes.card)
                         .background(Card),
-                    contentPadding = PaddingValues(0.dp)
+                    contentPadding = PaddingValues(Spacing.space0)
                 ) {
                     itemsIndexed(
                         items = displayItems,
@@ -197,7 +198,7 @@ fun NewsScreen(
                                 color = TextSecondary.copy(alpha = 0.2f),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(start = 16.dp)
+                                    .padding(start = Spacing.space16)
                             )
                         }
                     }

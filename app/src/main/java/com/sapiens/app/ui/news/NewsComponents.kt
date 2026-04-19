@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -19,13 +18,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.ui.common.categoryChipColors
 import com.sapiens.app.ui.theme.Accent
+import com.sapiens.app.ui.theme.AppShapes
 import com.sapiens.app.ui.theme.Card
 import com.sapiens.app.ui.theme.CardPaddingHorizontal
 import com.sapiens.app.ui.theme.RowVertical
+import com.sapiens.app.ui.theme.Spacing
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
 
@@ -38,8 +38,8 @@ fun NewsFeedList(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .background(Card, RoundedCornerShape(18.dp))
+            .padding(horizontal = Spacing.space16)
+            .background(Card, AppShapes.card)
     ) {
         items.forEachIndexed { index, item ->
             NewsFeedRow(
@@ -50,7 +50,7 @@ fun NewsFeedList(
             if (index < items.lastIndex) {
                 HorizontalDivider(
                     color = TextSecondary.copy(alpha = 0.2f),
-                    modifier = Modifier.padding(start = 16.dp)
+                    modifier = Modifier.padding(start = Spacing.space16)
                 )
             }
         }
@@ -75,7 +75,7 @@ fun NewsFeedRow(
                 horizontal = CardPaddingHorizontal,
                 vertical = RowVertical
             ),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(Spacing.space8)
     ) {
         Row(verticalAlignment = Alignment.Top) {
             if (rank != null) {
@@ -84,20 +84,20 @@ fun NewsFeedRow(
                 Text(
                     text = rank.toString(),
                     modifier = Modifier
-                        .width(28.dp)
-                        .padding(top = 2.dp),
+                        .width(Spacing.space28)
+                        .padding(top = Spacing.space2),
                     style = MaterialTheme.typography.titleSmall,
                     color = rankColor,
                     fontWeight = rankWeight
                 )
             }
             Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(Spacing.space8),
                 modifier = Modifier.weight(1f)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.space8)
                 ) {
                     CategoryChip(item.category.ifBlank { item.tag })
                     Text(
@@ -126,13 +126,13 @@ private fun CategoryChip(category: String) {
     val (backgroundColor, textColor) = categoryChipColors(category)
     Surface(
         color = backgroundColor,
-        shape = RoundedCornerShape(6.dp)
+        shape = AppShapes.chip
     ) {
         Text(
             text = category,
             style = MaterialTheme.typography.labelSmall,
             color = textColor,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+            modifier = Modifier.padding(horizontal = Spacing.space8, vertical = Spacing.space3)
         )
     }
 }

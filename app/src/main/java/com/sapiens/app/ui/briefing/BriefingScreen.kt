@@ -20,7 +20,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.stableId
 import com.sapiens.app.data.store.ArticleBookmarksRepository
@@ -29,6 +28,7 @@ import kotlinx.coroutines.launch
 import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.Background
 import com.sapiens.app.ui.theme.CardSpacing
+import com.sapiens.app.ui.theme.Spacing
 import com.sapiens.app.ui.theme.TextSecondary
 
 @Composable
@@ -62,7 +62,7 @@ fun BriefingScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Background),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = Spacing.space8)
             ) {
                 item {
                     SectionLabel(
@@ -75,12 +75,12 @@ fun BriefingScreen(
                         hankyungArticles = hankyungBriefingArticles,
                         maeilArticles = maeilBriefingArticles,
                         onClickArticle = { selectedArticle = it },
-                        modifier = Modifier.padding(bottom = 8.dp)
+                        modifier = Modifier.padding(bottom = Spacing.space8)
                     )
                 }
 
                 item {
-                    Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(Spacing.space18))
                     SectionLabel(title = "해외 주요뉴스")
                 }
 
@@ -103,14 +103,14 @@ fun BriefingScreen(
                 }
 
                 item {
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(Spacing.space24))
                     Text(
                         text = marketUpdatedLabel,
                         style = MaterialTheme.typography.labelMedium,
                         color = TextSecondary,
-                        modifier = Modifier.padding(horizontal = 20.dp)
+                        modifier = Modifier.padding(horizontal = Spacing.space20)
                     )
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(Spacing.space24))
                 }
             }
         }

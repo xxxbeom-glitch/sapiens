@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.Card
@@ -34,12 +33,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.sapiens.app.data.model.Article
@@ -49,6 +46,7 @@ import com.sapiens.app.data.model.MarketIndicator
 import com.sapiens.app.ui.common.MarketIndexStyleChangeText
 import com.sapiens.app.ui.common.categoryChipColors
 import com.sapiens.app.ui.theme.Accent
+import com.sapiens.app.ui.theme.AppShapes
 import com.sapiens.app.ui.theme.Card
 import com.sapiens.app.ui.theme.CardPaddingBottom
 import com.sapiens.app.ui.theme.CardPaddingHorizontal
@@ -56,14 +54,16 @@ import com.sapiens.app.ui.theme.CardPaddingVertical
 import com.sapiens.app.ui.theme.MarketDown
 import com.sapiens.app.ui.theme.MarketFlat
 import com.sapiens.app.ui.theme.MarketUp
+import com.sapiens.app.ui.theme.SapiensTextStyles
+import com.sapiens.app.ui.theme.SurfaceMuted
+import com.sapiens.app.ui.theme.Spacing
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
+import androidx.compose.foundation.shape.CircleShape
 import kotlinx.coroutines.delay
 
 /** 국내 주요뉴스 페이저: 페이지마다 동일 높이(스와이프 시 상하 점프 방지). 칩+2줄 헤드라인+소제목 4줄+패딩 기준. */
-private val DomesticBriefingPagerFixedHeight = 332.dp
-
-private val DomesticBriefingCardShape = RoundedCornerShape(18.dp)
+private val DomesticBriefingPagerFixedHeight = Spacing.space332
 
 @Composable
 fun SectionLabel(
@@ -71,7 +71,7 @@ fun SectionLabel(
     subtitle: String? = null
 ) {
     Column(
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+        modifier = Modifier.padding(horizontal = Spacing.space20, vertical = Spacing.space12)
     ) {
         SectionTitleText(title = title)
         if (subtitle != null) {
@@ -79,7 +79,7 @@ fun SectionLabel(
                 text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextPrimary,
-                modifier = Modifier.padding(top = 4.dp)
+                modifier = Modifier.padding(top = Spacing.space4)
             )
         }
     }
@@ -108,11 +108,11 @@ fun MorningSourceCard(
     Surface(
         modifier = modifier,
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(0.5.dp, TextSecondary.copy(alpha = 0.22f))
+        shape = AppShapes.button,
+        border = BorderStroke(Spacing.hairline, TextSecondary.copy(alpha = 0.22f))
     ) {
         Column(
-            modifier = Modifier.padding(12.dp)
+            modifier = Modifier.padding(Spacing.space12)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -122,12 +122,12 @@ fun MorningSourceCard(
                 SourceChip(label = source)
                 Text(
                     text = publishedAt,
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                    style = SapiensTextStyles.briefingPublisherChip,
                     color = TextSecondary
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(Spacing.space10))
 
             Row(
                 modifier = Modifier
@@ -136,30 +136,27 @@ fun MorningSourceCard(
                         indication = null,
                         interactionSource = remember { MutableInteractionSource() }
                     ) { onClickArticle(first) },
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.space10),
                 verticalAlignment = Alignment.Top
             ) {
                 Text(
                     text = first.headline,
                     modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
-                    ),
+                    style = SapiensTextStyles.morningCardHeadline,
                     color = TextPrimary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 HeadlineThumbnail(
                     imageUrl = first.imageUrl,
-                    modifier = Modifier.size(52.dp)
+                    modifier = Modifier.size(Spacing.space52)
                 )
             }
 
             HorizontalDivider(
                 color = TextSecondary.copy(alpha = 0.2f),
-                thickness = 0.5.dp,
-                modifier = Modifier.padding(top = 10.dp)
+                thickness = Spacing.hairline,
+                modifier = Modifier.padding(top = Spacing.space10)
             )
 
             topArticles.drop(1).forEachIndexed { index, article ->
@@ -170,12 +167,12 @@ fun MorningSourceCard(
                             indication = null,
                             interactionSource = remember { MutableInteractionSource() }
                         ) { onClickArticle(article) }
-                        .padding(vertical = 8.dp),
+                        .padding(vertical = Spacing.space8),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = article.headline,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                        style = SapiensTextStyles.morningListRow,
                         color = TextPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -184,7 +181,7 @@ fun MorningSourceCard(
                 if (index < topArticles.drop(1).lastIndex) {
                     HorizontalDivider(
                         color = TextSecondary.copy(alpha = 0.2f),
-                        thickness = 0.5.dp
+                        thickness = Spacing.hairline
                     )
                 }
             }
@@ -208,14 +205,14 @@ fun DomesticNewspapersBriefingCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = DomesticBriefingCardShape
+            .padding(horizontal = Spacing.space16),
+        shape = AppShapes.card
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(DomesticBriefingPagerFixedHeight)
-                .clip(DomesticBriefingCardShape)
+                .clip(AppShapes.card)
         ) {
             HorizontalPager(
                 state = pagerState,
@@ -237,13 +234,13 @@ fun DomesticNewspapersBriefingCard(
 private fun BriefingPublisherChip(label: String) {
     Surface(
         color = Accent.copy(alpha = 0.14f),
-        shape = RoundedCornerShape(4.dp)
+        shape = AppShapes.chipTight
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, lineHeight = 14.sp),
+            style = SapiensTextStyles.briefingPublisherChip,
             color = Accent,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+            modifier = Modifier.padding(horizontal = Spacing.space6, vertical = Spacing.space2)
         )
     }
 }
@@ -277,7 +274,7 @@ private fun NewspaperBriefingFiveList(
             val topArticles = articles.take(5)
             val first = topArticles.first()
             BriefingPublisherChip(label = publisherChipLabel)
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(Spacing.space8))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -290,10 +287,7 @@ private fun NewspaperBriefingFiveList(
                 Text(
                     text = first.headline,
                     modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = 24.sp,
-                        lineHeight = 34.sp
-                    ),
+                    style = SapiensTextStyles.briefingThemeHeadline,
                     color = TextPrimary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -303,8 +297,8 @@ private fun NewspaperBriefingFiveList(
             if (topArticles.size > 1) {
                 HorizontalDivider(
                     color = TextSecondary.copy(alpha = 0.2f),
-                    thickness = 0.5.dp,
-                    modifier = Modifier.padding(top = 10.dp)
+                    thickness = Spacing.hairline,
+                    modifier = Modifier.padding(top = Spacing.space10)
                 )
             }
 
@@ -316,7 +310,7 @@ private fun NewspaperBriefingFiveList(
                             indication = null,
                             interactionSource = remember { MutableInteractionSource() }
                         ) { onClickArticle(article) }
-                        .padding(vertical = 8.dp),
+                        .padding(vertical = Spacing.space8),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -331,7 +325,7 @@ private fun NewspaperBriefingFiveList(
                 if (index < topArticles.drop(1).lastIndex) {
                     HorizontalDivider(
                         color = TextSecondary.copy(alpha = 0.2f),
-                        thickness = 0.5.dp
+                        thickness = Spacing.hairline
                     )
                 }
             }
@@ -344,7 +338,7 @@ private fun HeadlineThumbnail(
     imageUrl: String,
     modifier: Modifier = Modifier
 ) {
-    val shape = RoundedCornerShape(6.dp)
+    val shape = AppShapes.thumbnail
     if (imageUrl.isBlank()) {
         Box(
             modifier = modifier
@@ -356,7 +350,7 @@ private fun HeadlineThumbnail(
                 imageVector = Icons.Default.Image,
                 contentDescription = null,
                 tint = TextSecondary,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(Spacing.space22)
             )
         }
         return
@@ -384,8 +378,8 @@ fun MorningCardPager(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            shape = RoundedCornerShape(18.dp)
+                .padding(horizontal = Spacing.space16),
+            shape = AppShapes.card
         ) {
             Column(
                 modifier = Modifier
@@ -396,7 +390,7 @@ fun MorningCardPager(
                         top = CardPaddingVertical,
                         bottom = CardPaddingBottom
                     ),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(Spacing.space10)
             ) {
                 HorizontalPager(
                     state = pagerState,
@@ -411,12 +405,12 @@ fun MorningCardPager(
                                 indication = null,
                                 interactionSource = remember { MutableInteractionSource() }
                             ) { onClickArticle(article) },
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        verticalArrangement = Arrangement.spacedBy(Spacing.space10)
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 56.dp)
+                                .heightIn(min = Spacing.space56)
                         ) {
                             Text(
                                 text = article.headline,
@@ -431,7 +425,7 @@ fun MorningCardPager(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 44.dp)
+                                .heightIn(min = Spacing.space44)
                         ) {
                             Text(
                                 text = article.summary,
@@ -465,17 +459,17 @@ fun MorningCardPager(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 12.dp),
+                .padding(top = Spacing.space12),
             horizontalArrangement = Arrangement.Center
         ) {
             repeat(articles.size) { index ->
                 val selected = pagerState.currentPage == index
                 Box(
                     modifier = Modifier
-                        .padding(horizontal = 3.dp)
-                        .height(6.dp)
-                        .width(if (selected) 20.dp else 6.dp)
-                        .clip(RoundedCornerShape(50))
+                        .padding(horizontal = Spacing.space3)
+                        .height(Spacing.space6)
+                        .width(if (selected) Spacing.space20 else Spacing.space6)
+                        .clip(CircleShape)
                         .background(if (selected) Accent else TextSecondary.copy(alpha = 0.4f))
                 )
             }
@@ -502,7 +496,7 @@ fun MarketTickerBanner(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = Spacing.space16, vertical = Spacing.space8)
     ) {
         HorizontalPager(
             state = pagerState,
@@ -521,8 +515,8 @@ fun MarketTickerBanner(
 
                 Box(
                     modifier = Modifier
-                        .height(28.dp)
-                        .width(0.5.dp)
+                        .height(Spacing.space28)
+                        .width(Spacing.hairline)
                         .background(TextSecondary.copy(alpha = 0.2f))
                 )
 
@@ -536,17 +530,17 @@ fun MarketTickerBanner(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp),
+                .padding(top = Spacing.space8),
             horizontalArrangement = Arrangement.Center
         ) {
             repeat(pages.size) { index ->
                 val selected = pagerState.currentPage == index
                 Box(
                     modifier = Modifier
-                        .padding(horizontal = 2.dp)
-                        .height(4.dp)
-                        .width(if (selected) 12.dp else 4.dp)
-                        .clip(RoundedCornerShape(99.dp))
+                        .padding(horizontal = Spacing.space2)
+                        .height(Spacing.space4)
+                        .width(if (selected) Spacing.space12 else Spacing.space4)
+                        .clip(AppShapes.sheetHandle)
                         .background(if (selected) Accent else TextSecondary.copy(alpha = 0.35f))
                 )
             }
@@ -571,7 +565,7 @@ private fun MarketTickerItem(
     }
 
     Row(
-        modifier = modifier.padding(horizontal = 10.dp),
+        modifier = modifier.padding(horizontal = Spacing.space10),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -602,8 +596,8 @@ fun USMajorArticlesCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(18.dp)
+            .padding(horizontal = Spacing.space16),
+        shape = AppShapes.card
     ) {
         Column(
             modifier = Modifier
@@ -620,12 +614,12 @@ fun USMajorArticlesCard(
                     text = "불러온 기사가 없습니다.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
-                    modifier = Modifier.padding(vertical = 16.dp)
+                    modifier = Modifier.padding(vertical = Spacing.space16)
                 )
             } else {
                 val first = articles.first()
                 BriefingPublisherChip(label = first.source.ifBlank { "해외" })
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(Spacing.space8))
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -638,10 +632,7 @@ fun USMajorArticlesCard(
                     Text(
                         text = first.headline,
                         modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            fontSize = 24.sp,
-                            lineHeight = 34.sp
-                        ),
+                        style = SapiensTextStyles.briefingThemeHeadline,
                         color = TextPrimary,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -651,8 +642,8 @@ fun USMajorArticlesCard(
                 if (articles.size > 1) {
                     HorizontalDivider(
                         color = TextSecondary.copy(alpha = 0.2f),
-                        thickness = 0.5.dp,
-                        modifier = Modifier.padding(top = 10.dp)
+                        thickness = Spacing.hairline,
+                        modifier = Modifier.padding(top = Spacing.space10)
                     )
                 }
 
@@ -664,7 +655,7 @@ fun USMajorArticlesCard(
                                 indication = null,
                                 interactionSource = remember { MutableInteractionSource() }
                             ) { onClickArticle(article) }
-                            .padding(vertical = 8.dp),
+                            .padding(vertical = Spacing.space8),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
@@ -679,7 +670,7 @@ fun USMajorArticlesCard(
                     if (index < articles.drop(1).lastIndex) {
                         HorizontalDivider(
                             color = TextSecondary.copy(alpha = 0.2f),
-                            thickness = 0.5.dp
+                            thickness = Spacing.hairline
                         )
                     }
                 }
@@ -696,13 +687,13 @@ fun MarketIndexGrid(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = Spacing.space16),
+        verticalArrangement = Arrangement.spacedBy(Spacing.space8)
     ) {
         rows.forEach { rowItems ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(Spacing.space8)
             ) {
                 rowItems.forEach { index ->
                     MarketIndexCard(
@@ -725,13 +716,13 @@ private fun MarketIndexCard(
 ) {
     Column(
         modifier = modifier
-            .background(Color(0xFF28282A), RoundedCornerShape(14.dp))
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .background(SurfaceMuted, AppShapes.cardNested)
+            .padding(Spacing.space14),
+        verticalArrangement = Arrangement.spacedBy(Spacing.space6)
     ) {
         Text(
             text = index.group.uppercase(),
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+            style = SapiensTextStyles.marketIndexGroup,
             color = TextSecondary
         )
         Text(
@@ -756,18 +747,18 @@ private fun MarketIndexCard(
 fun SourceChip(label: String) {
     Surface(
         color = Accent.copy(alpha = 0.14f),
-        shape = RoundedCornerShape(6.dp)
+        shape = AppShapes.chip
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            modifier = Modifier.padding(horizontal = Spacing.space8, vertical = Spacing.space3),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
+            horizontalArrangement = Arrangement.spacedBy(Spacing.space5)
         ) {
             Box(
                 modifier = Modifier
-                    .width(5.dp)
-                    .height(5.dp)
-                    .clip(RoundedCornerShape(50))
+                    .width(Spacing.space5)
+                    .height(Spacing.space5)
+                    .clip(CircleShape)
                     .background(Accent)
             )
             Text(
@@ -784,13 +775,13 @@ private fun CategoryChip(label: String) {
     val (backgroundColor, textColor) = categoryChipColors(label)
     Surface(
         color = backgroundColor,
-        shape = RoundedCornerShape(6.dp)
+        shape = AppShapes.chip
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             color = textColor,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+            modifier = Modifier.padding(horizontal = Spacing.space8, vertical = Spacing.space3)
         )
     }
 }

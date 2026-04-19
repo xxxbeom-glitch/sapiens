@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
@@ -50,7 +49,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.stableId
 import com.sapiens.app.data.repository.FeedbackRepository
@@ -59,8 +57,11 @@ import com.sapiens.app.data.store.BookmarkToggleResult
 import com.sapiens.app.data.store.UserPreferencesRepository
 import com.sapiens.app.ui.common.ArticleBottomSheet
 import com.sapiens.app.ui.theme.Accent
+import com.sapiens.app.ui.theme.AppShapes
 import com.sapiens.app.ui.theme.Background
 import com.sapiens.app.ui.theme.RowVertical
+import com.sapiens.app.ui.theme.Spacing
+import com.sapiens.app.ui.theme.SuccessBright
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
@@ -289,13 +290,13 @@ private fun MenuRow(item: MenuItem) {
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() }
             ) { item.onClick() }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = Spacing.space16, vertical = Spacing.space14),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.space12),
             modifier = Modifier.weight(1f)
         ) {
             Icon(
@@ -303,7 +304,7 @@ private fun MenuRow(item: MenuItem) {
                 contentDescription = item.title,
                 tint = Accent
             )
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.space2)) {
                 Text(
                     text = item.title,
                     style = MaterialTheme.typography.titleSmall,
@@ -377,8 +378,8 @@ private fun AccountDetailScreen(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(Spacing.space16),
+        verticalArrangement = Arrangement.spacedBy(Spacing.space12)
     ) {
         if (!isLoggedIn) {
             Button(
@@ -401,11 +402,11 @@ private fun AccountDetailScreen(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.space12)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(44.dp)
+                            .size(Spacing.space44)
                             .background(Accent.copy(alpha = 0.2f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
@@ -457,15 +458,15 @@ private fun ChipGrid(
     onToggle: (String) -> Unit
 ) {
     FlowRow(
-        modifier = Modifier.padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = Modifier.padding(Spacing.space16),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.space8),
+        verticalArrangement = Arrangement.spacedBy(Spacing.space8)
     ) {
         chips.forEach { label ->
             val selected = label in selectedValues
             Surface(
                 color = if (selected) Accent.copy(alpha = 0.2f) else Color.Transparent,
-                shape = RoundedCornerShape(8.dp),
+                shape = AppShapes.searchField,
                 modifier = Modifier.clickable(
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() }
@@ -475,7 +476,7 @@ private fun ChipGrid(
                     text = label,
                     style = MaterialTheme.typography.labelMedium,
                     color = if (selected) Accent else TextSecondary,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    modifier = Modifier.padding(horizontal = Spacing.space10, vertical = Spacing.space6)
                 )
             }
         }
@@ -489,7 +490,7 @@ private fun BookmarkDetailScreen(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = RowVertical)
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = Spacing.space16, vertical = RowVertical)
     ) {
         item {
             items.forEachIndexed { index, article ->
@@ -525,7 +526,7 @@ private fun BookmarkDetailScreen(
 
 @Composable
 private fun AiStatusDetailScreen() {
-    Column(modifier = Modifier.padding(16.dp)) {
+    Column(modifier = Modifier.padding(Spacing.space16)) {
         StatusRow(label = "뉴스 요약 AI", healthy = true)
         StatusRow(label = "시황 리포트 AI", healthy = true)
         StatusRow(label = "데이터 수집", healthy = true)
@@ -533,7 +534,7 @@ private fun AiStatusDetailScreen() {
             text = "오전 6:00 업데이트",
             style = MaterialTheme.typography.bodySmall,
             color = TextSecondary,
-            modifier = Modifier.padding(top = 8.dp)
+            modifier = Modifier.padding(top = Spacing.space8)
         )
     }
 }
@@ -547,8 +548,8 @@ private fun ThemeSettingDetailScreen(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(Spacing.space16),
+        verticalArrangement = Arrangement.spacedBy(Spacing.space8)
     ) {
         ThemeOptionRow(
             label = "다크 모드",
@@ -577,7 +578,7 @@ private fun ThemeOptionRow(
                 interactionSource = remember { MutableInteractionSource() },
                 onClick = onClick
             )
-            .padding(vertical = 12.dp),
+            .padding(vertical = Spacing.space12),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -599,7 +600,7 @@ private fun StatusRow(
     label: String,
     healthy: Boolean
 ) {
-    val dotColor = if (healthy) Color(0xFF22C55E) else Color(0xFFFF3B30)
+    val dotColor = if (healthy) SuccessBright else MaterialTheme.colorScheme.error
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -610,11 +611,11 @@ private fun StatusRow(
         Text(label, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(Spacing.space6)
         ) {
             Box(
                 modifier = Modifier
-                    .size(8.dp)
+                    .size(Spacing.space8)
                     .background(dotColor, CircleShape)
             )
             Text(

@@ -489,23 +489,25 @@ def analyze_company(
         try:
             raw = _call_gemini(user)
             data = _require_json_dict(raw)
-            required = (
+            # 누락된 키는 에러 없이 채워서 진행 (문자열 필드는 "", health_status는 {})
+            required_str_keys = (
                 "business",
                 "revenue_model",
                 "outlook_2026",
                 "risk_factors",
                 "capital",
-                "health_status",
                 "health_summary",
-                "health_score",
                 "ai_analyst_summary",
             )
-            for k in required:
-                if k not in data:
-                    raise ValueError(f"missing key: {k}")
-            hs = data["health_status"]
+            for k in required_str_keys:
+                if k not in data or data[k] is None:
+                    data[k] = ""
+                else:
+                    data[k] = str(data[k])
+            hs = data.get("health_status")
             if not isinstance(hs, dict):
-                raise ValueError("health_status must be object")
+                hs = {}
+                data["health_status"] = hs
             for hk in (
                 "debt_ratio_status",
                 "current_ratio_status",
@@ -515,7 +517,7 @@ def analyze_company(
             ):
                 hs.setdefault(hk, "안정")
             try:
-                sc = int(data["health_score"])
+                sc = int(data.get("health_score"))
             except (TypeError, ValueError):
                 sc = 3
             data["health_score"] = max(0, min(5, sc))

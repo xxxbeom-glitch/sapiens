@@ -13,6 +13,20 @@ import androidx.compose.ui.unit.sp
 private val SuitFontFamily = FontFamily.SansSerif
 
 val SapiensTypography = Typography(
+    displayLarge = TextStyle(
+        fontFamily = SuitFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 57.sp,
+        lineHeight = 64.sp,
+        letterSpacing = (-0.25).sp
+    ),
+    displayMedium = TextStyle(
+        fontFamily = SuitFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 45.sp,
+        lineHeight = 52.sp,
+        letterSpacing = 0.sp
+    ),
     displaySmall = TextStyle(
         fontFamily = SuitFontFamily,
         fontWeight = FontWeight.Bold,

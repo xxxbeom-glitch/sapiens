@@ -8,8 +8,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Accent,
-    onPrimary = TextPrimaryDark,
+    primary = Primary,
+    onPrimary = OnPrimaryFixed,
     background = BackgroundDark,
     onBackground = TextPrimaryDark,
     surface = BackgroundDark,
@@ -22,8 +22,8 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Accent,
-    onPrimary = TextPrimaryDark,
+    primary = Primary,
+    onPrimary = OnPrimaryFixed,
     background = BackgroundLight,
     onBackground = TextPrimaryLight,
     surface = BackgroundLight,
