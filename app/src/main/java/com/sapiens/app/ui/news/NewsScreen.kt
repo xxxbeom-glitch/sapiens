@@ -18,12 +18,14 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,7 +34,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sapiens.app.data.model.Article
+import com.sapiens.app.data.model.stableId
+import com.sapiens.app.data.repository.FeedbackRepository
+import com.sapiens.app.data.store.ArticleBookmarksRepository
+import com.sapiens.app.data.store.BookmarkToggleResult
 import com.sapiens.app.ui.common.ArticleBottomSheet
+import kotlinx.coroutines.launch
 import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.Background
 import com.sapiens.app.ui.theme.Card
@@ -95,7 +102,9 @@ fun NewsRegionToggle(
 @Composable
 fun NewsScreen(
     viewModel: NewsViewModel,
-    isOverseas: Boolean
+    isOverseas: Boolean,
+    bookmarksRepository: ArticleBookmarksRepository,
+    feedbackRepository: FeedbackRepository
 ) {
     val isLoading by viewModel.isLoading.collectAsState()
     val realtimeNews by viewModel.realtimeNews.collectAsState()
@@ -105,6 +114,8 @@ fun NewsScreen(
     val overseasTech by viewModel.overseasTech.collectAsState()
 
     var selectedArticle by remember { mutableStateOf<Article?>(null) }
+    val bookmarkEntries by bookmarksRepository.bookmarksFlow.collectAsState(initial = emptyList())
+    val scope = rememberCoroutineScope()
     // 국내(3탭)·해외(2탭) 인덱스를 분리해 두지 않으면, 국내 3번째 탭에서 해외로 바꿀 때
     // 한 프레임이라도 selectedTabIndex(2) >= 해외 tabCount(2)가 되어 PrimaryTabRow가 크래시난다.
     var domesticTabIndex by remember { mutableIntStateOf(0) }
@@ -199,9 +210,35 @@ fun NewsScreen(
         }
 
         selectedArticle?.let { article ->
+            val bookmarked = bookmarkEntries.any { it.article.stableId() == article.stableId() }
             ArticleBottomSheet(
                 article = article,
-                onDismissRequest = { selectedArticle = null }
+                onDismissRequest = { selectedArticle = null },
+                isBookmarked = bookmarked,
+                onBookmarkToggle = {
+                    scope.launch {
+                        val id = article.stableId()
+                        try {
+                            when (
+                                val r = bookmarksRepository.toggleBookmark(
+                                    article,
+                                    withFeedbackWhenAdding = true
+                                )
+                            ) {
+                                is BookmarkToggleResult.Added ->
+                                    if (r.withFeedbackSync) {
+                                        feedbackRepository.saveArticleLike(id, article.category)
+                                    }
+                                is BookmarkToggleResult.Removed ->
+                                    if (r.hadFeedbackSync) {
+                                        feedbackRepository.deleteFeedback(id)
+                                    }
+                            }
+                        } catch (e: Exception) {
+                            Log.w("NewsScreen", "bookmark/feedback", e)
+                        }
+                    }
+                }
             )
         }
     }

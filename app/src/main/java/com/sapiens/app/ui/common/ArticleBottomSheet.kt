@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -32,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.Card
@@ -46,7 +48,9 @@ import com.sapiens.app.ui.theme.TextSecondary
 @Composable
 fun ArticleBottomSheet(
     article: Article,
-    onDismissRequest: () -> Unit
+    onDismissRequest: () -> Unit,
+    isBookmarked: Boolean,
+    onBookmarkToggle: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val resolvedPoints = article.summaryPoints
@@ -96,27 +100,30 @@ fun ArticleBottomSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 14.dp),
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                val headlineStyle = MaterialTheme.typography.headlineMedium.copy(
+                    fontSize = (MaterialTheme.typography.headlineMedium.fontSize.value - 1f).sp,
+                    lineHeight = (MaterialTheme.typography.headlineMedium.lineHeight.value - 1f).sp
+                )
                 Text(
                     text = article.headline,
-                    style = MaterialTheme.typography.headlineMedium,
+                    style = headlineStyle,
                     color = TextPrimary,
                     maxLines = 3,
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Icon(
-                    imageVector = Icons.Outlined.BookmarkBorder,
-                    contentDescription = "저장",
-                    tint = TextSecondary,
+                    imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                    contentDescription = if (isBookmarked) "저장됨" else "저장",
+                    tint = if (isBookmarked) Accent else TextSecondary,
                     modifier = Modifier
                         .size(24.dp)
-                        .align(Alignment.Top)
                         .clickable(
                             indication = null,
                             interactionSource = remember { MutableInteractionSource() }
-                        ) { }
+                        ) { onBookmarkToggle() }
                 )
             }
 

@@ -45,6 +45,7 @@ import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.MarketDirection
 import com.sapiens.app.data.model.MarketIndex
 import com.sapiens.app.data.model.MarketIndicator
+import com.sapiens.app.ui.common.MarketIndexStyleChangeText
 import com.sapiens.app.ui.common.categoryChipColors
 import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.Card
@@ -669,12 +670,6 @@ private fun MarketIndexCard(
     index: MarketIndex,
     modifier: Modifier = Modifier
 ) {
-    val directionColor = when (index.direction) {
-        MarketDirection.UP -> MarketUp
-        MarketDirection.DOWN -> MarketDown
-        MarketDirection.FLAT -> MarketFlat
-    }
-
     Column(
         modifier = modifier
             .background(Color(0xFF28282A), RoundedCornerShape(14.dp))
@@ -697,10 +692,9 @@ private fun MarketIndexCard(
             color = TextPrimary,
             fontWeight = FontWeight.Bold
         )
-        Text(
-            text = index.change,
-            style = MaterialTheme.typography.labelSmall,
-            color = directionColor
+        MarketIndexStyleChangeText(
+            change = index.change,
+            direction = index.direction
         )
     }
 }

@@ -62,6 +62,52 @@ def _json_object_slice(s: str) -> str | None:
     return None
 
 
+# 비정상 입력(거대 한 줄)에 방어. 일반 잘림 응답의 `}` 누락은 보통 수십 개 이하.
+_MAX_TRAILING_CLOSING_BRACES = 64
+
+
+def _try_parse_dict_balance_closing_braces(s: str) -> dict[str, Any] | None:
+    """
+    응답이 잘려 닫는 `}`가 부족한 경우: 첫 `{` 이후 본문에서
+    열린 `{` / 닫힌 `}` 개수를 세서 부족한 수만큼(상한 _MAX_…) `}`를 이어 붙인 뒤
+    `json.loads`를 한 번 더 시도한다. (문자열 내부 괄호는 무시하는 단순 휴리스틱.)
+    """
+    t = (s or "").strip()
+    i = t.find("{")
+    if i < 0:
+        return None
+    core = t[i:].strip()
+    if not core.startswith("{"):
+        return None
+    open_c = core.count("{")
+    close_c = core.count("}")
+    deficit = open_c - close_c
+    if deficit <= 0:
+        return None
+    n_add = min(deficit, _MAX_TRAILING_CLOSING_BRACES)
+    if deficit > n_add:
+        logger.warning(
+            "JSON `}` 자동보완: 닫힘 부족 %d개 > 상한 %d — %d개만 이어 붙여 재시도",
+            deficit,
+            _MAX_TRAILING_CLOSING_BRACES,
+            n_add,
+        )
+    candidate = core + ("}" * n_add)
+    try:
+        parsed: Any = json.loads(candidate)
+        if isinstance(parsed, dict):
+            logger.info(
+                "JSON 파싱: 닫는 `}` %d개 보완 후 성공 (누락 %d, 적용 %d)",
+                n_add,
+                deficit,
+                n_add,
+            )
+            return parsed
+    except json.JSONDecodeError:
+        pass
+    return None
+
+
 def _extract_json(text: str) -> dict[str, Any] | str:
     """
     JSON 객체 파싱 시도.
@@ -76,6 +122,10 @@ def _extract_json(text: str) -> dict[str, Any] | str:
             return parsed
     except json.JSONDecodeError:
         pass
+    # 첫 `}`~마지막 `}` 슬라이스보다, 열/닫 중괄호 개수로 `}` 누락을 보정하는 쪽이 잘림 응답에 유리
+    fixed = _try_parse_dict_balance_closing_braces(s)
+    if fixed is not None:
+        return fixed
     sub = _json_object_slice(s)
     if sub:
         try:
@@ -84,6 +134,9 @@ def _extract_json(text: str) -> dict[str, Any] | str:
                 return parsed
         except json.JSONDecodeError:
             pass
+        fixed_sub = _try_parse_dict_balance_closing_braces(sub)
+        if fixed_sub is not None:
+            return fixed_sub
     return s
 
 

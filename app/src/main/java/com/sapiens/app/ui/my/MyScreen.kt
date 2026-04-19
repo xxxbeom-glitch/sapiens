@@ -1,5 +1,6 @@
 package com.sapiens.app.ui.my
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -50,8 +51,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.sapiens.app.data.mock.MockData
 import com.sapiens.app.data.model.Article
+import com.sapiens.app.data.model.stableId
+import com.sapiens.app.data.repository.FeedbackRepository
+import com.sapiens.app.data.store.ArticleBookmarksRepository
+import com.sapiens.app.data.store.BookmarkToggleResult
 import com.sapiens.app.data.store.UserPreferencesRepository
 import com.sapiens.app.ui.common.ArticleBottomSheet
 import com.sapiens.app.ui.theme.Accent
@@ -83,12 +87,16 @@ private enum class MyPage(val title: String) {
 @Composable
 fun MyScreen(
     isDarkTheme: Boolean,
-    onThemeChange: (Boolean) -> Unit
+    onThemeChange: (Boolean) -> Unit,
+    bookmarksRepository: ArticleBookmarksRepository,
+    feedbackRepository: FeedbackRepository
 ) {
     val context = LocalContext.current
     val preferencesRepository = remember { UserPreferencesRepository(context) }
     val selectedSectors by preferencesRepository.selectedSectorsFlow.collectAsState(initial = emptySet())
     val selectedNewsCategories by preferencesRepository.selectedMorningCategoriesFlow.collectAsState(initial = emptySet())
+    val bookmarkEntries by bookmarksRepository.bookmarksFlow.collectAsState(initial = emptyList())
+    val savedArticles = bookmarkEntries.map { it.article }
     val coroutineScope = rememberCoroutineScope()
 
     val isLoggedIn = false
@@ -178,7 +186,7 @@ fun MyScreen(
                 onBack = { currentPage = MyPage.MENU }
             ) {
                 BookmarkDetailScreen(
-                    items = MockData.bookmarkedArticles,
+                    items = savedArticles,
                     onClickItem = { selectedBookmarkedArticle = it }
                 )
             }
@@ -195,9 +203,35 @@ fun MyScreen(
     }
 
     selectedBookmarkedArticle?.let { article ->
+        val bookmarked = bookmarkEntries.any { it.article.stableId() == article.stableId() }
         ArticleBottomSheet(
             article = article,
-            onDismissRequest = { selectedBookmarkedArticle = null }
+            onDismissRequest = { selectedBookmarkedArticle = null },
+            isBookmarked = bookmarked,
+            onBookmarkToggle = {
+                coroutineScope.launch {
+                    val id = article.stableId()
+                    try {
+                        when (
+                            val r = bookmarksRepository.toggleBookmark(
+                                article,
+                                withFeedbackWhenAdding = false
+                            )
+                        ) {
+                            is BookmarkToggleResult.Added ->
+                                if (r.withFeedbackSync) {
+                                    feedbackRepository.saveArticleLike(id, article.category)
+                                }
+                            is BookmarkToggleResult.Removed ->
+                                if (r.hadFeedbackSync) {
+                                    feedbackRepository.deleteFeedback(id)
+                                }
+                        }
+                    } catch (e: Exception) {
+                        Log.w("MyScreen", "bookmark/feedback", e)
+                    }
+                }
+            }
         )
     }
 }

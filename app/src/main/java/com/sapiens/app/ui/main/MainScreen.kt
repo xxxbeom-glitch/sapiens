@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -35,12 +36,14 @@ import androidx.compose.ui.unit.sp
 import com.sapiens.app.R
 import com.sapiens.app.data.mock.MockData
 import com.sapiens.app.data.model.Company
+import com.sapiens.app.data.repository.FeedbackRepositoryImpl
 import com.sapiens.app.data.repository.NewsRepositoryImpl
+import com.sapiens.app.data.store.ArticleBookmarksRepository
 import com.sapiens.app.ui.briefing.BriefingScreen
 import com.sapiens.app.ui.briefing.BriefingViewModel
-import com.sapiens.app.ui.company.CompanySearchBottomSheet
-import com.sapiens.app.ui.company.CompanyScreen
-import com.sapiens.app.ui.company.CompanyViewModel
+import com.sapiens.app.ui.market.MarketSearchBottomSheet
+import com.sapiens.app.ui.market.MarketScreen
+import com.sapiens.app.ui.market.MarketViewModel
 import com.sapiens.app.ui.my.MyScreen
 import com.sapiens.app.ui.news.NewsRegionToggle
 import com.sapiens.app.ui.news.NewsScreen
@@ -58,7 +61,7 @@ private data class BottomTab(
 private val tabs = listOf(
     BottomTab(label = "브리핑", iconResId = R.drawable.ico_brief),
     BottomTab(label = "뉴스", iconResId = R.drawable.ico_news),
-    BottomTab(label = "기업정보", iconResId = R.drawable.ico_company),
+    BottomTab(label = "마켓", iconResId = R.drawable.ico_company),
     BottomTab(label = "마이", iconResId = R.drawable.ico_my)
 )
 
@@ -68,14 +71,17 @@ fun MainScreen(
     onThemeChange: (Boolean) -> Unit
 ) {
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-    var showCompanySearchSheet by remember { mutableStateOf(false) }
+    var showMarketSearchSheet by remember { mutableStateOf(false) }
     var isOverseasNews by remember { mutableStateOf(false) }
     val addedCompanies = remember { mutableStateListOf<Company>() }
 
+    val context = LocalContext.current
     val newsRepository = remember { NewsRepositoryImpl() }
+    val bookmarksRepository = remember { ArticleBookmarksRepository(context.applicationContext) }
+    val feedbackRepository = remember { FeedbackRepositoryImpl() }
     val briefingViewModel: BriefingViewModel = viewModel(factory = BriefingViewModel.factory(newsRepository))
     val newsViewModel: NewsViewModel = viewModel(factory = NewsViewModel.factory(newsRepository))
-    val companyViewModel: CompanyViewModel = viewModel(factory = CompanyViewModel.factory(newsRepository))
+    val marketViewModel: MarketViewModel = viewModel(factory = MarketViewModel.factory(newsRepository))
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -84,7 +90,7 @@ fun MainScreen(
             MainTopAppBar(
                 title = tabs[selectedTabIndex].label,
                 showSearchAction = selectedTabIndex == 2,
-                onClickSearch = { showCompanySearchSheet = true },
+                onClickSearch = { showMarketSearchSheet = true },
                 showNewsRegionToggle = selectedTabIndex == 1,
                 isOverseasNews = isOverseasNews,
                 onOverseasNewsChange = { isOverseasNews = it }
@@ -104,25 +110,32 @@ fun MainScreen(
                 .padding(innerPadding)
         ) {
             when (selectedTabIndex) {
-                0 -> BriefingScreen(viewModel = briefingViewModel)
+                0 -> BriefingScreen(
+                    viewModel = briefingViewModel,
+                    bookmarksRepository = bookmarksRepository
+                )
                 1 -> NewsScreen(
                     viewModel = newsViewModel,
-                    isOverseas = isOverseasNews
+                    isOverseas = isOverseasNews,
+                    bookmarksRepository = bookmarksRepository,
+                    feedbackRepository = feedbackRepository
                 )
-                2 -> CompanyScreen(
-                    viewModel = companyViewModel,
+                2 -> MarketScreen(
+                    viewModel = marketViewModel,
                     addedCompanies = addedCompanies
                 )
                 else -> MyScreen(
                     isDarkTheme = isDarkTheme,
-                    onThemeChange = onThemeChange
+                    onThemeChange = onThemeChange,
+                    bookmarksRepository = bookmarksRepository,
+                    feedbackRepository = feedbackRepository
                 )
             }
         }
     }
 
-    if (showCompanySearchSheet) {
-        CompanySearchBottomSheet(
+    if (showMarketSearchSheet) {
+        MarketSearchBottomSheet(
             allCompanies = MockData.companyList,
             addedTickers = addedCompanies.map { it.ticker }.toSet(),
             onAddCompany = { company ->
@@ -130,7 +143,7 @@ fun MainScreen(
                     addedCompanies.add(company)
                 }
             },
-            onDismissRequest = { showCompanySearchSheet = false }
+            onDismissRequest = { showMarketSearchSheet = false }
         )
     }
 }
@@ -177,7 +190,7 @@ private fun MainTopAppBar(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Search,
-                            contentDescription = "기업 검색",
+                            contentDescription = "마켓 검색",
                             tint = TextPrimary
                         )
                     }

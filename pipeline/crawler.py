@@ -1254,12 +1254,25 @@ def _unwrap_json_array(payload: Any) -> list[Any]:
         return payload
     if not isinstance(payload, dict):
         return []
-    for k in ("result", "data", "body", "themes", "items", "categories", "categoryList", "list", "content"):
+    for k in (
+        "result",
+        "data",
+        "body",
+        "themes",
+        "items",
+        "categories",
+        "categoryList",
+        "list",
+        "content",
+        "stocks",
+        "stockList",
+        "stockInfos",
+    ):
         v = payload.get(k)
         if isinstance(v, list):
             return v
         if isinstance(v, dict):
-            for k2 in ("themes", "items", "list", "categories", "stocks", "content", "data"):
+            for k2 in ("themes", "items", "list", "categories", "stocks", "stockList", "content", "data"):
                 inner = v.get(k2)
                 if isinstance(inner, list):
                     return inner
@@ -1289,8 +1302,8 @@ def _naver_theme_format_price(val: Any) -> str:
     if "," in s and re.search(r"\d", s):
         return s
     try:
-        n = int(float(val))  # type: ignore[arg-type]
-        return format(n, ",")
+        n = int(float(str(val).replace(",", "")))  # type: ignore[arg-type]
+        return f"{n:,}"
     except (TypeError, ValueError):
         return s
 
@@ -1345,36 +1358,54 @@ def _naver_theme_format_signed_amount(val: Any) -> str:
         return s
 
 
-def _naver_theme_stock_change_pct(fluctuations_ratio: Any, up_down_gb: Any) -> str:
+def _naver_theme_stock_change_display(item: dict) -> str:
     """
-    fluctuationsRatio(보통 절대값) + upDownGb로 등락률 문자열.
-    upDownGb \"2\" → 상승(+), \"5\" → 하락(-). 그 외는 fluctuationsRatio 부호로 추정.
+    stock.naver 테마 종목 1건 기준 등락률 문자열.
+    upDownGb: 1=하락, 2=상승, 3=보합, 4=하한가, 5=상한가 (API 문서·실응답 기준).
+    fluctuationsRatio는 보통 절대값(%)이며, 1·2에서는 부호를 upDownGb에 맞춘다.
     """
-    if fluctuations_ratio is None:
-        return ""
-    s = str(fluctuations_ratio).strip()
+    gb = str(item.get("upDownGb") or "").strip()
+    if gb == "5":
+        return "상한가"
+    if gb == "4":
+        return "하한가"
+    if gb == "3":
+        return "0.00%"
+
+    fr = item.get("fluctuationsRatio")
+    if fr is None or (isinstance(fr, str) and not str(fr).strip()):
+        cp = item.get("compareToPreviousClosePrice")
+        if cp is not None and str(cp).strip() != "":
+            return _naver_theme_format_signed_amount(cp)
+        return _naver_theme_format_change_rate(
+            item.get("prdyCtrt") or item.get("changeRate") or item.get("rate") or item.get("chgRate")
+        )
+
+    s = str(fr).strip()
     if not s:
         return ""
     if "%" in s:
         return s
+
     raw = s.rstrip("%").replace(",", "")
     try:
-        signed = float(raw)
+        signed_val = float(raw)
     except (TypeError, ValueError):
         return s
-    mag = abs(signed)
-    gb = str(up_down_gb or "").strip()
-    if gb == "5":
+    mag = abs(signed_val)
+
+    if gb == "1":
         sign = "-"
     elif gb == "2":
         sign = "+"
     else:
-        if signed > 0:
+        if signed_val > 0:
             sign = "+"
-        elif signed < 0:
+        elif signed_val < 0:
             sign = "-"
         else:
             sign = ""
+
     if mag == 0.0:
         return "0.00%"
     return f"{sign}{mag:.2f}%"
@@ -1402,24 +1433,15 @@ def _naver_theme_stocks_from_api(payload: Any, limit: int) -> list[dict[str, str
             continue
         price_raw = (
             item.get("closePrice")
+            or item.get("closeprice")
             or item.get("now")
             or item.get("dealPrice")
             or item.get("price")
             or item.get("prpr")
             or item.get("currentPrice")
+            or item.get("stockPrice")
         )
-        fr = item.get("fluctuationsRatio")
-        gb = item.get("upDownGb")
-        if fr is not None and str(fr).strip() != "":
-            change = _naver_theme_stock_change_pct(fr, gb)
-        else:
-            cp = item.get("compareToPreviousClosePrice")
-            if cp is not None and str(cp).strip() != "":
-                change = _naver_theme_format_signed_amount(cp)
-            else:
-                change = _naver_theme_format_change_rate(
-                    item.get("prdyCtrt") or item.get("changeRate") or item.get("rate") or item.get("chgRate")
-                )
+        change = _naver_theme_stock_change_display(item)
         code_raw = (
             item.get("itemCode")
             or item.get("itemcode")
