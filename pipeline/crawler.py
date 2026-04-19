@@ -13,7 +13,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
 import pytz
 import requests
@@ -91,19 +91,67 @@ def _element_to_plain_article_text(root: Any) -> str:
         return ""
 
 
+def _naver_finance_news_read_to_n_news_article_url(url: str) -> str:
+    """
+    finance.naver.com/news/news_read.naver?... 쿼리의 office_id·article_id로
+    n.news.naver.com/article/{office_id}/{article_id} 본문 페이지 URL을 만든다.
+    해당 형식이 아니면 원본 URL을 그대로 반환한다.
+    """
+    raw = (url or "").strip()
+    if not raw:
+        return raw
+    try:
+        parsed = urlparse(raw)
+    except Exception:
+        return raw
+    netloc = (parsed.netloc or "").lower()
+    path = (parsed.path or "").lower()
+    if "finance.naver.com" not in netloc:
+        return raw
+    if "news_read.naver" not in path and "news_read.nhn" not in path:
+        return raw
+    q = parse_qs(parsed.query, keep_blank_values=False)
+
+    def _first(*keys: str) -> str:
+        for k in keys:
+            vals = q.get(k)
+            if vals and str(vals[0]).strip():
+                return str(vals[0]).strip()
+        return ""
+
+    article_id = _first(
+        "article_id",
+        "articleId",
+        "ARTICLE_ID",
+    )
+    office_id = _first(
+        "office_id",
+        "officeId",
+        "OFFICE_ID",
+        "office_no",
+        "officeNo",
+    )
+    if article_id and office_id:
+        return f"https://n.news.naver.com/article/{office_id}/{article_id}"
+    return raw
+
+
 def _fetch_naver_article_body(article: dict[str, Any]) -> str:
     """
     네이버(금융/뉴스) 기사 본문 텍스트 추출. 실패 시 빈 문자열.
-    기사 dict의 ``url`` 값만 그대로 HTTP 요청에 사용한다(재조합·정규화 없음).
+    기사 dict의 ``url``을 사용한다. finance ``news_read.naver`` 링크는
+    쿼리의 office_id·article_id로 n.news 기사 URL로 바꾼 뒤 요청한다.
     """
-    u = str(article.get("url") or "").strip()
-    if not u:
+    article_url = str(article.get("url") or "").strip()
+    url = _naver_finance_news_read_to_n_news_article_url(article_url)
+    if not url:
         return ""
-    html = _fetch(u)
+    html = _fetch(url)
     if not html:
         logger.warning(
-            "naver 기사 본문 비어 있음(HTML 미수신): url=%s 시도 셀렉터=%s",
-            u,
+            "naver 기사 본문 비어 있음(HTML 미수신): article_url=%s fetch_url=%s 시도 셀렉터=%s",
+            article_url,
+            url,
             ", ".join(NAVER_ARTICLE_BODY_SELECTORS),
         )
         return ""
@@ -116,15 +164,17 @@ def _fetch_naver_article_body(article: dict[str, Any]) -> str:
                 if t:
                     return t[:ARTICLE_BODY_MAX_CHARS]
         logger.warning(
-            "naver 기사 본문 비어 있음(본문 노드·텍스트 없음): url=%s 시도 셀렉터=%s",
-            u,
+            "naver 기사 본문 비어 있음(본문 노드·텍스트 없음): article_url=%s fetch_url=%s 시도 셀렉터=%s",
+            article_url,
+            url,
             ", ".join(NAVER_ARTICLE_BODY_SELECTORS),
         )
         return ""
     except Exception as e:
         logger.warning(
-            "naver 기사 본문 비어 있음(파싱 예외): url=%s 시도 셀렉터=%s err=%s",
-            u,
+            "naver 기사 본문 비어 있음(파싱 예외): article_url=%s fetch_url=%s 시도 셀렉터=%s err=%s",
+            article_url,
+            url,
             ", ".join(NAVER_ARTICLE_BODY_SELECTORS),
             e,
         )
