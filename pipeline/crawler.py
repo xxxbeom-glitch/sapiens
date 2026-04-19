@@ -37,6 +37,12 @@ MAX_PER_SECTION = 10
 MAX_TOSS_NEWS = 20
 SUMMARY_CHARS = 200
 ARTICLE_BODY_MAX_CHARS = 2000
+NAVER_ARTICLE_BODY_SELECTORS = (
+    "#dic_area",
+    "div.article_body",
+    "#articeBody",
+    "#articleBody",
+)
 STOCK_NAVER_BASE = "https://stock.naver.com"
 NAVER_STOCK_THEME_LIST_URL = f"{STOCK_NAVER_BASE}/market/stock/kr/theme/1"
 NAVER_STOCK_THEME_MAX = 20
@@ -95,18 +101,33 @@ def _fetch_naver_article_body(article: dict[str, Any]) -> str:
         return ""
     html = _fetch(u)
     if not html:
+        logger.warning(
+            "naver 기사 본문 비어 있음(HTML 미수신): url=%s 시도 셀렉터=%s",
+            u,
+            ", ".join(NAVER_ARTICLE_BODY_SELECTORS),
+        )
         return ""
     try:
         soup = BeautifulSoup(html, "lxml")
-        for sel in ("#dic_area", "div.article_body", "#articeBody", "#articleBody"):
+        for sel in NAVER_ARTICLE_BODY_SELECTORS:
             el = soup.select_one(sel)
             if el:
                 t = _element_to_plain_article_text(el)
                 if t:
                     return t[:ARTICLE_BODY_MAX_CHARS]
+        logger.warning(
+            "naver 기사 본문 비어 있음(본문 노드·텍스트 없음): url=%s 시도 셀렉터=%s",
+            u,
+            ", ".join(NAVER_ARTICLE_BODY_SELECTORS),
+        )
         return ""
     except Exception as e:
-        logger.debug("naver article body 실패 %s: %s", u[:80], e)
+        logger.warning(
+            "naver 기사 본문 비어 있음(파싱 예외): url=%s 시도 셀렉터=%s err=%s",
+            u,
+            ", ".join(NAVER_ARTICLE_BODY_SELECTORS),
+            e,
+        )
         return ""
 
 
@@ -1188,6 +1209,7 @@ def crawl_naver_stock_themes() -> list[dict[str, Any]]:
         html = _fetch(NAVER_STOCK_THEME_LIST_URL)
         if not html:
             return []
+        logger.info(f"THEME HTML 앞 500자: {html[:500]}")
         metas = _parse_naver_stock_theme_list(html)
         if not metas:
             logger.warning("crawl_naver_stock_themes: 테마 목록 파싱 결과 없음")

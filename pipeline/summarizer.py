@@ -64,6 +64,8 @@ def summarize_article(
     summary: str,
     source: str,
     body: str = "",
+    *,
+    briefing_newspaper: bool = False,
 ) -> dict[str, Any]:
     """
     반환:
@@ -71,6 +73,14 @@ def summarize_article(
     """
     body_stripped = (body or "").strip()
     summary_stripped = (summary or "").strip()
+
+    if briefing_newspaper and len(body_stripped) < 200:
+        logger.info(
+            "briefing 신문: 본문 %d자(200자 미만) — 요약 API 스킵, summary_points=[]",
+            len(body_stripped),
+        )
+        return {"headline": "", "category": "", "summary_points": []}
+
     if body_stripped:
         article_block = (
             f"제목: {title}\n"
@@ -81,26 +91,62 @@ def summarize_article(
     else:
         article_block = f"제목: {title}\n목록/리드 요약문:\n{summary_stripped}\n"
 
-    user = (
-        f"다음 뉴스를 분석해 JSON만 출력하세요.\n"
-        f'키: "headline", "category", "summary_points"\n'
-        f"headline은 반드시 한국어로 작성하세요. 원문이 영어면 자연스러운 한국어 제목으로 번역하세요.\n"
-        f'category는 반드시 다음 중 하나: '
-        f"경제, IT, 정치, 사회, 국제, 부동산, 산업, 금융, 매크로, 빅테크\n"
-        f"summary_points는 기사 핵심을 빠짐없이 담은 문자열 배열로 작성하세요.\n"
-        f"중요한 사실·수치·배경·영향을 누락하지 말고, 내용을 함축하거나 생략하지 마세요.\n"
-        f"구체성 규칙(headline·summary_points 모두 적용):\n"
-        f"- 기업명, 종목명, 브랜드명, 인물명은 원문에 나온 표기를 그대로 포함할 것.\n"
-        f"- 주가, 등락률·퍼센트, 금액 등 구체적 수치가 원문에 있으면 반드시 요약에 포함할 것.\n"
-        f"- 「특정 종목」「해당 기업」「관련 주」처럼 추상적으로 바꾸어 고유명·수치를 대체하거나 감추지 말 것.\n"
-        f"- 핵심 정보(누가·무엇을·얼마나)를 빠뜨리지 말고 구체적으로 서술할 것.\n"
-        f"어려운 경제/금융/전문 용어는 뜻을 유지하되 쉬운 일상 언어로 풀어쓰세요.\n"
-        f"문장은 짧고 자연스럽게 쓰고, 뉴스식 딱딱한 문체는 피하세요.\n"
-        f"분량은 고정하지 말고 내용량에 맞춰 유동적으로 작성하세요.\n"
-        f"(중요 내용이 많으면 길게, 단순한 내용이면 짧게)\n\n"
-        f"{article_block}"
-        f"출처: {source}\n"
-    )
+    max_points_keep = 10
+    if briefing_newspaper and len(body_stripped) >= 200:
+        blen = len(body_stripped)
+        if blen < 500:
+            max_points_keep = 2
+            pts_count_rule = (
+                "summary_points 배열 길이: 원문 분량에 맞게 **1개 또는 2개**만 사용하세요. "
+                "짧은 기사는 **1개**만으로 충분할 수 있습니다. 억지로 bullet을 늘리거나 한 문장을 잘게 쪼개지 마세요.\n"
+            )
+        else:
+            max_points_keep = 4
+            pts_count_rule = (
+                "summary_points 배열 길이: **3개 또는 4개**만 사용하세요(5개 이상 금지). "
+                "핵심이 3개로 충분하면 3개만 써도 됩니다.\n"
+            )
+        user = (
+            "다음 뉴스를 분석해 JSON만 출력하세요.\n"
+            f'키: "headline", "category", "summary_points"\n'
+            "headline은 반드시 한국어로 작성하세요. 원문이 영어면 자연스러운 한국어 제목으로 번역하세요.\n"
+            "category는 반드시 다음 중 하나: "
+            "경제, IT, 정치, 사회, 국제, 부동산, 산업, 금융, 매크로, 빅테크\n"
+            f"{pts_count_rule}"
+            "각 summary_points 항목은 **하나의 완전한 문장**으로 끝내세요. "
+            "항목별 글자 수·길이 상한을 두지 말고, 읽기 자연스러운 분량으로 쓰세요.\n"
+            "중요한 사실·수치·배경·영향을 누락하지 마세요.\n"
+            "구체성 규칙(headline·summary_points 모두 적용):\n"
+            "- 기업명, 종목명, 브랜드명, 인물명은 원문에 나온 표기를 그대로 포함할 것.\n"
+            "- 주가, 등락률·퍼센트, 금액 등 구체적 수치가 원문에 있으면 반드시 요약에 포함할 것.\n"
+            "- 「특정 종목」「해당 기업」「관련 주」처럼 추상적으로 바꾸어 고유명·수치를 대체하거나 감추지 말 것.\n"
+            "- 핵심 정보(누가·무엇을·얼마나)를 빠뜨리지 말고 구체적으로 서술할 것.\n"
+            "어려운 경제/금융/전문 용어는 뜻을 유지하되 쉬운 일상 언어로 풀어쓰세요.\n"
+            "뉴스식 딱딱한 문체는 피하세요.\n\n"
+            f"{article_block}"
+            f"출처: {source}\n"
+        )
+    else:
+        user = (
+            f"다음 뉴스를 분석해 JSON만 출력하세요.\n"
+            f'키: "headline", "category", "summary_points"\n'
+            f"headline은 반드시 한국어로 작성하세요. 원문이 영어면 자연스러운 한국어 제목으로 번역하세요.\n"
+            f'category는 반드시 다음 중 하나: '
+            f"경제, IT, 정치, 사회, 국제, 부동산, 산업, 금융, 매크로, 빅테크\n"
+            f"summary_points는 기사 핵심을 빠짐없이 담은 문자열 배열로 작성하세요.\n"
+            f"중요한 사실·수치·배경·영향을 누락하지 말고, 내용을 함축하거나 생략하지 마세요.\n"
+            f"구체성 규칙(headline·summary_points 모두 적용):\n"
+            f"- 기업명, 종목명, 브랜드명, 인물명은 원문에 나온 표기를 그대로 포함할 것.\n"
+            f"- 주가, 등락률·퍼센트, 금액 등 구체적 수치가 원문에 있으면 반드시 요약에 포함할 것.\n"
+            f"- 「특정 종목」「해당 기업」「관련 주」처럼 추상적으로 바꾸어 고유명·수치를 대체하거나 감추지 말 것.\n"
+            f"- 핵심 정보(누가·무엇을·얼마나)를 빠뜨리지 말고 구체적으로 서술할 것.\n"
+            f"어려운 경제/금융/전문 용어는 뜻을 유지하되 쉬운 일상 언어로 풀어쓰세요.\n"
+            f"문장은 짧고 자연스럽게 쓰고, 뉴스식 딱딱한 문체는 피하세요.\n"
+            f"분량은 고정하지 말고 내용량에 맞춰 유동적으로 작성하세요.\n"
+            f"(중요 내용이 많으면 길게, 단순한 내용이면 짧게)\n\n"
+            f"{article_block}"
+            f"출처: {source}\n"
+        )
     last_err: Exception | None = None
     for attempt in range(2):
         try:
@@ -120,7 +166,9 @@ def summarize_article(
             pts = data["summary_points"]
             if not isinstance(pts, list):
                 raise ValueError("summary_points must be a list")
-            data["summary_points"] = [str(p).strip() for p in pts if str(p).strip()][:10]
+            data["summary_points"] = [
+                str(p).strip() for p in pts if str(p).strip()
+            ][:max_points_keep]
             return data
         except Exception as e:
             last_err = e
@@ -266,6 +314,8 @@ def curate_us_market_articles(
 def summarize_batch(
     client: anthropic.Anthropic,
     items: list[dict[str, Any]],
+    *,
+    briefing_newspaper: bool = False,
 ) -> list[dict[str, Any]]:
     """기사 목록 순차 요약. 항목 사이 0.5초."""
     out: list[dict[str, Any]] = []
@@ -277,6 +327,7 @@ def summarize_batch(
                 summary=it.get("summary", ""),
                 source=it.get("source", ""),
                 body=str(it.get("body") or ""),
+                briefing_newspaper=briefing_newspaper,
             )
             out.append({**it, "_ai": ai})
         except Exception as e:

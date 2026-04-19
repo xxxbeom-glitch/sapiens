@@ -31,7 +31,7 @@ def _summarize_newspaper_pool_for_briefing(
 ) -> list[dict[str, Any]]:
     """요약 실패 시 스텁으로 merge. pool 길이만큼(최대 5) 순서 유지."""
     stub = {"headline": "", "category": "", "summary_points": []}
-    summarized = summarizer.summarize_batch(client, pool)
+    summarized = summarizer.summarize_batch(client, pool, briefing_newspaper=True)
     by_url: dict[str, dict[str, Any]] = {}
     for row in summarized:
         r = dict(row)
