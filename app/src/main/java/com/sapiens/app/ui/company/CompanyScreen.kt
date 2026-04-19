@@ -8,12 +8,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
@@ -54,8 +55,12 @@ import com.sapiens.app.ui.common.CompanyBottomSheet
 import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.Background
 import com.sapiens.app.ui.theme.Card
+import com.sapiens.app.ui.theme.CardPaddingBottom
 import com.sapiens.app.ui.theme.CardPaddingHorizontal
+import com.sapiens.app.ui.theme.CardPaddingVertical
+import com.sapiens.app.ui.theme.CardSpacing
 import com.sapiens.app.ui.theme.RowVertical
+import com.sapiens.app.ui.theme.SummaryPointSpacing
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
 
@@ -64,6 +69,14 @@ private val domesticTickers = setOf("005930", "000660", "035420", "051910")
 private val foreignTickers = setOf("NVDA", "AAPL", "TSLA")
 
 private val rateDownBlue = Color(0xFF007AFF)
+
+/** 피그마(테마 카드) 타이틀 예외 규격 — 나머지 타이포는 SapiensTypography 유지 */
+private val ThemeCardHashtagFontSize = 25.sp
+private val ThemeCardHashtagLineHeight = 34.sp
+
+/** 테마 종목 행: 로고 + 텍스트 간격(피그마식 인셋 구분선 정렬용) */
+private val ThemeStockLogoSize = 40.dp
+private val ThemeStockLogoNameSpacing = 12.dp
 
 @Composable
 fun CompanyScreen(
@@ -183,38 +196,58 @@ private fun DomesticThemeCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = CardPaddingHorizontal, vertical = RowVertical)
+                .padding(
+                    PaddingValues(
+                        start = CardPaddingHorizontal,
+                        end = CardPaddingHorizontal,
+                        top = CardPaddingVertical,
+                        bottom = CardPaddingBottom
+                    )
+                )
         ) {
+            // 헤더: 좌측 멀티라인 #테마명, 우측 상단 정렬 등락률 (피그마식 2컬럼)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
                 Text(
                     text = "#${theme.themeName}",
-                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = CardSpacing),
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = ThemeCardHashtagFontSize,
+                        lineHeight = ThemeCardHashtagLineHeight,
+                        fontWeight = FontWeight.SemiBold
+                    ),
                     color = TextPrimary,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = theme.changeRate,
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.labelLarge,
                     color = rateTextColor(theme.changeRate),
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.End
                 )
             }
 
             if (displayStocks.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(
+                    modifier = Modifier.padding(top = CardSpacing, bottom = CardSpacing),
+                    color = TextSecondary.copy(alpha = 0.2f)
+                )
                 displayStocks.forEachIndexed { index, stock ->
                     ThemeStockRow(stock = stock, imageLoader = svgLoader)
                     if (index < displayStocks.lastIndex) {
                         HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 10.dp),
+                            modifier = Modifier.padding(
+                                start = ThemeStockLogoSize + ThemeStockLogoNameSpacing,
+                                top = SummaryPointSpacing,
+                                bottom = SummaryPointSpacing
+                            ),
                             color = TextSecondary.copy(alpha = 0.2f)
                         )
                     }
@@ -236,7 +269,7 @@ private fun ThemeStockRow(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(ThemeStockLogoNameSpacing),
             modifier = Modifier.weight(1f)
         ) {
             val logo = stock.logoUrl()
@@ -246,14 +279,14 @@ private fun ThemeStockRow(
                     contentDescription = stock.name,
                     imageLoader = imageLoader,
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(ThemeStockLogoSize)
                         .clip(CircleShape),
                     contentScale = ContentScale.Crop
                 )
             } else {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(ThemeStockLogoSize)
                         .clip(CircleShape)
                         .background(TextSecondary.copy(alpha = 0.25f)),
                     contentAlignment = Alignment.Center
@@ -272,20 +305,27 @@ private fun ThemeStockRow(
                 color = TextPrimary,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
             )
         }
-        Column(horizontalAlignment = Alignment.End) {
+        Column(
+            horizontalAlignment = Alignment.End,
+            modifier = Modifier.widthIn(min = 76.dp)
+        ) {
             Text(
                 text = stock.price,
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextPrimary,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = stock.change,
                 style = MaterialTheme.typography.labelMedium,
-                color = rateTextColor(stock.change)
+                color = rateTextColor(stock.change),
+                maxLines = 1
             )
         }
     }

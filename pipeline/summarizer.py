@@ -14,7 +14,7 @@ from google import genai
 
 logger = logging.getLogger(__name__)
 
-MODEL = "gemini-2.0-flash"
+MODEL = "gemini-2.5-flash"
 
 _gemini_client: Any = None
 SYSTEM = (
