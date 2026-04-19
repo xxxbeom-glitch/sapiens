@@ -1252,37 +1252,28 @@ def _naver_theme_format_price(val: Any) -> str:
 
 
 def _naver_theme_list_from_api(payload: Any) -> list[dict[str, str]]:
-    """테마 목록 JSON → themeId, themeName, changeRate."""
+    """
+    테마 목록 JSON → [{"theme_id", "theme_name", "change_rate"}, ...]
+    최상위 리스트 각 항목: no → theme_id, name → theme_name, changeRate → 등락률 문자열.
+    changeRate는 숫자·문자열 모두 `+8.38%` 형태로 맞춘다.
+    """
     out: list[dict[str, str]] = []
     for item in _unwrap_json_array(payload):
         if not isinstance(item, dict):
             continue
-        tid = str(
-            item.get("themeId")
-            or item.get("id")
-            or item.get("categoryId")
-            or item.get("code")
-            or item.get("themeCode")
-            or ""
-        ).strip()
-        name = str(
-            item.get("themeName")
-            or item.get("name")
-            or item.get("title")
-            or item.get("categoryName")
-            or item.get("stockGroupName")
-            or ""
-        ).strip()
+        tid = str(item.get("no") or item.get("themeId") or item.get("id") or "").strip()
+        name = str(item.get("name") or item.get("themeName") or "").strip()
         if not tid or not name:
             continue
-        chg = (
-            item.get("changeRate")
-            or item.get("fluctuationsRatio")
-            or item.get("priceChangeRate")
-            or item.get("rtn")
-            or item.get("rate")
-            or item.get("chgRate")
-        )
+        chg = item.get("changeRate")
+        if chg is None or (isinstance(chg, str) and not chg.strip()):
+            chg = (
+                item.get("fluctuationsRatio")
+                or item.get("priceChangeRate")
+                or item.get("rtn")
+                or item.get("rate")
+                or item.get("chgRate")
+            )
         out.append(
             {
                 "theme_id": tid,
