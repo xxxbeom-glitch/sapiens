@@ -38,7 +38,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,6 +46,7 @@ import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import com.sapiens.app.data.mock.MockData
 import com.sapiens.app.data.model.Company
+import com.sapiens.app.data.model.MarketDirection
 import com.sapiens.app.data.model.MarketTheme
 import com.sapiens.app.data.model.ThemeStock
 import com.sapiens.app.data.model.logoUrl
@@ -55,6 +55,9 @@ import com.sapiens.app.ui.common.CompanyBottomSheet
 import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.Background
 import com.sapiens.app.ui.theme.Card
+import com.sapiens.app.ui.theme.MarketDown
+import com.sapiens.app.ui.theme.MarketFlat
+import com.sapiens.app.ui.theme.MarketUp
 import com.sapiens.app.ui.theme.CardPaddingBottom
 import com.sapiens.app.ui.theme.CardPaddingHorizontal
 import com.sapiens.app.ui.theme.CardPaddingVertical
@@ -68,8 +71,6 @@ private val companyTabs = listOf("국내", "해외")
 private val domesticTickers = setOf("005930", "000660", "035420", "051910")
 private val foreignTickers = setOf("NVDA", "AAPL", "TSLA")
 
-private val rateDownBlue = Color(0xFF007AFF)
-
 /** 피그마(테마 카드) 타이틀 예외 규격 — 나머지 타이포는 SapiensTypography 유지 */
 private val ThemeCardHashtagFontSize = 25.sp
 private val ThemeCardHashtagLineHeight = 34.sp
@@ -77,6 +78,30 @@ private val ThemeCardHashtagLineHeight = 34.sp
 /** 테마 종목 행: 로고 + 텍스트 간격(피그마식 인셋 구분선 정렬용) */
 private val ThemeStockLogoSize = 40.dp
 private val ThemeStockLogoNameSpacing = 12.dp
+
+/** 브리핑 대표지수 카드(`MarketIndexCard`)용 더미 설명 — API 연동 전 */
+private val ThemeCardDummyDescription =
+    "테마는 동일 이슈·산업으로 묶인 종목군으로, 뉴스·정책·실적 이벤트에 따라 변동성이 커질 수 있습니다. " +
+        "단기 수급만 보지 말고 종목별 재무건전성과 밸류에이션을 함께 확인하는 편이 좋습니다. " +
+        "본 카드의 테마 등락률은 참고용이며 투자 권유가 아닙니다. " +
+        "더보기 동작 확인을 위해 이어지는 더미 문장입니다."
+
+private fun directionFromChangeString(rate: String): MarketDirection {
+    val t = rate.trim()
+    if (t.isEmpty()) return MarketDirection.FLAT
+    return when {
+        t.startsWith("+") -> MarketDirection.UP
+        t.startsWith("-") || t.startsWith("−") || t.startsWith("–") -> MarketDirection.DOWN
+        else -> MarketDirection.FLAT
+    }
+}
+
+private fun changeColorLikeMarketIndex(rate: String): Color =
+    when (directionFromChangeString(rate)) {
+        MarketDirection.UP -> MarketUp
+        MarketDirection.DOWN -> MarketDown
+        MarketDirection.FLAT -> MarketFlat
+    }
 
 @Composable
 fun CompanyScreen(
@@ -187,6 +212,7 @@ private fun DomesticThemeCard(
 ) {
     val svgLoader = rememberSvgImageLoader()
     val displayStocks = theme.stocksForDisplay()
+    var descriptionExpanded by remember(theme.themeName) { mutableStateOf(false) }
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -205,17 +231,14 @@ private fun DomesticThemeCard(
                     )
                 )
         ) {
-            // 헤더: 좌측 멀티라인 #테마명, 우측 상단 정렬 등락률 (피그마식 2컬럼)
-            Row(
+            // 헤더: #테마명 → 그 아래 왼쪽 정렬 등락률(대표지수 카드와 동일 타이포·색)
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                horizontalAlignment = Alignment.Start
             ) {
                 Text(
                     text = "#${theme.themeName}",
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(end = CardSpacing),
+                    modifier = Modifier.fillMaxWidth(),
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontSize = ThemeCardHashtagFontSize,
                         lineHeight = ThemeCardHashtagLineHeight,
@@ -227,10 +250,28 @@ private fun DomesticThemeCard(
                 )
                 Text(
                     text = theme.changeRate,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = rateTextColor(theme.changeRate),
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.End
+                    modifier = Modifier.padding(top = 6.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = changeColorLikeMarketIndex(theme.changeRate)
+                )
+                Text(
+                    text = ThemeCardDummyDescription,
+                    modifier = Modifier.padding(top = CardSpacing),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    maxLines = if (descriptionExpanded) 48 else 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = if (descriptionExpanded) "접기" else "더보기",
+                    modifier = Modifier
+                        .padding(top = 6.dp)
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { descriptionExpanded = !descriptionExpanded },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Accent
                 )
             }
 
@@ -315,29 +356,19 @@ private fun ThemeStockRow(
         ) {
             Text(
                 text = stock.price,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.titleMedium,
                 color = TextPrimary,
-                fontWeight = FontWeight.Medium,
+                fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = stock.change,
-                style = MaterialTheme.typography.labelMedium,
-                color = rateTextColor(stock.change),
+                style = MaterialTheme.typography.labelSmall,
+                color = changeColorLikeMarketIndex(stock.change),
                 maxLines = 1
             )
         }
-    }
-}
-
-@Composable
-private fun rateTextColor(rate: String): Color {
-    val t = rate.trim()
-    return when {
-        t.startsWith("+") -> MaterialTheme.colorScheme.error
-        t.startsWith("-") || t.startsWith("−") || t.startsWith("–") -> rateDownBlue
-        else -> TextSecondary
     }
 }
 

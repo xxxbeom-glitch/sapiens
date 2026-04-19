@@ -39,12 +39,64 @@ def _looks_english_headline(text: str) -> bool:
     return bool(_LATIN_RE.search(s)) and not _contains_hangul(s)
 
 
-def _extract_json(text: str) -> dict[str, Any]:
-    text = text.strip()
-    m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
+def _strip_json_code_fences(text: str | None) -> str:
+    """마크다운 코드블록 제거 후 strip. None·빈 문자열은 빈 문자열."""
+    if text is None:
+        return ""
+    s = str(text).strip()
+    if not s:
+        return ""
+    s = s.replace("```json", "").replace("```", "").strip()
+    m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", s)
     if m:
-        text = m.group(1).strip()
-    return json.loads(text)
+        s = m.group(1).strip()
+    return s
+
+
+def _json_object_slice(s: str) -> str | None:
+    """본문 앞뒤 잡음 제거용: 첫 `{`~마지막 `}` 구간."""
+    i = s.find("{")
+    j = s.rfind("}")
+    if 0 <= i < j:
+        return s[i : j + 1]
+    return None
+
+
+def _extract_json(text: str) -> dict[str, Any] | str:
+    """
+    JSON 객체 파싱 시도.
+    성공 시 dict 반환. 실패 시 전처리된 문자열을 그대로 반환(호출부에서 dict 여부로 분기).
+    """
+    s = _strip_json_code_fences(text)
+    if not s:
+        return ""
+    try:
+        parsed: Any = json.loads(s)
+        if isinstance(parsed, dict):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+    sub = _json_object_slice(s)
+    if sub:
+        try:
+            parsed = json.loads(sub)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    return s
+
+
+def _require_json_dict(text: str) -> dict[str, Any]:
+    """모델 응답에서 JSON 객체만 허용. 파싱 실패 시 로그 후 ValueError."""
+    parsed = _extract_json(text)
+    if isinstance(parsed, dict):
+        return parsed
+    if isinstance(parsed, str) and not parsed.strip():
+        raise ValueError("empty model response text (JSON expected)")
+    raw = parsed if isinstance(parsed, str) else str(parsed)
+    logger.warning("JSON 파싱 실패 — 응답 앞 500자: %s", raw[:500])
+    raise ValueError("model response was not valid JSON object")
 
 
 def _get_gemini_client() -> Any:
@@ -59,18 +111,21 @@ def _get_gemini_client() -> Any:
 
 
 def _call_gemini(user_content: str) -> str:
-    client = _get_gemini_client()
-    prompt = f"{SYSTEM}\n\n{user_content}"
-    response = client.models.generate_content(
-        model=MODEL,
-        contents=prompt,
-        config={"max_output_tokens": 2048},
-    )
     try:
-        text = response.text
-    except ValueError as e:
-        raise RuntimeError(f"Gemini 응답에 텍스트가 없습니다: {e}") from e
-    return (text or "").strip()
+        client = _get_gemini_client()
+        prompt = f"{SYSTEM}\n\n{user_content}"
+        response = client.models.generate_content(
+            model=MODEL,
+            contents=prompt,
+            config={"max_output_tokens": 2048},
+        )
+        raw = getattr(response, "text", None)
+        if raw is None:
+            return ""
+        return str(raw).strip()
+    except Exception as e:
+        logger.exception("_call_gemini 실패: %s", e)
+        return ""
 
 
 def summarize_article(
@@ -165,7 +220,7 @@ def summarize_article(
     for attempt in range(2):
         try:
             raw = _call_gemini(user)
-            data = _extract_json(raw)
+            data = _require_json_dict(raw)
             if "headline" not in data or "category" not in data or "summary_points" not in data:
                 raise ValueError(f"Invalid JSON keys: {data.keys()}")
             data["headline"] = str(data.get("headline", "")).strip()
@@ -215,7 +270,7 @@ def translate_headline_to_korean(
     for attempt in range(2):
         try:
             raw = _call_gemini(user)
-            data = _extract_json(raw)
+            data = _require_json_dict(raw)
             ko = str(data.get("headline_ko", "")).strip()
             if not ko:
                 raise ValueError("missing headline_ko")
@@ -247,7 +302,7 @@ def generate_market_report(
     for attempt in range(2):
         try:
             raw = _call_gemini(user)
-            data = _extract_json(raw)
+            data = _require_json_dict(raw)
             if "report" not in data:
                 raise ValueError("missing report")
             return {"report": str(data["report"]).strip()}
@@ -292,7 +347,7 @@ def curate_us_market_articles(
     for attempt in range(2):
         try:
             raw = _call_gemini(user)
-            data = _extract_json(raw)
+            data = _require_json_dict(raw)
             idxs = data.get("selected_indices", [])
             if not isinstance(idxs, list) or not idxs:
                 raise ValueError("missing or invalid selected_indices")
@@ -380,7 +435,7 @@ def analyze_company(
     for attempt in range(2):
         try:
             raw = _call_gemini(user)
-            data = _extract_json(raw)
+            data = _require_json_dict(raw)
             required = (
                 "business",
                 "revenue_model",
