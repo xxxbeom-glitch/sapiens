@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import sys
+import time
 from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -35,7 +36,117 @@ REQUEST_TIMEOUT = 20
 MAX_PER_SECTION = 10
 MAX_TOSS_NEWS = 20
 SUMMARY_CHARS = 200
+ARTICLE_BODY_MAX_CHARS = 2000
 _NAVER_ARTICLE_THUMB_CACHE: dict[str, str] = {}
+
+
+_NAVER_BODY_NOISE_SELECTORS = (
+    ".ad_area",
+    ".promotion",
+    ".related_news",
+    ".article_related",
+    ".vod_area",
+    "#spiBundleArea",
+    ".recommend",
+    ".link_news",
+    ".article_poll_area",
+    ".media_end_smart_ann",
+    ".end_photo_org",
+    "._LAZY_LOADING_WRAP",
+    ".poll_group",
+    ".article_info_area",
+    ".journalist_profile",
+)
+
+
+def _element_to_plain_article_text(root: Any) -> str:
+    """본문 루트 노드에서 스크립트·광고·관련기사 등 제거 후 한 줄 위주 텍스트."""
+    if root is None:
+        return ""
+    try:
+        frag = BeautifulSoup(str(root), "lxml")
+        top = frag.find()
+        if not top:
+            return ""
+        for rem in top.find_all(["script", "style", "noscript", "iframe"]):
+            rem.decompose()
+        for sel in _NAVER_BODY_NOISE_SELECTORS:
+            for rem in top.select(sel):
+                rem.decompose()
+        text = top.get_text(separator=" ", strip=True)
+        text = re.sub(r"\s+", " ", text).strip()
+        return text[:ARTICLE_BODY_MAX_CHARS]
+    except Exception:
+        return ""
+
+
+def _fetch_naver_article_body(url: str) -> str:
+    """
+    네이버(금융/뉴스) 기사 URL에서 본문 텍스트 추출. 실패 시 빈 문자열.
+    """
+    u = (url or "").strip()
+    if not u:
+        return ""
+    html = _fetch(u)
+    if not html:
+        return ""
+    try:
+        soup = BeautifulSoup(html, "lxml")
+        for sel in ("#dic_area", "div.article_body", "#articeBody", "#articleBody"):
+            el = soup.select_one(sel)
+            if el:
+                t = _element_to_plain_article_text(el)
+                if t:
+                    return t[:ARTICLE_BODY_MAX_CHARS]
+        return ""
+    except Exception as e:
+        logger.debug("naver article body 실패 %s: %s", u[:80], e)
+        return ""
+
+
+def _fetch_yahoo_article_body(url: str) -> str:
+    """Yahoo Finance 기사 페이지 본문 추출. 실패 시 빈 문자열."""
+    u = (url or "").strip()
+    if not u:
+        return ""
+    html = _fetch(u)
+    if not html:
+        return ""
+    try:
+        soup = BeautifulSoup(html, "lxml")
+        for sel in (
+            "div.caas-body",
+            "div.caas-content",
+            "[data-testid='article-body']",
+            "article",
+        ):
+            el = soup.select_one(sel)
+            if el:
+                t = _element_to_plain_article_text(el)
+                if len(t) >= 80:
+                    return t[:ARTICLE_BODY_MAX_CHARS]
+        return ""
+    except Exception as e:
+        logger.debug("yahoo article body 실패 %s: %s", u[:80], e)
+        return ""
+
+
+def _attach_naver_article_bodies(rows: list[dict[str, Any]], pause_sec: float = 0.06) -> None:
+    """각 row에 `body` 키 채움 (네이버 기사 URL)."""
+    for row in rows:
+        u = (row.get("url") or "").strip()
+        row["body"] = _fetch_naver_article_body(u) if u else ""
+        if pause_sec > 0:
+            time.sleep(pause_sec)
+
+
+def _attach_yahoo_article_bodies(rows: list[dict[str, Any]], pause_sec: float = 0.06) -> None:
+    """각 row에 `body` 키 채움 (Yahoo Finance 기사 URL)."""
+    for row in rows:
+        u = (row.get("url") or "").strip()
+        row["body"] = _fetch_yahoo_article_body(u) if u else ""
+        if pause_sec > 0:
+            time.sleep(pause_sec)
 
 
 def _normalize_url(url: str) -> str:
@@ -347,6 +458,7 @@ def crawl_naver_realtime() -> list[dict[str, Any]]:
             return items
         for row in _collect_naver_links_from_list(html, MAX_PER_SECTION):
             items.append(row)
+        _attach_naver_article_bodies(items)
     except Exception as e:
         logger.exception("crawl_naver_realtime 실패: %s", e)
     return items
@@ -364,6 +476,7 @@ def crawl_naver_ranked() -> list[dict[str, Any]]:
             d = dict(row)
             d["title"] = f"[{rank}] {d['title']}"
             items.append(d)
+        _attach_naver_article_bodies(items)
     except Exception as e:
         logger.exception("crawl_naver_ranked 실패: %s", e)
     return items
@@ -378,6 +491,7 @@ def crawl_naver_main() -> list[dict[str, Any]]:
             return items
         for row in _collect_naver_links_from_list(html, MAX_PER_SECTION):
             items.append(row)
+        _attach_naver_article_bodies(items)
     except Exception as e:
         logger.exception("crawl_naver_main 실패: %s", e)
     return items
@@ -696,6 +810,7 @@ def _crawl_yahoo_finance_list_url(page_url: str, max_n: int) -> list[dict[str, A
             out.append(row)
             if len(out) >= max_n:
                 break
+        _attach_yahoo_article_bodies(out)
     except Exception as e:
         logger.warning("_crawl_yahoo_finance_list_url %s: %s", page_url, e)
     return out

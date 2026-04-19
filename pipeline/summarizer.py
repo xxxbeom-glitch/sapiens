@@ -58,11 +58,29 @@ def _call_claude(client: anthropic.Anthropic, user_content: str) -> str:
     return "".join(parts).strip()
 
 
-def summarize_article(client: anthropic.Anthropic, title: str, summary: str, source: str) -> dict[str, Any]:
+def summarize_article(
+    client: anthropic.Anthropic,
+    title: str,
+    summary: str,
+    source: str,
+    body: str = "",
+) -> dict[str, Any]:
     """
     반환:
     headline, category, summary_points
     """
+    body_stripped = (body or "").strip()
+    summary_stripped = (summary or "").strip()
+    if body_stripped:
+        article_block = (
+            f"제목: {title}\n"
+            f"기사 본문 (요약의 주된 근거):\n{body_stripped}\n"
+        )
+        if summary_stripped:
+            article_block += f"목록/리드용 짧은 설명 (보조 참고): {summary_stripped}\n"
+    else:
+        article_block = f"제목: {title}\n목록/리드 요약문:\n{summary_stripped}\n"
+
     user = (
         f"다음 뉴스를 분석해 JSON만 출력하세요.\n"
         f'키: "headline", "category", "summary_points"\n'
@@ -71,12 +89,12 @@ def summarize_article(client: anthropic.Anthropic, title: str, summary: str, sou
         f"경제, IT, 정치, 사회, 국제, 부동산, 산업, 금융, 매크로, 빅테크\n"
         f"summary_points는 기사 핵심을 빠짐없이 담은 문자열 배열로 작성하세요.\n"
         f"중요한 사실·수치·배경·영향을 누락하지 말고, 내용을 함축하거나 생략하지 마세요.\n"
+        f"브랜드명, 기업명, 인물명 등 고유명사는 반드시 원문 그대로 포함해 요약하세요.\n"
         f"어려운 경제/금융/전문 용어는 뜻을 유지하되 쉬운 일상 언어로 풀어쓰세요.\n"
         f"문장은 짧고 자연스럽게 쓰고, 뉴스식 딱딱한 문체는 피하세요.\n"
         f"분량은 고정하지 말고 내용량에 맞춰 유동적으로 작성하세요.\n"
         f"(중요 내용이 많으면 길게, 단순한 내용이면 짧게)\n\n"
-        f"제목: {title}\n"
-        f"본문 요약: {summary}\n"
+        f"{article_block}"
         f"출처: {source}\n"
     )
     last_err: Exception | None = None
@@ -93,6 +111,7 @@ def summarize_article(client: anthropic.Anthropic, title: str, summary: str, sou
                     headline=data["headline"],
                     source=source,
                     summary=summary,
+                    body=body_stripped,
                 )
             pts = data["summary_points"]
             if not isinstance(pts, list):
@@ -112,18 +131,21 @@ def translate_headline_to_korean(
     headline: str,
     source: str,
     summary: str = "",
+    body: str = "",
 ) -> str:
     """영문 헤드라인을 한국어 투자 뉴스 제목으로 번역."""
     src = (headline or "").strip()
     if not src:
         return src
+    ctx = (body or "").strip() or (summary or "")
     user = (
         "다음 뉴스 헤드라인을 한국어로 번역하세요.\n"
         "의미를 보존하되 과장 없이 간결한 뉴스 제목 톤으로 작성하세요.\n"
+        "브랜드명, 기업명, 인물명 등 고유명사는 원문 그대로 유지하세요.\n"
         '반드시 JSON 한 개만 출력: {"headline_ko":"..."}\n\n'
         f"source: {source}\n"
         f"headline_en: {src}\n"
-        f"context_summary: {(summary or '')[:400]}\n"
+        f"context: {ctx[:400]}\n"
     )
     last_err: Exception | None = None
     for attempt in range(2):
@@ -250,6 +272,7 @@ def summarize_batch(
                 title=it.get("title", ""),
                 summary=it.get("summary", ""),
                 source=it.get("source", ""),
+                body=str(it.get("body") or ""),
             )
             out.append({**it, "_ai": ai})
         except Exception as e:
