@@ -80,11 +80,12 @@ def _element_to_plain_article_text(root: Any) -> str:
         return ""
 
 
-def _fetch_naver_article_body(url: str) -> str:
+def _fetch_naver_article_body(article: dict[str, Any]) -> str:
     """
-    네이버(금융/뉴스) 기사 URL에서 본문 텍스트 추출. 실패 시 빈 문자열.
+    네이버(금융/뉴스) 기사 본문 텍스트 추출. 실패 시 빈 문자열.
+    기사 dict의 ``url`` 값만 그대로 HTTP 요청에 사용한다(재조합·정규화 없음).
     """
-    u = (url or "").strip()
+    u = str(article.get("url") or "").strip()
     if not u:
         return ""
     html = _fetch(u)
@@ -132,10 +133,10 @@ def _fetch_yahoo_article_body(url: str) -> str:
 
 
 def _attach_naver_article_bodies(rows: list[dict[str, Any]], pause_sec: float = 0.06) -> None:
-    """각 row에 `body` 키 채움 (네이버 기사 URL)."""
+    """각 row에 `body` 키 채움. 본문 요청 URL은 row['url']만 사용."""
     for row in rows:
-        u = (row.get("url") or "").strip()
-        row["body"] = _fetch_naver_article_body(u) if u else ""
+        u = str(row.get("url") or "").strip()
+        row["body"] = _fetch_naver_article_body(row) if u else ""
         if pause_sec > 0:
             time.sleep(pause_sec)
 
@@ -190,10 +191,15 @@ def _resolve_naver_news_href(href: str) -> str:
         return h.split("#")[0]
     if h.startswith("//"):
         return ("https:" + h).split("#")[0]
-    # / 로 시작: n.news(기사) vs finance(목록) — n.news 쪽 path는 대체로 전체 href로 내려옴. 상대만 join
+    # / 로 시작: 경로만 보고 n.news vs finance 구분 (쿼리의 article_id 등에 'article'이 들어가면 오탐하지 않음)
     if h.startswith("/"):
-        if h.startswith(("/mnp", "/include", "/article/option")) or "article" in h:
+        path_only = h.split("?", 1)[0]
+        pl = path_only.lower()
+        if pl.startswith(("/mnp", "/include", "/article/option", "/m/article/")):
             return urljoin("https://n.news.naver.com", h).split("#")[0]
+        if pl.startswith("/article/"):
+            return urljoin("https://n.news.naver.com", h).split("#")[0]
+        return urljoin(NAVER_BASE, h).split("#")[0]
     return urljoin(NAVER_BASE, h).split("#")[0]
 
 
