@@ -26,13 +26,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Icon
-import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,7 +47,6 @@ import com.sapiens.app.data.model.MarketIndex
 import com.sapiens.app.data.model.MarketIndicator
 import com.sapiens.app.ui.common.categoryChipColors
 import com.sapiens.app.ui.theme.Accent
-import com.sapiens.app.ui.theme.Background
 import com.sapiens.app.ui.theme.Card
 import com.sapiens.app.ui.theme.CardPaddingBottom
 import com.sapiens.app.ui.theme.CardPaddingHorizontal
@@ -61,7 +57,6 @@ import com.sapiens.app.ui.theme.MarketUp
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @Composable
 fun SectionLabel(
@@ -201,55 +196,47 @@ fun DomesticNewspapersBriefingCard(
     if (pages[0].isEmpty() && pages[1].isEmpty()) return
 
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
-    val scope = rememberCoroutineScope()
-    val tabLabels = listOf("한국경제", "매일경제")
+    val publisherLabels = listOf("한국경제", "매일경제")
 
-    Column(
+    Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(18.dp)
     ) {
-        PrimaryTabRow(
-            selectedTabIndex = pagerState.currentPage,
-            containerColor = Background,
-            contentColor = Accent
-        ) {
-            tabLabels.forEachIndexed { index, label ->
-                Tab(
-                    selected = pagerState.currentPage == index,
-                    onClick = {
-                        scope.launch { pagerState.animateScrollToPage(index) }
-                    },
-                    text = {
-                        Text(
-                            text = label,
-                            color = if (pagerState.currentPage == index) TextPrimary else TextSecondary
-                        )
-                    }
-                )
-            }
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxWidth()
+        ) { page ->
+            NewspaperBriefingFiveList(
+                articles = pages[page],
+                publisherChipLabel = publisherLabels[page],
+                onClickArticle = onClickArticle
+            )
         }
+    }
+}
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp)
-        ) {
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxWidth()
-            ) { page ->
-                NewspaperBriefingFiveList(
-                    articles = pages[page],
-                    onClickArticle = onClickArticle
-                )
-            }
-        }
+/** 브리핑 국내 신문 카드 — 언론사 태그 (CategoryChip보다 한 단계 작게). */
+@Composable
+private fun BriefingPublisherChip(label: String) {
+    Surface(
+        color = Accent.copy(alpha = 0.14f),
+        shape = RoundedCornerShape(4.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, lineHeight = 14.sp),
+            color = Accent,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        )
     }
 }
 
 @Composable
 private fun NewspaperBriefingFiveList(
     articles: List<Article>,
+    publisherChipLabel: String,
     onClickArticle: (Article) -> Unit
 ) {
     Column(
@@ -272,6 +259,8 @@ private fun NewspaperBriefingFiveList(
         } else {
             val topArticles = articles.take(5)
             val first = topArticles.first()
+            BriefingPublisherChip(label = publisherChipLabel)
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
