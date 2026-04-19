@@ -65,7 +65,7 @@ private data class BottomTab(
 private val tabs = listOf(
     BottomTab(label = "브리핑", iconResId = R.drawable.ico_brief),
     BottomTab(label = "뉴스", iconResId = R.drawable.ico_news),
-    BottomTab(label = "마켓", iconResId = R.drawable.ico_company),
+    BottomTab(label = "마켓", iconResId = R.drawable.ico_market),
     BottomTab(label = "마이", iconResId = R.drawable.ico_my)
 )
 
