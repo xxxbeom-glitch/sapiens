@@ -926,77 +926,87 @@ def _newspaper_detail_position_int(node: dict[str, Any]) -> int:
 
 
 def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> list[dict[str, Any]]:
+    def _newspaper_service_time_published(val: Any) -> str:
+        """serviceTime(밀리초 epoch 문자열/숫자) → KST 표시 문자열. 실패 시 빈 문자열."""
+        if val is None:
+            return ""
+        s = str(val).strip()
+        if not s or not s.isdigit():
+            return ""
+        try:
+            ms = int(s)
+            dt_utc = datetime.fromtimestamp(ms / 1000.0, tz=pytz.UTC)
+            dt_seoul = dt_utc.astimezone(pytz.timezone("Asia/Seoul"))
+            return dt_seoul.strftime("%Y-%m-%d %H:%M")
+        except (OSError, ValueError, OverflowError):
+            return ""
+
     def _parse_payload(payload: Any, fallback_source: str, limit: int) -> list[dict[str, Any]]:
+        """
+        API 최상위: [{ paperNumber, newspaperOfficeMain: [ { articleId, title, ... } ] }, ...]
+        기사 URL: https://n.news.naver.com/article/{officeId}/{articleId}
+        """
+        if not isinstance(payload, list):
+            return []
+
         out: list[dict[str, Any]] = []
-
-        def walk(node: Any) -> None:
-            if isinstance(node, dict):
-                title = str(
-                    node.get("title")
-                    or node.get("articleTitle")
-                    or node.get("headline")
+        for section in payload:
+            if not isinstance(section, dict):
+                continue
+            paper_number = _newspaper_paper_number_int(section)
+            articles = section.get("newspaperOfficeMain")
+            if not isinstance(articles, list):
+                continue
+            for art in articles:
+                if not isinstance(art, dict):
+                    continue
+                article_id = str(art.get("articleId") or "").strip()
+                office_id = str(art.get("officeId") or "").strip()
+                if not article_id or not office_id:
+                    continue
+                url = _normalize_url(f"https://n.news.naver.com/article/{office_id}/{article_id}")
+                if not url:
+                    continue
+                title = str(art.get("title") or "").strip()
+                if len(title) < 2:
+                    continue
+                thumb_raw = str(
+                    art.get("thumbnailImgUrl")
+                    or art.get("thumnailImgUrl")
+                    or art.get("thumbnailUrl")
                     or ""
                 ).strip()
-                href = str(
-                    node.get("linkUrl")
-                    or node.get("url")
-                    or node.get("articleUrl")
-                    or node.get("officeArticleUrl")
-                    or node.get("articleLink")
-                    or ""
+                thumb = _absolutize_naver_newspaper_img(thumb_raw)
+                if not thumb:
+                    thumb = _extract_naver_article_first_image(url)
+                detail_position = _newspaper_detail_position_int(art)
+                source = str(art.get("officeName") or "").strip() or fallback_source
+                summary_raw = str(art.get("summary") or art.get("lede") or "").strip()
+                summary = (
+                    (summary_raw[:SUMMARY_CHARS] + ("…" if len(summary_raw) > SUMMARY_CHARS else ""))
+                    if summary_raw
+                    else (title[:SUMMARY_CHARS] + ("…" if len(title) > SUMMARY_CHARS else ""))
                 ).strip()
-                if title and href:
-                    url = _normalize_url(_absolutize_media_naver_url(href))
-                    if url:
-                        paper_number = _newspaper_paper_number_int(node)
-                        detail_position = _newspaper_detail_position_int(node)
-                        summary_raw = str(node.get("summary") or node.get("lede") or "").strip()
-                        thumb_raw = str(
-                            node.get("thumbnail")
-                            or node.get("thumbnailUrl")
-                            or node.get("imageUrl")
-                            or node.get("thumbUrl")
-                            or ""
-                        ).strip()
-                        thumb = _absolutize_naver_newspaper_img(thumb_raw)
-                        if not thumb:
-                            thumb = _extract_naver_article_first_image(url)
-                        published = str(
-                            node.get("date")
-                            or node.get("publishedAt")
-                            or node.get("articleDate")
-                            or ""
-                        ).strip()
-                        source = str(
-                            node.get("officeName")
-                            or node.get("pressName")
-                            or fallback_source
-                        ).strip() or fallback_source
-                        summary = (
-                            (summary_raw[:SUMMARY_CHARS] + ("…" if len(summary_raw) > SUMMARY_CHARS else ""))
-                            if summary_raw
-                            else (title[:SUMMARY_CHARS] + ("…" if len(title) > SUMMARY_CHARS else ""))
-                        ).strip()
-                        out.append(
-                            {
-                                "title": title,
-                                "summary": summary,
-                                "source": source,
-                                "url": url,
-                                "published_at": published,
-                                "category": "",
-                                "thumbnail_url": thumb,
-                                "paper_number": paper_number,
-                                "detail_position": detail_position,
-                            }
-                        )
-                for v in node.values():
-                    walk(v)
-            elif isinstance(node, list):
-                for item in node:
-                    walk(item)
+                published = _newspaper_service_time_published(art.get("serviceTime"))
+                if not published:
+                    published = str(
+                        art.get("date") or art.get("publishedAt") or art.get("articleDate") or ""
+                    ).strip()
 
-        walk(payload)
+                out.append(
+                    {
+                        "title": title,
+                        "summary": summary,
+                        "source": source,
+                        "url": url,
+                        "published_at": published,
+                        "category": "",
+                        "thumbnail_url": thumb,
+                        "paper_number": paper_number,
+                        "detail_position": detail_position,
+                    }
+                )
+
         out.sort(key=lambda r: (r["paper_number"], r["detail_position"]))
         seen_url: set[str] = set()
         deduped: list[dict[str, Any]] = []
