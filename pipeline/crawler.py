@@ -1185,11 +1185,18 @@ def crawl_maeil_newspaper() -> list[dict[str, Any]]:
 
 def _fetch_stock_naver_json(url: str) -> Any | None:
     """stock.naver.com JSON API. 실패 시 None."""
-    req_headers = dict(HEADERS)
-    req_headers["Referer"] = f"{STOCK_NAVER_BASE}/"
-    req_headers.setdefault("Accept", "application/json")
+    headers = dict(HEADERS)
+    headers["Referer"] = "https://stock.naver.com/"
+    headers.setdefault("Accept", "application/json")
     try:
-        r = requests.get(url, headers=req_headers, timeout=REQUEST_TIMEOUT)
+        r = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+        body_200 = (r.text or "")[:200]
+        logger.info(
+            "stock.naver API 응답: status=%s url=%s body_200=%s",
+            r.status_code,
+            url,
+            body_200,
+        )
         r.raise_for_status()
         return r.json()
     except Exception as e:
