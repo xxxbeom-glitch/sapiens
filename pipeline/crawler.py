@@ -943,14 +943,24 @@ def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> li
 
     def _parse_payload(payload: Any, fallback_source: str, limit: int) -> list[dict[str, Any]]:
         """
-        API 최상위: [{ paperNumber, newspaperOfficeMain: [ { articleId, title, ... } ] }, ...]
+        API dict: { officeId, newspaperOfficeMainPerPaper: [{ paperNumber, newspaperOfficeMain }, ...] }
+        레거시 list: [{ paperNumber, newspaperOfficeMain }, ...]
         기사 URL: https://n.news.naver.com/article/{officeId}/{articleId}
         """
-        if not isinstance(payload, list):
+        root_office_id = ""
+        if isinstance(payload, dict):
+            sections = payload.get("newspaperOfficeMainPerPaper") or []
+            root_office_id = str(payload.get("officeId") or "").strip()
+        elif isinstance(payload, list):
+            sections = payload
+        else:
+            return []
+
+        if not isinstance(sections, list):
             return []
 
         out: list[dict[str, Any]] = []
-        for section in payload:
+        for section in sections:
             if not isinstance(section, dict):
                 continue
             paper_number = _newspaper_paper_number_int(section)
@@ -961,7 +971,7 @@ def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> li
                 if not isinstance(art, dict):
                     continue
                 article_id = str(art.get("articleId") or "").strip()
-                office_id = str(art.get("officeId") or "").strip()
+                office_id = str(art.get("officeId") or "").strip() or root_office_id
                 if not article_id or not office_id:
                     continue
                 url = _normalize_url(f"https://n.news.naver.com/article/{office_id}/{article_id}")
