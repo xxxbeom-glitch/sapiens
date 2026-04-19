@@ -889,7 +889,9 @@ def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> li
 
     seoul = pytz.timezone("Asia/Seoul")
     today = datetime.now(seoul)
-    for target_day in (today, today - timedelta(days=1)):
+    # 오늘 → 어제 → 그제 → 3일 전까지 (주말·공휴일 등으로 당일 API가 빈 배열일 때 대비)
+    for days_back in range(4):
+        target_day = today - timedelta(days=days_back)
         date_str = target_day.strftime("%Y%m%d")
         api_url = f"{NAVER_MEDIA}/api/press/{press_code}/newspaper?date={date_str}"
         payload = _fetch_json(
