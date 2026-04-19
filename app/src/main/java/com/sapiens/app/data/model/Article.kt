@@ -9,7 +9,8 @@ data class Article(
     val summaryPoints: List<String> = emptyList(),
     val tag: String = "",
     val sourceColor: String? = null,
-    val imageUrl: String = ""
+    val imageUrl: String = "",
+    val thumbnailUrl: String = ""
 )
 
 enum class MarketDirection {

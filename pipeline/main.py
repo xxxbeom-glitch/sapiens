@@ -54,7 +54,11 @@ def run() -> None:
     newspaper_hankyung = crawler.crawl_hankyung_newspaper()
     newspaper_maeil = crawler.crawl_maeil_newspaper()
     newspaper_merged: list[dict] = list(newspaper_hankyung) + list(newspaper_maeil)
-    newspaper_merged = crawler.dedupe_items(newspaper_merged)
+    newspaper_merged.sort(
+        key=lambda r: (int(r.get("paper_number", 999)), int(r.get("detail_position", 99)))
+    )
+    newspaper_merged = crawler.dedupe_similar_titles_ordered(newspaper_merged, 0.8)
+    newspaper_merged = newspaper_merged[:8]
 
     # 3) 시장 지표
     indicators = crawler.crawl_market_indicators()

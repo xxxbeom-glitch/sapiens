@@ -61,7 +61,7 @@ def _call_claude(client: anthropic.Anthropic, user_content: str) -> str:
 def summarize_article(client: anthropic.Anthropic, title: str, summary: str, source: str) -> dict[str, Any]:
     """
     반환:
-    headline, category, summary_points (3~4)
+    headline, category, summary_points
     """
     user = (
         f"다음 뉴스를 분석해 JSON만 출력하세요.\n"
@@ -69,7 +69,12 @@ def summarize_article(client: anthropic.Anthropic, title: str, summary: str, sou
         f"headline은 반드시 한국어로 작성하세요. 원문이 영어면 자연스러운 한국어 제목으로 번역하세요.\n"
         f'category는 반드시 다음 중 하나: '
         f"경제, IT, 정치, 사회, 국제, 부동산, 산업, 금융, 매크로, 빅테크\n"
-        f"summary_points는 문자열 배열, 각 항목은 수치·배경·영향을 담은 2~3문장.\n\n"
+        f"summary_points는 기사 핵심을 빠짐없이 담은 문자열 배열로 작성하세요.\n"
+        f"중요한 사실·수치·배경·영향을 누락하지 말고, 내용을 함축하거나 생략하지 마세요.\n"
+        f"어려운 경제/금융/전문 용어는 뜻을 유지하되 쉬운 일상 언어로 풀어쓰세요.\n"
+        f"문장은 짧고 자연스럽게 쓰고, 뉴스식 딱딱한 문체는 피하세요.\n"
+        f"분량은 고정하지 말고 내용량에 맞춰 유동적으로 작성하세요.\n"
+        f"(중요 내용이 많으면 길게, 단순한 내용이면 짧게)\n\n"
         f"제목: {title}\n"
         f"본문 요약: {summary}\n"
         f"출처: {source}\n"
@@ -92,7 +97,7 @@ def summarize_article(client: anthropic.Anthropic, title: str, summary: str, sou
             pts = data["summary_points"]
             if not isinstance(pts, list):
                 raise ValueError("summary_points must be a list")
-            data["summary_points"] = [str(p) for p in pts][:4]
+            data["summary_points"] = [str(p).strip() for p in pts if str(p).strip()][:10]
             return data
         except Exception as e:
             last_err = e

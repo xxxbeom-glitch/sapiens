@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -26,6 +25,10 @@ import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.Background
 import com.sapiens.app.ui.theme.CardSpacing
 import com.sapiens.app.ui.theme.TextSecondary
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.ZoneId
 
 @Composable
 fun BriefingScreen(viewModel: BriefingViewModel) {
@@ -36,9 +39,17 @@ fun BriefingScreen(viewModel: BriefingViewModel) {
     val marketUpdatedLabel by viewModel.marketUpdatedLabel.collectAsState()
 
     var selectedArticle by remember { mutableStateOf<Article?>(null) }
-    val groupedMorning = morningArticles
-        .groupBy { it.source.ifBlank { "기타" } }
-        .map { (source, items) -> source to items }
+    val nowMillis = remember { System.currentTimeMillis() }
+    val sortedMorningArticles = remember(morningArticles, nowMillis) {
+        morningArticles
+            .mapIndexed { index, article ->
+                val normalized = if (article.source.isBlank()) article.copy(source = "기타") else article
+                normalized to parsePublishedAtToMillis(normalized.time, nowMillis, index)
+            }
+            .sortedByDescending { it.second }
+            .map { it.first }
+            .take(8)
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (isLoading) {
@@ -63,16 +74,11 @@ fun BriefingScreen(viewModel: BriefingViewModel) {
                     )
                 }
 
-                items(
-                    items = groupedMorning,
-                    key = { (source, _) -> source }
-                ) { (source, articles) ->
-                    MorningSourceCard(
-                        source = source,
-                        articles = articles,
+                item {
+                    MorningTopArticlesCard(
+                        articles = sortedMorningArticles,
                         onClickArticle = { selectedArticle = it },
                         modifier = Modifier
-                            .padding(horizontal = 16.dp)
                             .padding(bottom = 8.dp)
                     )
                 }
@@ -120,4 +126,52 @@ fun BriefingScreen(viewModel: BriefingViewModel) {
             )
         }
     }
+}
+
+private fun parsePublishedAtToMillis(timeRaw: String, nowMillis: Long, index: Int): Long {
+    val raw = timeRaw.trim()
+    if (raw.isEmpty()) return Long.MIN_VALUE + index
+
+    val minutesAgo = Regex("""(\d+)\s*분\s*전""").find(raw)?.groupValues?.get(1)?.toLongOrNull()
+    if (minutesAgo != null) return nowMillis - minutesAgo * 60_000L
+
+    val hoursAgo = Regex("""(\d+)\s*시간\s*전""").find(raw)?.groupValues?.get(1)?.toLongOrNull()
+    if (hoursAgo != null) return nowMillis - hoursAgo * 3_600_000L
+
+    if (raw.contains("방금")) return nowMillis
+    if (raw == "오늘") return nowMillis - 1L
+
+    val kst = ZoneId.of("Asia/Seoul")
+    val timeMatch = Regex("""(오전|오후)\s*(\d{1,2}):(\d{2})""").find(raw)
+    if (timeMatch != null) {
+        val period = timeMatch.groupValues[1]
+        val hourBase = timeMatch.groupValues[2].toIntOrNull() ?: 0
+        val minute = timeMatch.groupValues[3].toIntOrNull() ?: 0
+        val hour = when {
+            period == "오전" && hourBase == 12 -> 0
+            period == "오전" -> hourBase
+            period == "오후" && hourBase == 12 -> 12
+            else -> hourBase + 12
+        }
+        val date = LocalDate.now(kst)
+        return LocalDateTime.of(date, LocalTime.of(hour.coerceIn(0, 23), minute.coerceIn(0, 59)))
+            .atZone(kst)
+            .toInstant()
+            .toEpochMilli()
+    }
+
+    val dateMatch = Regex("""(20\d{2})[./-](\d{1,2})[./-](\d{1,2})""").find(raw)
+    if (dateMatch != null) {
+        val y = dateMatch.groupValues[1].toIntOrNull()
+        val m = dateMatch.groupValues[2].toIntOrNull()
+        val d = dateMatch.groupValues[3].toIntOrNull()
+        if (y != null && m != null && d != null) {
+            return LocalDate.of(y, m.coerceIn(1, 12), d.coerceIn(1, 28))
+                .atStartOfDay(kst)
+                .toInstant()
+                .toEpochMilli()
+        }
+    }
+
+    return Long.MIN_VALUE + index
 }

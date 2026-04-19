@@ -35,6 +35,7 @@ REQUEST_TIMEOUT = 20
 MAX_PER_SECTION = 10
 MAX_TOSS_NEWS = 20
 SUMMARY_CHARS = 200
+_NAVER_ARTICLE_THUMB_CACHE: dict[str, str] = {}
 
 
 def _normalize_url(url: str) -> str:
@@ -94,6 +95,42 @@ def _absolutize_naver_list_image(src: str) -> str:
     if t.startswith("/"):
         return urljoin("https://mimgnews.pstatic.net", t)
     return t
+
+
+def _absolutize_with_base(base_url: str, src: str) -> str:
+    t = (src or "").strip()
+    if not t or t.startswith("data:"):
+        return ""
+    if t.startswith("//"):
+        return "https:" + t
+    if t.startswith("http://") or t.startswith("https://"):
+        return t.split("#")[0]
+    return urljoin(base_url, t).split("#")[0]
+
+
+def _extract_naver_article_first_image(article_url: str) -> str:
+    """기사 본문에서 대표 이미지 후보(#img1, .nbd_im_w img) 추출."""
+    u = (article_url or "").strip()
+    if not u:
+        return ""
+    if u in _NAVER_ARTICLE_THUMB_CACHE:
+        return _NAVER_ARTICLE_THUMB_CACHE[u]
+
+    html = _fetch(u)
+    if not html:
+        _NAVER_ARTICLE_THUMB_CACHE[u] = ""
+        return ""
+
+    try:
+        soup = BeautifulSoup(html, "lxml")
+        cand = soup.select_one("#img1") or soup.select_one(".nbd_im_w img")
+        src = (cand.get("src") or "").strip() if cand else ""
+        img = _absolutize_with_base(u, src)
+        _NAVER_ARTICLE_THUMB_CACHE[u] = img
+        return img
+    except Exception:
+        _NAVER_ARTICLE_THUMB_CACHE[u] = ""
+        return ""
 
 
 def _article_summary_text_excluding_spans(article_summary_dd) -> str:
@@ -195,6 +232,8 @@ def _parse_naver_pc_article_block(dd_subj) -> dict[str, Any] | None:
         img = dl.select_one("dt.thumb > a > img") or dl.select_one("dt.thumb a img")
         if img and img.get("src"):
             thumb = _absolutize_naver_list_image(img.get("src", ""))
+    if not thumb:
+        thumb = _extract_naver_article_first_image(url)
 
     return {
         "title": title,
@@ -256,6 +295,7 @@ def _parse_naver_ranked_simple_news_li(li) -> dict[str, Any] | None:
     source, published = _extract_naver_source_and_published(asum=None, container=li)
     raw = a.get_text(separator=" ", strip=True)
     summary = (raw[:SUMMARY_CHARS] + ("…" if len(raw) > SUMMARY_CHARS else "")).strip() or title[:SUMMARY_CHARS]
+    thumb = _extract_naver_article_first_image(url)
     return {
         "title": title,
         "url": url,
@@ -263,7 +303,7 @@ def _parse_naver_ranked_simple_news_li(li) -> dict[str, Any] | None:
         "published_at": published,
         "summary": summary,
         "category": "",
-        "thumbnail_url": "",
+        "thumbnail_url": thumb,
     }
 
 
@@ -688,7 +728,7 @@ def crawl_yahoo_tech() -> list[dict[str, Any]]:
 
 
 NAVER_MEDIA = "https://media.naver.com"
-MAX_NEWSPAPER_ITEMS = 15
+MAX_NEWSPAPER_ITEMS = 30
 
 
 def _absolutize_media_naver_url(href: str) -> str:
@@ -741,14 +781,34 @@ def _parse_naver_press_newspaper_li(li, source_label: str) -> dict[str, Any] | N
     }
 
 
+def _newspaper_paper_number_int(node: dict[str, Any]) -> int:
+    """paperNumber(예: A1)에서 숫자만 추출. 없거나 숫자 없으면 999."""
+    raw = node.get("paperNumber") or node.get("paper_number")
+    if raw is None:
+        return 999
+    s = str(raw).strip()
+    if not s:
+        return 999
+    m = re.search(r"\d+", s)
+    return int(m.group()) if m else 999
+
+
+def _newspaper_detail_position_int(node: dict[str, Any]) -> int:
+    """detailPosition — 면 내 기사 순서. 없거나 비정상이면 99."""
+    v = node.get("detailPosition")
+    if v is None:
+        return 99
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return 99
+
+
 def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> list[dict[str, Any]]:
     def _parse_payload(payload: dict[str, Any], fallback_source: str, limit: int) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
-        seen: set[str] = set()
 
         def walk(node: Any) -> None:
-            if len(out) >= limit:
-                return
             if isinstance(node, dict):
                 title = str(
                     node.get("title")
@@ -766,8 +826,9 @@ def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> li
                 ).strip()
                 if title and href:
                     url = _normalize_url(_absolutize_media_naver_url(href))
-                    if url and url not in seen:
-                        seen.add(url)
+                    if url:
+                        paper_number = _newspaper_paper_number_int(node)
+                        detail_position = _newspaper_detail_position_int(node)
                         summary_raw = str(node.get("summary") or node.get("lede") or "").strip()
                         thumb_raw = str(
                             node.get("thumbnail")
@@ -776,6 +837,9 @@ def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> li
                             or node.get("thumbUrl")
                             or ""
                         ).strip()
+                        thumb = _absolutize_naver_newspaper_img(thumb_raw)
+                        if not thumb:
+                            thumb = _extract_naver_article_first_image(url)
                         published = str(
                             node.get("date")
                             or node.get("publishedAt")
@@ -800,7 +864,9 @@ def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> li
                                 "url": url,
                                 "published_at": published,
                                 "category": "",
-                                "thumbnail_url": _absolutize_naver_newspaper_img(thumb_raw),
+                                "thumbnail_url": thumb,
+                                "paper_number": paper_number,
+                                "detail_position": detail_position,
                             }
                         )
                 for v in node.values():
@@ -810,7 +876,16 @@ def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> li
                     walk(item)
 
         walk(payload)
-        return out[:limit]
+        out.sort(key=lambda r: (r["paper_number"], r["detail_position"]))
+        seen_url: set[str] = set()
+        deduped: list[dict[str, Any]] = []
+        for row in out:
+            u = (row.get("url") or "").strip()
+            if not u or u in seen_url:
+                continue
+            seen_url.add(u)
+            deduped.append(row)
+        return deduped[:limit]
 
     seoul = pytz.timezone("Asia/Seoul")
     today = datetime.now(seoul)
@@ -825,12 +900,13 @@ def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> li
             continue
         rows = _parse_payload(payload, source_label, max_n)
         if rows:
+            rows.sort(key=lambda r: (r.get("paper_number", 999), r.get("detail_position", 99)))
             return rows
     return []
 
 
 def crawl_hankyung_newspaper() -> list[dict[str, Any]]:
-    """NAVER 뉴스 — 한국경제 신문 스탠드 (최대 15)."""
+    """NAVER 뉴스 — 한국경제 신문 스탠드 (최대 30)."""
     try:
         return _crawl_naver_newspaper(
             "015",
@@ -843,7 +919,7 @@ def crawl_hankyung_newspaper() -> list[dict[str, Any]]:
 
 
 def crawl_maeil_newspaper() -> list[dict[str, Any]]:
-    """NAVER 뉴스 — 매일경제 신문 스탠드 (최대 15)."""
+    """NAVER 뉴스 — 매일경제 신문 스탠드 (최대 30)."""
     try:
         return _crawl_naver_newspaper(
             "009",
@@ -853,6 +929,27 @@ def crawl_maeil_newspaper() -> list[dict[str, Any]]:
     except Exception as e:
         logger.exception("crawl_maeil_newspaper 실패: %s", e)
         return []
+
+
+def dedupe_similar_titles_ordered(
+    items: list[dict[str, Any]], min_ratio: float = 0.8
+) -> list[dict[str, Any]]:
+    """입력 순서를 유지하며, 이미 남긴 기사와 제목 유사도 min_ratio 이상이면 스킵."""
+    kept: list[dict[str, Any]] = []
+    for it in items:
+        title = it.get("title") or ""
+        is_dup = False
+        for other in kept:
+            otitle = other.get("title") or ""
+            if not title or not otitle:
+                continue
+            ratio = difflib.SequenceMatcher(None, title.lower(), otitle.lower()).ratio()
+            if ratio >= min_ratio:
+                is_dup = True
+                break
+        if not is_dup:
+            kept.append(it)
+    return kept
 
 
 def dedupe_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:

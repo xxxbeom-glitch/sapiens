@@ -186,6 +186,92 @@ fun MorningSourceCard(
 }
 
 @Composable
+fun MorningTopArticlesCard(
+    articles: List<Article>,
+    onClickArticle: (Article) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (articles.isEmpty()) return
+    val topArticles = articles.take(8)
+    val first = topArticles.first()
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .background(Card)
+                .padding(
+                    start = CardPaddingHorizontal,
+                    end = CardPaddingHorizontal,
+                    top = CardPaddingVertical,
+                    bottom = CardPaddingBottom
+                )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { onClickArticle(first) },
+                verticalAlignment = Alignment.Top
+            ) {
+                Text(
+                    text = first.headline,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontSize = 24.sp,
+                        lineHeight = 34.sp
+                    ),
+                    color = TextPrimary,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (topArticles.size > 1) {
+                HorizontalDivider(
+                    color = TextSecondary.copy(alpha = 0.2f),
+                    thickness = 0.5.dp,
+                    modifier = Modifier.padding(top = 10.dp)
+                )
+            }
+
+            topArticles.drop(1).forEachIndexed { index, article ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { onClickArticle(article) }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = article.headline,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (index < topArticles.drop(1).lastIndex) {
+                    HorizontalDivider(
+                        color = TextSecondary.copy(alpha = 0.2f),
+                        thickness = 0.5.dp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun HeadlineThumbnail(
     imageUrl: String,
     modifier: Modifier = Modifier

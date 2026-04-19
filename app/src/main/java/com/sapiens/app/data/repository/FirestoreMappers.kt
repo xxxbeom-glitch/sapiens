@@ -1,5 +1,6 @@
 package com.sapiens.app.data.repository
 
+import android.util.Log
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.MarketDirection
 import com.sapiens.app.data.model.MarketIndicator
@@ -37,7 +38,25 @@ private fun Map<*, *>.toArticle(): Article? {
     val category = this["category"] as? String ?: ""
     val tag = this["tag"] as? String ?: ""
     val sourceColor = this["sourceColor"] as? String
-    val imageUrl = (this["imageUrl"] as? String ?: this["thumbnail_url"] as? String).orEmpty()
+    val imageUrl = (
+        this["imageUrl"] as? String
+            ?: this["image_url"] as? String
+            ?: this["thumbnailUrl"] as? String
+            ?: this["thumbnail_url"] as? String
+            ?: this["thumbnail"] as? String
+    ).orEmpty()
+    val thumbnailUrl = (
+        this["thumbnailUrl"] as? String
+            ?: this["thumbnail_url"] as? String
+            ?: this["imageUrl"] as? String
+            ?: this["image_url"] as? String
+            ?: this["thumbnail"] as? String
+    ).orEmpty()
+    Log.d(
+        "FirestoreMappers",
+        "article image fields imageUrl='${this["imageUrl"]}' thumbnailUrl='${this["thumbnailUrl"]}' " +
+            "thumbnail_url='${this["thumbnail_url"]}' image_url='${this["image_url"]}' mapped='$imageUrl/$thumbnailUrl'"
+    )
     val summaryPoints = (this["summaryPoints"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
     return Article(
         source = source,
@@ -48,7 +67,8 @@ private fun Map<*, *>.toArticle(): Article? {
         summaryPoints = summaryPoints,
         tag = tag,
         sourceColor = sourceColor,
-        imageUrl = imageUrl
+        imageUrl = imageUrl,
+        thumbnailUrl = thumbnailUrl
     )
 }
 
