@@ -926,7 +926,7 @@ def _newspaper_detail_position_int(node: dict[str, Any]) -> int:
 
 
 def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> list[dict[str, Any]]:
-    def _parse_payload(payload: dict[str, Any], fallback_source: str, limit: int) -> list[dict[str, Any]]:
+    def _parse_payload(payload: Any, fallback_source: str, limit: int) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
 
         def walk(node: Any) -> None:
@@ -1010,18 +1010,42 @@ def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> li
 
     seoul = pytz.timezone("Asia/Seoul")
     today = datetime.now(seoul)
+    date_try_labels = ("오늘", "어제", "그제", "3일 전")
     # 오늘 → 어제 → 그제 → 3일 전까지 (주말·공휴일 등으로 당일 API가 빈 배열일 때 대비)
     for days_back in range(4):
         target_day = today - timedelta(days=days_back)
         date_str = target_day.strftime("%Y%m%d")
         api_url = f"{NAVER_MEDIA}/api/press/{press_code}/newspaper?date={date_str}"
-        payload = _fetch_json(
+        date_try_label = date_try_labels[days_back]
+
+        req_headers = dict(HEADERS)
+        req_headers["Referer"] = f"{NAVER_MEDIA}/press/{press_code}/newspaper"
+
+        status_code: int | None = None
+        raw_json: Any = None
+        try:
+            r = requests.get(api_url, headers=req_headers, timeout=REQUEST_TIMEOUT)
+            status_code = r.status_code
+            r.raise_for_status()
+            raw_json = r.json()
+        except requests.HTTPError as e:
+            if e.response is not None:
+                status_code = e.response.status_code
+            logger.warning("_crawl_naver_newspaper HTTP 오류 press=%s url=%s: %s", press_code, api_url, e)
+        except Exception as e:
+            logger.warning("_crawl_naver_newspaper 요청 실패 press=%s url=%s: %s", press_code, api_url, e)
+
+        rows = _parse_payload(raw_json, source_label, max_n) if raw_json is not None else []
+        logger.info(
+            "_crawl_naver_newspaper press=%s source=%s 날짜시도=%s(%s) url=%s status=%s articles=%d",
+            press_code,
+            source_label,
+            date_try_label,
+            date_str,
             api_url,
-            headers={"Referer": f"{NAVER_MEDIA}/press/{press_code}/newspaper"},
+            status_code if status_code is not None else "-",
+            len(rows),
         )
-        if not payload:
-            continue
-        rows = _parse_payload(payload, source_label, max_n)
         if rows:
             rows.sort(key=lambda r: (r.get("paper_number", 999), r.get("detail_position", 99)))
             return rows
