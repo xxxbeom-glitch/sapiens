@@ -1,6 +1,7 @@
 package com.sapiens.app.ui.briefing
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,15 +13,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,10 +34,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.MarketDirection
 import com.sapiens.app.data.model.MarketIndex
@@ -76,6 +84,139 @@ private fun SectionTitleText(title: String) {
         text = title,
         style = MaterialTheme.typography.titleSmall,
         color = TextPrimary
+    )
+}
+
+@Composable
+fun MorningSourceCard(
+    source: String,
+    articles: List<Article>,
+    onClickArticle: (Article) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (articles.isEmpty()) return
+    val topArticles = articles.take(4)
+    val first = topArticles.first()
+    val publishedAt = first.time.ifBlank { "-" }
+    Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(0.5.dp, TextSecondary.copy(alpha = 0.22f))
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SourceChip(label = source)
+                Text(
+                    text = publishedAt,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                    color = TextSecondary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { onClickArticle(first) },
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Text(
+                    text = first.headline,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    color = TextPrimary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                HeadlineThumbnail(
+                    imageUrl = first.imageUrl,
+                    modifier = Modifier.size(52.dp)
+                )
+            }
+
+            HorizontalDivider(
+                color = TextSecondary.copy(alpha = 0.2f),
+                thickness = 0.5.dp,
+                modifier = Modifier.padding(top = 10.dp)
+            )
+
+            topArticles.drop(1).forEachIndexed { index, article ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { onClickArticle(article) }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = article.headline,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                        color = TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (index < topArticles.drop(1).lastIndex) {
+                    HorizontalDivider(
+                        color = TextSecondary.copy(alpha = 0.2f),
+                        thickness = 0.5.dp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeadlineThumbnail(
+    imageUrl: String,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(6.dp)
+    if (imageUrl.isBlank()) {
+        Box(
+            modifier = modifier
+                .clip(shape)
+                .background(TextSecondary.copy(alpha = 0.16f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Image,
+                contentDescription = null,
+                tint = TextSecondary,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        return
+    }
+    AsyncImage(
+        model = imageUrl,
+        contentDescription = null,
+        placeholder = painterResource(id = android.R.drawable.ic_menu_report_image),
+        error = painterResource(id = android.R.drawable.ic_menu_report_image),
+        fallback = painterResource(id = android.R.drawable.ic_menu_report_image),
+        contentScale = ContentScale.Crop,
+        modifier = modifier
+            .clip(shape)
+            .background(TextSecondary.copy(alpha = 0.12f))
     )
 }
 

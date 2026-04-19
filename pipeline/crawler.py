@@ -10,9 +10,11 @@ import logging
 import os
 import re
 import sys
+from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
+import pytz
 import requests
 from bs4 import BeautifulSoup
 
@@ -51,6 +53,19 @@ def _fetch(url: str) -> str | None:
         return r.text
     except Exception as e:
         logger.warning("요청 실패 %s: %s", url, e)
+        return None
+
+
+def _fetch_json(url: str, headers: dict[str, str] | None = None) -> dict[str, Any] | None:
+    req_headers = dict(HEADERS)
+    if headers:
+        req_headers.update(headers)
+    try:
+        r = requests.get(url, headers=req_headers, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        logger.warning("JSON 요청 실패 %s: %s", url, e)
         return None
 
 
@@ -93,6 +108,48 @@ def _article_summary_text_excluding_spans(article_summary_dd) -> str:
     return re.sub(r"\s+", " ", raw).strip()
 
 
+def _normalize_press_name(raw: str) -> str:
+    s = re.sub(r"\s+", " ", (raw or "").strip())
+    if not s:
+        return ""
+    s = re.sub(r"^(입력|제공)\s*", "", s)
+    s = re.sub(r"\s*기자$", "", s)
+    return s.strip(" ·|")
+
+
+def _extract_naver_source_and_published(asum, container=None) -> tuple[str, str]:
+    """네이버 금융 목록 HTML에서 언론사/시간을 최대한 보수적으로 추출."""
+    source = ""
+    published = ""
+
+    if asum:
+        pr = asum.select_one("span.press")
+        if pr:
+            source = _normalize_press_name(pr.get_text(strip=True))
+        wd = asum.select_one("span.wdate")
+        if wd:
+            published = (wd.get_text(strip=True) or "").strip()
+
+    root = container or asum
+    if root:
+        # 제목 옆/메타에 span.press가 아닌 클래스명으로 들어오는 경우 대응
+        if not source:
+            for node in root.select("span[class], em[class], a[class], strong[class]"):
+                classes = " ".join(node.get("class") or []).lower()
+                if not any(k in classes for k in ("press", "media", "office", "source")):
+                    continue
+                txt = _normalize_press_name(node.get_text(" ", strip=True))
+                if txt and len(txt) <= 24 and not re.search(r"\d{2,4}[./-]\d{1,2}", txt):
+                    source = txt
+                    break
+        if not published:
+            wnode = root.select_one("span.wdate, span.date, time")
+            if wnode:
+                published = (wnode.get_text(strip=True) or "").strip()
+
+    return source or "네이버금융", published
+
+
 def _parse_naver_pc_article_block(dd_subj) -> dict[str, Any] | None:
     """
     PC finance 뉴스 목록:
@@ -128,17 +185,7 @@ def _parse_naver_pc_article_block(dd_subj) -> dict[str, Any] | None:
                 asum = sib
                 break
 
-    source = "네이버금융"
-    published = ""
-    if asum:
-        pr = asum.select_one("span.press")
-        if pr:
-            s = pr.get_text(strip=True)
-            if s:
-                source = s
-        wd = asum.select_one("span.wdate")
-        if wd:
-            published = wd.get_text(strip=True) or ""
+    source, published = _extract_naver_source_and_published(asum=asum, container=dl or dd_subj)
 
     raw = _article_summary_text_excluding_spans(asum)
     summary = (raw[:SUMMARY_CHARS] + ("…" if len(raw) > SUMMARY_CHARS else "")).strip() or title[:SUMMARY_CHARS]
@@ -206,13 +253,7 @@ def _parse_naver_ranked_simple_news_li(li) -> dict[str, Any] | None:
     title = ((a.get("title") or "").strip() or a.get_text(strip=True) or "").strip()
     if len(title) < 2:
         return None
-    pr = li.select_one("span.press")
-    if pr and pr.get_text(strip=True):
-        source = pr.get_text(strip=True)
-    else:
-        source = "네이버금융"
-    wd = li.select_one("span.wdate")
-    published = wd.get_text(strip=True) if wd else ""
+    source, published = _extract_naver_source_and_published(asum=None, container=li)
     raw = a.get_text(separator=" ", strip=True)
     summary = (raw[:SUMMARY_CHARS] + ("…" if len(raw) > SUMMARY_CHARS else "")).strip() or title[:SUMMARY_CHARS]
     return {
@@ -700,35 +741,99 @@ def _parse_naver_press_newspaper_li(li, source_label: str) -> dict[str, Any] | N
     }
 
 
-def _crawl_naver_newspaper(url: str, source_label: str, max_n: int) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    try:
-        html = _fetch(url)
-        if not html:
-            return out
-        soup = BeautifulSoup(html, "lxml")
+def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> list[dict[str, Any]]:
+    def _parse_payload(payload: dict[str, Any], fallback_source: str, limit: int) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
         seen: set[str] = set()
-        for li in soup.select("ul.newspaper_article_lst li"):
-            row = _parse_naver_press_newspaper_li(li, source_label)
-            if not row:
-                continue
-            u = (row.get("url") or "").strip()
-            if not u or u in seen:
-                continue
-            seen.add(u)
-            out.append(row)
-            if len(out) >= max_n:
-                break
-    except Exception as e:
-        logger.warning("_crawl_naver_newspaper %s: %s", url, e)
-    return out
+
+        def walk(node: Any) -> None:
+            if len(out) >= limit:
+                return
+            if isinstance(node, dict):
+                title = str(
+                    node.get("title")
+                    or node.get("articleTitle")
+                    or node.get("headline")
+                    or ""
+                ).strip()
+                href = str(
+                    node.get("linkUrl")
+                    or node.get("url")
+                    or node.get("articleUrl")
+                    or node.get("officeArticleUrl")
+                    or node.get("articleLink")
+                    or ""
+                ).strip()
+                if title and href:
+                    url = _normalize_url(_absolutize_media_naver_url(href))
+                    if url and url not in seen:
+                        seen.add(url)
+                        summary_raw = str(node.get("summary") or node.get("lede") or "").strip()
+                        thumb_raw = str(
+                            node.get("thumbnail")
+                            or node.get("thumbnailUrl")
+                            or node.get("imageUrl")
+                            or node.get("thumbUrl")
+                            or ""
+                        ).strip()
+                        published = str(
+                            node.get("date")
+                            or node.get("publishedAt")
+                            or node.get("articleDate")
+                            or ""
+                        ).strip()
+                        source = str(
+                            node.get("officeName")
+                            or node.get("pressName")
+                            or fallback_source
+                        ).strip() or fallback_source
+                        summary = (
+                            (summary_raw[:SUMMARY_CHARS] + ("…" if len(summary_raw) > SUMMARY_CHARS else ""))
+                            if summary_raw
+                            else (title[:SUMMARY_CHARS] + ("…" if len(title) > SUMMARY_CHARS else ""))
+                        ).strip()
+                        out.append(
+                            {
+                                "title": title,
+                                "summary": summary,
+                                "source": source,
+                                "url": url,
+                                "published_at": published,
+                                "category": "",
+                                "thumbnail_url": _absolutize_naver_newspaper_img(thumb_raw),
+                            }
+                        )
+                for v in node.values():
+                    walk(v)
+            elif isinstance(node, list):
+                for item in node:
+                    walk(item)
+
+        walk(payload)
+        return out[:limit]
+
+    seoul = pytz.timezone("Asia/Seoul")
+    today = datetime.now(seoul)
+    for target_day in (today, today - timedelta(days=1)):
+        date_str = target_day.strftime("%Y%m%d")
+        api_url = f"{NAVER_MEDIA}/api/press/{press_code}/newspaper?date={date_str}"
+        payload = _fetch_json(
+            api_url,
+            headers={"Referer": f"{NAVER_MEDIA}/press/{press_code}/newspaper"},
+        )
+        if not payload:
+            continue
+        rows = _parse_payload(payload, source_label, max_n)
+        if rows:
+            return rows
+    return []
 
 
 def crawl_hankyung_newspaper() -> list[dict[str, Any]]:
     """NAVER 뉴스 — 한국경제 신문 스탠드 (최대 15)."""
     try:
         return _crawl_naver_newspaper(
-            f"{NAVER_MEDIA}/press/015/newspaper",
+            "015",
             "한국경제",
             MAX_NEWSPAPER_ITEMS,
         )
@@ -741,7 +846,7 @@ def crawl_maeil_newspaper() -> list[dict[str, Any]]:
     """NAVER 뉴스 — 매일경제 신문 스탠드 (최대 15)."""
     try:
         return _crawl_naver_newspaper(
-            f"{NAVER_MEDIA}/press/009/newspaper",
+            "009",
             "매일경제",
             MAX_NEWSPAPER_ITEMS,
         )

@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -36,10 +36,9 @@ fun BriefingScreen(viewModel: BriefingViewModel) {
     val marketUpdatedLabel by viewModel.marketUpdatedLabel.collectAsState()
 
     var selectedArticle by remember { mutableStateOf<Article?>(null) }
-    val pagerState = rememberPagerState(
-        initialPage = 0,
-        pageCount = { morningArticles.size.coerceAtLeast(1) }
-    )
+    val groupedMorning = morningArticles
+        .groupBy { it.source.ifBlank { "기타" } }
+        .map { (source, items) -> source to items }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (isLoading) {
@@ -64,11 +63,17 @@ fun BriefingScreen(viewModel: BriefingViewModel) {
                     )
                 }
 
-                item {
-                    MorningCardPager(
-                        articles = morningArticles,
-                        pagerState = pagerState,
-                        onClickArticle = { selectedArticle = it }
+                items(
+                    items = groupedMorning,
+                    key = { (source, _) -> source }
+                ) { (source, articles) ->
+                    MorningSourceCard(
+                        source = source,
+                        articles = articles,
+                        onClickArticle = { selectedArticle = it },
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .padding(bottom = 8.dp)
                     )
                 }
 

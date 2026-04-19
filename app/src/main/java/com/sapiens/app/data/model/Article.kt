@@ -8,7 +8,8 @@ data class Article(
     val category: String = "",
     val summaryPoints: List<String> = emptyList(),
     val tag: String = "",
-    val sourceColor: String? = null
+    val sourceColor: String? = null,
+    val imageUrl: String = ""
 )
 
 enum class MarketDirection {

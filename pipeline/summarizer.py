@@ -338,6 +338,7 @@ def merge_to_firestore_article(raw: dict[str, Any], ai: dict[str, Any]) -> dict[
         "headline": ko_headline,
         "headline_ko": ko_headline,
         "headline_en": raw.get("title", ""),
+        "imageUrl": raw.get("thumbnail_url", ""),
         "summary": (raw.get("summary") or "")[:500],
         "time": raw.get("published_at") or "",
         "category": ai.get("category", ""),

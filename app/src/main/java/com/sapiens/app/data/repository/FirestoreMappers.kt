@@ -28,7 +28,7 @@ private fun Any?.asIndicatorList(): List<MarketIndicator> {
 }
 
 private fun Map<*, *>.toArticle(): Article? {
-    val source = this["source"] as? String ?: return null
+    val source = (this["source"] as? String).orEmpty()
     val headlineKo = this["headline_ko"] as? String
     val headline = (headlineKo ?: this["headline"] as? String)?.trim().orEmpty()
     if (headline.isBlank()) return null
@@ -37,6 +37,7 @@ private fun Map<*, *>.toArticle(): Article? {
     val category = this["category"] as? String ?: ""
     val tag = this["tag"] as? String ?: ""
     val sourceColor = this["sourceColor"] as? String
+    val imageUrl = (this["imageUrl"] as? String ?: this["thumbnail_url"] as? String).orEmpty()
     val summaryPoints = (this["summaryPoints"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
     return Article(
         source = source,
@@ -46,7 +47,8 @@ private fun Map<*, *>.toArticle(): Article? {
         category = category,
         summaryPoints = summaryPoints,
         tag = tag,
-        sourceColor = sourceColor
+        sourceColor = sourceColor,
+        imageUrl = imageUrl
     )
 }
 
