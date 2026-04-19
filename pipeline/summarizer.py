@@ -1,19 +1,20 @@
 """
-Claude API 기사 요약·시황 생성.
+Google Gemini API 기사 요약·시황 생성.
 """
 from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import time
 from typing import Any
 
-import anthropic
-
 logger = logging.getLogger(__name__)
 
-MODEL = "claude-sonnet-4-20250514"
+MODEL = "gemini-2.5-pro-exp-03-25"
+
+_gemini_model: Any = None
 SYSTEM = (
     "당신은 한국 투자자를 위한 금융 뉴스 에디터입니다.\n"
     "뉴스를 분석해서 핵심 내용을 명확하고 구체적으로 요약하세요.\n"
@@ -44,22 +45,35 @@ def _extract_json(text: str) -> dict[str, Any]:
     return json.loads(text)
 
 
-def _call_claude(client: anthropic.Anthropic, user_content: str) -> str:
-    msg = client.messages.create(
-        model=MODEL,
-        max_tokens=2048,
-        system=SYSTEM,
-        messages=[{"role": "user", "content": user_content}],
+def _get_gemini_model() -> Any:
+    global _gemini_model
+    if _gemini_model is not None:
+        return _gemini_model
+    import google.generativeai as genai
+
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not key:
+        raise RuntimeError("GEMINI_API_KEY 가 설정되어 있어야 합니다.")
+    genai.configure(api_key=key)
+    _gemini_model = genai.GenerativeModel(MODEL)
+    return _gemini_model
+
+
+def _call_gemini(user_content: str) -> str:
+    model = _get_gemini_model()
+    prompt = f"{SYSTEM}\n\n{user_content}"
+    response = model.generate_content(
+        prompt,
+        generation_config={"max_output_tokens": 2048},
     )
-    parts = []
-    for block in msg.content:
-        if block.type == "text":
-            parts.append(block.text)
-    return "".join(parts).strip()
+    try:
+        text = response.text
+    except ValueError as e:
+        raise RuntimeError(f"Gemini 응답에 텍스트가 없습니다: {e}") from e
+    return (text or "").strip()
 
 
 def summarize_article(
-    client: anthropic.Anthropic,
     title: str,
     summary: str,
     source: str,
@@ -150,14 +164,13 @@ def summarize_article(
     last_err: Exception | None = None
     for attempt in range(2):
         try:
-            raw = _call_claude(client, user)
+            raw = _call_gemini(user)
             data = _extract_json(raw)
             if "headline" not in data or "category" not in data or "summary_points" not in data:
                 raise ValueError(f"Invalid JSON keys: {data.keys()}")
             data["headline"] = str(data.get("headline", "")).strip()
             if _looks_english_headline(data["headline"]):
                 data["headline"] = translate_headline_to_korean(
-                    client=client,
                     headline=data["headline"],
                     source=source,
                     summary=summary,
@@ -179,7 +192,6 @@ def summarize_article(
 
 
 def translate_headline_to_korean(
-    client: anthropic.Anthropic,
     headline: str,
     source: str,
     summary: str = "",
@@ -202,7 +214,7 @@ def translate_headline_to_korean(
     last_err: Exception | None = None
     for attempt in range(2):
         try:
-            raw = _call_claude(client, user)
+            raw = _call_gemini(user)
             data = _extract_json(raw)
             ko = str(data.get("headline_ko", "")).strip()
             if not ko:
@@ -218,7 +230,6 @@ def translate_headline_to_korean(
 
 
 def generate_market_report(
-    client: anthropic.Anthropic,
     indicators: list[dict[str, Any]],
     articles: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -235,7 +246,7 @@ def generate_market_report(
     last_err: Exception | None = None
     for attempt in range(2):
         try:
-            raw = _call_claude(client, user)
+            raw = _call_gemini(user)
             data = _extract_json(raw)
             if "report" not in data:
                 raise ValueError("missing report")
@@ -249,11 +260,10 @@ def generate_market_report(
 
 
 def curate_us_market_articles(
-    client: anthropic.Anthropic,
     items: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """
-    stocks+tech 합친 리스트에서 Claude로 최대 8개 엄선 (중복·광고성 제외).
+    stocks+tech 합친 리스트에서 Gemini로 최대 8개 엄선 (중복·광고성 제외).
     8개 미만이면 전부 반환; 8개 이하면 API 생략하고 전부 반환.
     """
     if not items:
@@ -281,7 +291,7 @@ def curate_us_market_articles(
     last_err: Exception | None = None
     for attempt in range(2):
         try:
-            raw = _call_claude(client, user)
+            raw = _call_gemini(user)
             data = _extract_json(raw)
             idxs = data.get("selected_indices", [])
             if not isinstance(idxs, list) or not idxs:
@@ -312,7 +322,6 @@ def curate_us_market_articles(
 
 
 def summarize_batch(
-    client: anthropic.Anthropic,
     items: list[dict[str, Any]],
     *,
     briefing_newspaper: bool = False,
@@ -322,7 +331,6 @@ def summarize_batch(
     for it in items:
         try:
             ai = summarize_article(
-                client,
                 title=it.get("title", ""),
                 summary=it.get("summary", ""),
                 source=it.get("source", ""),
@@ -337,7 +345,6 @@ def summarize_batch(
 
 
 def analyze_company(
-    client: anthropic.Anthropic,
     ticker: str,
     name: str,
     financials: dict[str, Any],
@@ -346,7 +353,7 @@ def analyze_company(
     profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
-    Claude 기반 기업 서술·건전성 라벨·점수·AI 증권 의견.
+    Gemini 기반 기업 서술·건전성 라벨·점수·AI 증권 의견.
     """
     profile = profile or {}
     payload = {
@@ -372,7 +379,7 @@ def analyze_company(
     last_err: Exception | None = None
     for attempt in range(2):
         try:
-            raw = _call_claude(client, user)
+            raw = _call_gemini(user)
             data = _extract_json(raw)
             required = (
                 "business",

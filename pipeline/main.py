@@ -1,5 +1,5 @@
 """
-뉴스 크롤링 → Claude 요약 → Firestore 저장.
+뉴스 크롤링 → Gemini 요약 → Firestore 저장.
 
 RunPod 등에서 `from main import run` 시 import 단계에서 부작용·무거운 초기화가
 돌아가지 않도록, 로깅 설정·환경 로드·하위 모듈 import는 모두 `run()` 안에서 수행합니다.
@@ -7,7 +7,6 @@ RunPod 등에서 `from main import run` 시 import 단계에서 부작용·무�
 from __future__ import annotations
 
 import logging
-import os
 import time
 from pathlib import Path
 from typing import Any
@@ -27,11 +26,11 @@ def _sorted_newspaper_top(rows: list[dict[str, Any]], n: int) -> list[dict[str, 
 
 
 def _summarize_newspaper_pool_for_briefing(
-    client: Any, summarizer: Any, pool: list[dict[str, Any]]
+    summarizer: Any, pool: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
     """요약 실패 시 스텁으로 merge. pool 길이만큼(최대 5) 순서 유지."""
     stub = {"headline": "", "category": "", "summary_points": []}
-    summarized = summarizer.summarize_batch(client, pool, briefing_newspaper=True)
+    summarized = summarizer.summarize_batch(pool, briefing_newspaper=True)
     by_url: dict[str, dict[str, Any]] = {}
     for row in summarized:
         r = dict(row)
@@ -59,15 +58,6 @@ def _summarize_newspaper_pool_for_briefing(
     return out
 
 
-def _build_client() -> Any:
-    import anthropic
-
-    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not key:
-        raise RuntimeError("ANTHROPIC_API_KEY 가 설정되어 있어야 합니다.")
-    return anthropic.Anthropic(api_key=key)
-
-
 def run() -> None:
     logging.basicConfig(
         level=logging.INFO,
@@ -82,8 +72,6 @@ def run() -> None:
     import summarizer
 
     t0 = time.perf_counter()
-
-    client = _build_client()
 
     # 1) 국내
     domestic = crawler.crawl_domestic()
@@ -118,52 +106,52 @@ def run() -> None:
     }
     logger.info("크롤 완료: %s", counts)
 
-    # 4) Claude 요약 (국내 탭별)
+    # 4) Gemini 요약 (국내 탭별)
     fs_realtime: list[dict] = []
-    for row in summarizer.summarize_batch(client, domestic["realtime"]):
+    for row in summarizer.summarize_batch(domestic["realtime"]):
         ai = row.pop("_ai", None)
         if ai:
             fs_realtime.append(summarizer.merge_to_firestore_article(row, ai))
 
     fs_popular: list[dict] = []
-    for row in summarizer.summarize_batch(client, domestic["popular"]):
+    for row in summarizer.summarize_batch(domestic["popular"]):
         ai = row.pop("_ai", None)
         if ai:
             fs_popular.append(summarizer.merge_to_firestore_article(row, ai))
 
     fs_main: list[dict] = []
-    for row in summarizer.summarize_batch(client, domestic["main"]):
+    for row in summarizer.summarize_batch(domestic["main"]):
         ai = row.pop("_ai", None)
         if ai:
             fs_main.append(summarizer.merge_to_firestore_article(row, ai))
 
     # 한경·매경 신문 브리핑 → briefing/hankyung, briefing/maeil (각 상위 5건, 언론사 간 중복 제거 없음)
-    fs_hankyung = _summarize_newspaper_pool_for_briefing(client, summarizer, pool_hankyung)
-    fs_maeil = _summarize_newspaper_pool_for_briefing(client, summarizer, pool_maeil)
+    fs_hankyung = _summarize_newspaper_pool_for_briefing(summarizer, pool_hankyung)
+    fs_maeil = _summarize_newspaper_pool_for_briefing(summarizer, pool_maeil)
 
     # Yahoo: 스톡/테크 각각 전체 요약 → news/overseas_* (기존과 동일)
     fs_overseas_stocks: list[dict] = []
-    for row in summarizer.summarize_batch(client, overseas_stocks):
+    for row in summarizer.summarize_batch(overseas_stocks):
         ai = row.pop("_ai", None)
         if ai:
             fs_overseas_stocks.append(summarizer.merge_to_firestore_article(row, ai))
 
     fs_overseas_tech: list[dict] = []
-    for row in summarizer.summarize_batch(client, overseas_tech):
+    for row in summarizer.summarize_batch(overseas_tech):
         ai = row.pop("_ai", None)
         if ai:
             fs_overseas_tech.append(summarizer.merge_to_firestore_article(row, ai))
 
-    # 미국 시황 브리핑: 합친(raw) → Claude 8개 엄선 → 요약 → briefing/us_market
+    # 미국 시황 브리핑: 합친(raw) → Gemini 8개 엄선 → 요약 → briefing/us_market
     yahoo_picked: list[dict] = []
     if yahoo_merged:
         try:
-            yahoo_picked = summarizer.curate_us_market_articles(client, yahoo_merged)
+            yahoo_picked = summarizer.curate_us_market_articles(yahoo_merged)
         except Exception as e:
             logger.warning("curate_us_market_articles 실패, 전체로 요약 시도: %s", e)
             yahoo_picked = yahoo_merged[:8]
     fs_us_market: list[dict] = []
-    for row in summarizer.summarize_batch(client, yahoo_picked):
+    for row in summarizer.summarize_batch(yahoo_picked):
         ai = row.pop("_ai", None)
         if ai:
             fs_us_market.append(summarizer.merge_to_firestore_article(row, ai))
@@ -171,7 +159,7 @@ def run() -> None:
     # 시황 3문장 리포트: 국내 지표 + Yahoo 스톡·테크 전체 요약(피드)
     try:
         fs_for_report: list[dict] = list(fs_overseas_stocks) + list(fs_overseas_tech)
-        report = summarizer.generate_market_report(client, indicators, fs_for_report)
+        report = summarizer.generate_market_report(indicators, fs_for_report)
         logger.info("시황 요약:\n%s", report.get("report", "")[:500])
     except Exception as e:
         logger.warning("시황 요약 생성 실패: %s", e)
@@ -188,7 +176,7 @@ def run() -> None:
     firebase_client.save_news_feed(fs_popular, "popular")
     firebase_client.save_news_feed(fs_main, "main")
 
-    # 7–9) 종목 재무 크롤 → Claude 분석 → companies 저장
+    # 7–9) 종목 재무 크롤 → Gemini 분석 → companies 저장
     company_saved = 0
     for bundle in crawler.crawl_all_company_bundles():
         ticker = str(bundle.get("ticker", "")).strip()
@@ -200,7 +188,7 @@ def run() -> None:
             he = bundle.get("health") or {}
             ana = bundle.get("analyst") or {}
             prof = bundle.get("profile") or {}
-            ai_company = summarizer.analyze_company(client, ticker, name, fin, he, ana, prof)
+            ai_company = summarizer.analyze_company(ticker, name, fin, he, ana, prof)
             doc: dict = {
                 "ticker": ticker,
                 "name": name,
