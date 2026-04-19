@@ -1301,17 +1301,56 @@ def _naver_theme_format_signed_amount(val: Any) -> str:
         return s
 
 
+def _naver_theme_stock_change_pct(fluctuations_ratio: Any, up_down_gb: Any) -> str:
+    """
+    fluctuationsRatio(보통 절대값) + upDownGb로 등락률 문자열.
+    upDownGb \"2\" → 상승(+), \"5\" → 하락(-). 그 외는 fluctuationsRatio 부호로 추정.
+    """
+    if fluctuations_ratio is None:
+        return ""
+    s = str(fluctuations_ratio).strip()
+    if not s:
+        return ""
+    if "%" in s:
+        return s
+    raw = s.rstrip("%").replace(",", "")
+    try:
+        signed = float(raw)
+    except (TypeError, ValueError):
+        return s
+    mag = abs(signed)
+    gb = str(up_down_gb or "").strip()
+    if gb == "5":
+        sign = "-"
+    elif gb == "2":
+        sign = "+"
+    else:
+        if signed > 0:
+            sign = "+"
+        elif signed < 0:
+            sign = "-"
+        else:
+            sign = ""
+    if mag == 0.0:
+        return "0.00%"
+    return f"{sign}{mag:.2f}%"
+
+
 def _naver_theme_stocks_from_api(payload: Any, limit: int) -> list[dict[str, str]]:
-    """테마 종목 JSON → stockName, closePrice, fluctuationsRatio | compareToPreviousClosePrice."""
+    """
+    테마 종목 JSON → [{"name", "price", "change"}, ...]
+    최상위 리스트 각 항목: itemname, closePrice, fluctuationsRatio, upDownGb 등.
+    """
     rows: list[dict[str, str]] = []
     for item in _unwrap_json_array(payload):
         if not isinstance(item, dict):
             continue
         name = str(
-            item.get("stockName")
+            item.get("itemname")
+            or item.get("itemName")
+            or item.get("stockName")
             or item.get("stockNm")
             or item.get("name")
-            or item.get("itemName")
             or item.get("nm")
             or ""
         ).strip()
@@ -1326,15 +1365,17 @@ def _naver_theme_stocks_from_api(payload: Any, limit: int) -> list[dict[str, str
             or item.get("currentPrice")
         )
         fr = item.get("fluctuationsRatio")
-        cp = item.get("compareToPreviousClosePrice")
+        gb = item.get("upDownGb")
         if fr is not None and str(fr).strip() != "":
-            change = _naver_theme_format_change_rate(fr)
-        elif cp is not None and str(cp).strip() != "":
-            change = _naver_theme_format_signed_amount(cp)
+            change = _naver_theme_stock_change_pct(fr, gb)
         else:
-            change = _naver_theme_format_change_rate(
-                item.get("prdyCtrt") or item.get("changeRate") or item.get("rate") or item.get("chgRate")
-            )
+            cp = item.get("compareToPreviousClosePrice")
+            if cp is not None and str(cp).strip() != "":
+                change = _naver_theme_format_signed_amount(cp)
+            else:
+                change = _naver_theme_format_change_rate(
+                    item.get("prdyCtrt") or item.get("changeRate") or item.get("rate") or item.get("chgRate")
+                )
         rows.append(
             {
                 "name": name,
