@@ -10,7 +10,9 @@ data class Article(
     val tag: String = "",
     val sourceColor: String? = null,
     val imageUrl: String = "",
-    val thumbnailUrl: String = ""
+    val thumbnailUrl: String = "",
+    /** 원문 링크(Firestore `url` 등). 없으면 빈 문자열. */
+    val url: String = ""
 )
 
 enum class MarketDirection {

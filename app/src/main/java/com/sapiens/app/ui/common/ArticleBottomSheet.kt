@@ -1,5 +1,6 @@
 package com.sapiens.app.ui.common
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -14,15 +15,19 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -31,18 +36,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.ui.theme.Accent
-import com.sapiens.app.ui.theme.Card
 import com.sapiens.app.ui.theme.BottomSheetBottomPadding
+import com.sapiens.app.ui.theme.Card
 import com.sapiens.app.ui.theme.SheetHorizontal
 import com.sapiens.app.ui.theme.SheetTop
 import com.sapiens.app.ui.theme.SummaryPointSpacing
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
+
+private val NewsButtonCorner = 6.dp
+private val NewsButtonHeight = 56.dp
+private val NewsFooterButtonsSpacing = 12.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,7 +60,9 @@ fun ArticleBottomSheet(
     article: Article,
     onDismissRequest: () -> Unit,
     isBookmarked: Boolean,
-    onBookmarkToggle: () -> Unit
+    onBookmarkToggle: () -> Unit,
+    kind: ArticleBottomSheetKind = ArticleBottomSheetKind.Standard,
+    onOpenOriginalArticle: (() -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val resolvedPoints = article.summaryPoints
@@ -96,35 +108,52 @@ fun ArticleBottomSheet(
                 CategoryChip(label = article.category.ifBlank { "경제" })
             }
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val headlineStyle = MaterialTheme.typography.headlineMedium.copy(
-                    fontSize = (MaterialTheme.typography.headlineMedium.fontSize.value - 1f).sp,
-                    lineHeight = (MaterialTheme.typography.headlineMedium.lineHeight.value - 1f).sp
-                )
-                Text(
-                    text = article.headline,
-                    style = headlineStyle,
-                    color = TextPrimary,
-                    maxLines = 3,
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Icon(
-                    imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                    contentDescription = if (isBookmarked) "저장됨" else "저장",
-                    tint = if (isBookmarked) Accent else TextSecondary,
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }
-                        ) { onBookmarkToggle() }
-                )
+            when (kind) {
+                ArticleBottomSheetKind.Standard -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = article.headline,
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = TextPrimary,
+                            maxLines = 3,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Icon(
+                            imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                            contentDescription = if (isBookmarked) "저장됨" else "저장",
+                            tint = if (isBookmarked) Accent else TextSecondary,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clickable(
+                                    indication = null,
+                                    interactionSource = remember { MutableInteractionSource() }
+                                ) { onBookmarkToggle() }
+                        )
+                    }
+                }
+                ArticleBottomSheetKind.News -> {
+                    val headlineStyle = MaterialTheme.typography.headlineMedium.run {
+                        copy(
+                            fontSize = (fontSize.value - 1f).sp,
+                            lineHeight = (lineHeight.value - 1f).sp
+                        )
+                    }
+                    Text(
+                        text = article.headline,
+                        style = headlineStyle,
+                        color = TextPrimary,
+                        maxLines = 3,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 14.dp)
+                    )
+                }
             }
 
             HorizontalDivider(
@@ -154,6 +183,74 @@ fun ArticleBottomSheet(
                             color = TextSecondary,
                             modifier = Modifier.fillMaxWidth()
                         )
+                    }
+                }
+            }
+
+            if (kind == ArticleBottomSheetKind.News) {
+                val canOpenOriginal = article.url.isNotBlank()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(NewsFooterButtonsSpacing),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        onClick = { if (canOpenOriginal) onOpenOriginalArticle?.invoke() },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(NewsButtonHeight),
+                        enabled = canOpenOriginal,
+                        shape = RoundedCornerShape(NewsButtonCorner),
+                        border = BorderStroke(1.dp, TextSecondary.copy(alpha = 0.45f)),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = Color.Transparent,
+                            contentColor = Color.White,
+                            disabledContentColor = TextSecondary.copy(alpha = 0.45f)
+                        )
+                    ) {
+                        Text(
+                            text = "기사 원문 보기",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                    if (isBookmarked) {
+                        Button(
+                            onClick = onBookmarkToggle,
+                            modifier = Modifier
+                                .height(NewsButtonHeight)
+                                .wrapContentWidth(),
+                            shape = RoundedCornerShape(NewsButtonCorner),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Accent,
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Text(
+                                text = "저장됨",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    } else {
+                        Button(
+                            onClick = onBookmarkToggle,
+                            modifier = Modifier
+                                .height(NewsButtonHeight)
+                                .wrapContentWidth(),
+                            shape = RoundedCornerShape(NewsButtonCorner),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.White,
+                                contentColor = Color.Black
+                            )
+                        ) {
+                            Text(
+                                text = "저장",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }

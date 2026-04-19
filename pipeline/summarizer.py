@@ -543,4 +543,5 @@ def merge_to_firestore_article(raw: dict[str, Any], ai: dict[str, Any]) -> dict[
         "summaryPoints": ai.get("summary_points", []),
         "tag": ai.get("category", ""),
         "sourceColor": None,
+        "url": str(raw.get("url") or "").strip(),
     }

@@ -80,7 +80,13 @@ fun MainScreen(
     val bookmarksRepository = remember { ArticleBookmarksRepository(context.applicationContext) }
     val feedbackRepository = remember { FeedbackRepositoryImpl() }
     val briefingViewModel: BriefingViewModel = viewModel(factory = BriefingViewModel.factory(newsRepository))
-    val newsViewModel: NewsViewModel = viewModel(factory = NewsViewModel.factory(newsRepository))
+    val newsViewModel: NewsViewModel = viewModel(
+        factory = NewsViewModel.factory(
+            newsRepository,
+            bookmarksRepository,
+            feedbackRepository
+        )
+    )
     val marketViewModel: MarketViewModel = viewModel(factory = MarketViewModel.factory(newsRepository))
 
     Scaffold(
@@ -116,9 +122,7 @@ fun MainScreen(
                 )
                 1 -> NewsScreen(
                     viewModel = newsViewModel,
-                    isOverseas = isOverseasNews,
-                    bookmarksRepository = bookmarksRepository,
-                    feedbackRepository = feedbackRepository
+                    isOverseas = isOverseasNews
                 )
                 2 -> MarketScreen(
                     viewModel = marketViewModel,

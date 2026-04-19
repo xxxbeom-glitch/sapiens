@@ -5,18 +5,27 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.sapiens.app.data.mock.MockData
 import com.sapiens.app.data.model.Article
+import com.sapiens.app.data.model.stableId
+import com.sapiens.app.data.repository.FeedbackRepository
 import com.sapiens.app.data.repository.NewsFeedType
 import com.sapiens.app.data.repository.NewsRepository
+import com.sapiens.app.data.store.ArticleBookmarksRepository
+import com.sapiens.app.data.store.BookmarkToggleResult
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class NewsViewModel(
-    private val repository: NewsRepository
+    private val repository: NewsRepository,
+    private val bookmarksRepository: ArticleBookmarksRepository,
+    private val feedbackRepository: FeedbackRepository
 ) : ViewModel() {
 
     private val _isLoading = MutableStateFlow(true)
@@ -36,6 +45,10 @@ class NewsViewModel(
 
     private val _overseasTech = MutableStateFlow(emptyList<Article>())
     val overseasTech: StateFlow<List<Article>> = _overseasTech.asStateFlow()
+
+    val bookmarkedArticleIds: StateFlow<Set<String>> = bookmarksRepository.bookmarksFlow
+        .map { entries -> entries.map { it.article.stableId() }.toSet() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     init {
         viewModelScope.launch {
@@ -79,17 +92,50 @@ class NewsViewModel(
         }
     }
 
+    fun toggleNewsBookmark(article: Article) {
+        viewModelScope.launch {
+            val id = article.stableId()
+            try {
+                when (
+                    val r = bookmarksRepository.toggleBookmark(
+                        article,
+                        withFeedbackWhenAdding = true
+                    )
+                ) {
+                    is BookmarkToggleResult.Added ->
+                        if (r.withFeedbackSync) {
+                            feedbackRepository.saveArticleLike(id, article.category)
+                        }
+                    is BookmarkToggleResult.Removed ->
+                        if (r.hadFeedbackSync) {
+                            feedbackRepository.deleteFeedback(id)
+                        }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "bookmark/feedback", e)
+            }
+        }
+    }
+
     companion object {
         private const val TAG = "NewsViewModel"
 
-        fun factory(repository: NewsRepository): ViewModelProvider.Factory =
+        fun factory(
+            repository: NewsRepository,
+            bookmarksRepository: ArticleBookmarksRepository,
+            feedbackRepository: FeedbackRepository
+        ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     require(modelClass.isAssignableFrom(NewsViewModel::class.java)) {
                         "Unknown ViewModel class $modelClass"
                     }
-                    return NewsViewModel(repository) as T
+                    return NewsViewModel(
+                        repository,
+                        bookmarksRepository,
+                        feedbackRepository
+                    ) as T
                 }
             }
     }

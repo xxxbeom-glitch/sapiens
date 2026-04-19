@@ -87,6 +87,11 @@ private fun Map<*, *>.toArticle(): Article? {
             "thumbnail_url='${this["thumbnail_url"]}' image_url='${this["image_url"]}' mapped='$imageUrl/$thumbnailUrl'"
     )
     val summaryPoints = (this["summaryPoints"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+    val url = (
+        this["url"] as? String
+            ?: this["link"] as? String
+            ?: this["articleUrl"] as? String
+    ).orEmpty().trim()
     return Article(
         source = source,
         headline = headline,
@@ -97,7 +102,8 @@ private fun Map<*, *>.toArticle(): Article? {
         tag = tag,
         sourceColor = sourceColor,
         imageUrl = imageUrl,
-        thumbnailUrl = thumbnailUrl
+        thumbnailUrl = thumbnailUrl,
+        url = url
     )
 }
 
