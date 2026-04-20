@@ -1,5 +1,10 @@
 package com.sapiens.app.ui.news
 
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -57,12 +62,41 @@ fun NewsFeedList(
     }
 }
 
+/** 해외 뉴스 카드: ISO 8601 등 → KST `MM.dd HH:mm`. 파싱 실패 시 원문. */
+internal fun formatOverseasNewsTimeKst(raw: String): String {
+    val t = raw.trim()
+    if (t.isBlank()) return raw
+    val seoul = ZoneId.of("Asia/Seoul")
+    val outFmt = DateTimeFormatter.ofPattern("MM.dd HH:mm", Locale.ROOT)
+    return runCatching {
+        val instant = try {
+            Instant.parse(t)
+        } catch (_: Exception) {
+            OffsetDateTime.parse(t).toInstant()
+        }
+        instant.atZone(seoul).format(outFmt)
+    }.getOrDefault(raw)
+}
+
+/** `섹션 | 언론사` → 마지막 구간만. `|` 없으면 원문. */
+internal fun formatOverseasNewsSource(raw: String): String {
+    val s = raw.trim()
+    if (!s.contains('|')) return s
+    return s.substringAfterLast('|').trim().ifBlank { s }
+}
+
 @Composable
 fun NewsFeedRow(
     item: Article,
     rank: Int? = null,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    /** null 이면 [Article.time] 사용. 해외 탭에서 KST 포맷 문자열 전달. */
+    timeDisplayOverride: String? = null,
+    /** null 이면 [Article.source] 사용. 해외 탭에서 언론사만 전달. */
+    sourceDisplayOverride: String? = null,
 ) {
+    val timeText = timeDisplayOverride ?: item.time
+    val sourceText = sourceDisplayOverride ?: item.source
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -101,7 +135,7 @@ fun NewsFeedRow(
                 ) {
                     CategoryChip(item.category.ifBlank { item.tag })
                     Text(
-                        text = item.time,
+                        text = timeText,
                         style = MaterialTheme.typography.labelSmall,
                         color = TextSecondary
                     )
@@ -112,7 +146,7 @@ fun NewsFeedRow(
                     color = TextPrimary
                 )
                 Text(
-                    text = item.source,
+                    text = sourceText,
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )

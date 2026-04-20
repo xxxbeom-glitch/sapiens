@@ -1,6 +1,9 @@
 # Gradle files
 .gradle/
 build/
+# 모듈별 빌드 산출물(루트 `build/` 외에도 IDE가 app/build를 자주 생성)
+app/build/
+.kotlin/
 
 # Local configuration file (sdk path, etc)
 local.properties

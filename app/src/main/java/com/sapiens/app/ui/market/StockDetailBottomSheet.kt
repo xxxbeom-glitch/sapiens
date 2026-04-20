@@ -244,8 +244,6 @@ private fun StockDetailContent(
     val dividerColor = TextSecondary.copy(alpha = ContentAlpha.hairlineOnSecondary)
     val reports3 = data.reports.take(3)
     val news3 = data.news.take(3)
-    val financialUnitSubtitle =
-        data.financialValueUnit.trim().takeIf { it.isNotBlank() }?.let { "단위: $it" }
 
     Column(
         modifier = modifier
@@ -341,10 +339,7 @@ private fun StockDetailContent(
             if (data.financialYears.isNotEmpty()) {
                 item {
                     Spacer(modifier = Modifier.height(Spacing.space18))
-                    SectionLabel(
-                        title = "매출·영업이익 (연간)",
-                        subtitle = financialUnitSubtitle
-                    )
+                    SectionLabel(title = "매출·영업이익 (연간)")
                 }
                 item {
                     Column(

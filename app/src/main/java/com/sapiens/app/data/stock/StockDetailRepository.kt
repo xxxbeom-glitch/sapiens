@@ -395,7 +395,8 @@ class StockDetailRepositoryImpl(
                 operatingProfit = formatIncomeStatementFigure(ops[i], unit),
             )
         }
-        return rows to unit
+        // 단위는 각 숫자에 접미로 붙임(예: 549억원). 섹션 부제 "단위: …"는 사용하지 않음.
+        return rows to ""
     }
 
     private fun inferIncomeStatementUnitFromHeaders(cols: List<List<String>>): String {
@@ -411,10 +412,14 @@ class StockDetailRepositoryImpl(
         }
     }
 
-    /** 정수 셀 + 단위 접미(예: `337,455억원`). 파싱 실패 시 원문 유지. */
+    /** 정수 셀 + 단위 접미(예: `549억원`, `337,455억원`). 이미 단위가 있으면 원문 유지. */
     private fun formatIncomeStatementFigure(raw: String, unit: String): String {
+        val trimmed = raw.trim()
+        if (unit.isBlank()) return formatBigNumber(raw)
+        if (trimmed.endsWith(unit) || trimmed.endsWith("원")) return trimmed
         val base = formatBigNumber(raw)
-        if (unit.isBlank() || base == raw.trim()) return base
+        val numeric = trimmed.replace(",", "").toLongOrNull()
+        if (numeric == null) return trimmed
         return "${base}${unit}"
     }
 

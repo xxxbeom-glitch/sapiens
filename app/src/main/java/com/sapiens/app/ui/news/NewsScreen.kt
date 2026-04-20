@@ -192,7 +192,17 @@ fun NewsScreen(
                         NewsFeedRow(
                             item = article,
                             rank = if (showRank) index + 1 else null,
-                            onClick = { selectedArticle = article }
+                            onClick = { selectedArticle = article },
+                            timeDisplayOverride = if (isOverseas) {
+                                formatOverseasNewsTimeKst(article.time)
+                            } else {
+                                null
+                            },
+                            sourceDisplayOverride = if (isOverseas) {
+                                formatOverseasNewsSource(article.source)
+                            } else {
+                                null
+                            },
                         )
                         if (index < displayItems.lastIndex) {
                             HorizontalDivider(

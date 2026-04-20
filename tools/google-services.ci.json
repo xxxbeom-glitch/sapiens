@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "999999999999",
+    "project_id": "sapiens-ci-placeholder",
+    "storage_bucket": "sapiens-ci-placeholder.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:999999999999:android:0000000000000000000001",
+        "android_client_info": {
+          "package_name": "com.sapiens.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCiPlaceholderOnlyNotARealKey000000"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

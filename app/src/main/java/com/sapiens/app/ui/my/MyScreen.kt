@@ -35,7 +35,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -63,7 +62,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
-import com.sapiens.app.BuildConfig
 import com.sapiens.app.R
 import com.sapiens.app.data.model.AiSelectedModel
 import com.sapiens.app.data.model.Article
@@ -95,7 +93,6 @@ import kotlinx.coroutines.launch
 private enum class ExpandableSection {
     BOOKMARK,
     API_STATUS,
-    SETTINGS,
 }
 
 @Composable
@@ -235,19 +232,6 @@ fun MyScreen(
                 }
             },
         )
-
-        ExpandableMenuCard(
-            title = "설정",
-            subtitle = "앱 정보",
-            iconRes = R.drawable.ic_app_brand_0z,
-            expanded = expandedSection == ExpandableSection.SETTINGS,
-            onToggleExpand = {
-                expandedSection =
-                    if (expandedSection == ExpandableSection.SETTINGS) null else ExpandableSection.SETTINGS
-            },
-        ) {
-            SettingsAppInfoPanel(versionName = BuildConfig.VERSION_NAME)
-        }
 
         ExpandableMenuCard(
             title = "저장한 기사",
@@ -414,7 +398,7 @@ private fun PushNotificationMenuRow(
                 modifier = Modifier.weight(1f)
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Notifications,
+                    painter = painterResource(R.drawable.ic_app_brand_0z),
                     contentDescription = "푸시 알림",
                     modifier = Modifier.size(Spacing.space28),
                     tint = Primary

@@ -105,3 +105,10 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
+
+/** PR/푸시 전 로컬 검증: `./gradlew :app:verifyApp` (Lint 에러 시 실패) */
+tasks.register("verifyApp") {
+    group = "verification"
+    description = "compileDebugKotlin + lintDebug — 푸시 전 실행 권장"
+    dependsOn("lintDebug")
+}

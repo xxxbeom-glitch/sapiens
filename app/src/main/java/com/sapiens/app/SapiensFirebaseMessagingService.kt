@@ -37,7 +37,7 @@ class SapiensFirebaseMessagingService : FirebaseMessagingService() {
         )
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ico_news)
+            .setSmallIcon(R.drawable.ic_app_brand_0z)
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)
