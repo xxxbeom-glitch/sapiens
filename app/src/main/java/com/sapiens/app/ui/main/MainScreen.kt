@@ -1,5 +1,6 @@
 package com.sapiens.app.ui.main
 
+import android.app.Application
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -20,6 +21,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -29,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sapiens.app.ui.my.AuthViewModel
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,6 +44,9 @@ import com.sapiens.app.data.stock.StockDetailRepositoryImpl
 import com.sapiens.app.data.model.Company
 import com.sapiens.app.data.repository.FeedbackRepositoryImpl
 import com.sapiens.app.data.repository.NewsRepositoryImpl
+import com.sapiens.app.data.repository.SavedArticlesFirestoreWriter
+import com.sapiens.app.data.sync.UserCloudBackupRepository
+import com.sapiens.app.data.sync.UserCloudBackupScheduler
 import com.sapiens.app.data.store.ArticleBookmarksRepository
 import com.sapiens.app.ui.briefing.BriefingScreen
 import com.sapiens.app.ui.briefing.BriefingViewModel
@@ -57,6 +64,8 @@ import com.sapiens.app.ui.theme.Background
 import com.sapiens.app.ui.theme.Spacing
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private data class BottomTab(
     val label: String,
@@ -71,10 +80,7 @@ private val tabs = listOf(
 )
 
 @Composable
-fun MainScreen(
-    isDarkTheme: Boolean,
-    onThemeChange: (Boolean) -> Unit
-) {
+fun MainScreen() {
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     var showMarketSearchSheet by remember { mutableStateOf(false) }
     var isOverseasNews by remember { mutableStateOf(false) }
@@ -86,7 +92,12 @@ fun MainScreen(
     val stockDetailRepository = remember {
         StockDetailRepositoryImpl(BuildConfig.PUBLIC_DATA_API_KEY)
     }
-    val bookmarksRepository = remember { ArticleBookmarksRepository(context.applicationContext) }
+    val bookmarksRepository = remember {
+        ArticleBookmarksRepository(
+            context.applicationContext,
+            SavedArticlesFirestoreWriter()
+        )
+    }
     val feedbackRepository = remember { FeedbackRepositoryImpl() }
     val briefingViewModel: BriefingViewModel = viewModel(factory = BriefingViewModel.factory(newsRepository))
     val newsViewModel: NewsViewModel = viewModel(
@@ -99,6 +110,24 @@ fun MainScreen(
     val marketViewModel: MarketViewModel = viewModel(factory = MarketViewModel.factory(newsRepository))
     val stockDetailViewModel: StockDetailViewModel =
         viewModel(factory = StockDetailViewModel.factory(stockDetailRepository))
+    val authViewModel: AuthViewModel = viewModel(
+        factory = AuthViewModel.factory(context.applicationContext as Application)
+    )
+    val application = context.applicationContext as Application
+    val cloudBackupRepository = remember { UserCloudBackupRepository.create(application) }
+    val authUser by authViewModel.authUser.collectAsState(initial = null)
+
+    LaunchedEffect(authUser?.uid) {
+        val uid = authUser?.uid
+        if (uid.isNullOrBlank()) {
+            UserCloudBackupScheduler.cancel(application)
+        } else {
+            UserCloudBackupScheduler.schedule(application)
+            withContext(Dispatchers.IO) {
+                cloudBackupRepository.restoreFromCloudIfNeeded(uid)
+            }
+        }
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -141,8 +170,7 @@ fun MainScreen(
                     onThemeStockNameClick = { code -> stockDetailCode = code }
                 )
                 else -> MyScreen(
-                    isDarkTheme = isDarkTheme,
-                    onThemeChange = onThemeChange,
+                    authViewModel = authViewModel,
                     bookmarksRepository = bookmarksRepository,
                     feedbackRepository = feedbackRepository
                 )

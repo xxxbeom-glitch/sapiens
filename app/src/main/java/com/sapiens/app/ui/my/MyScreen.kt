@@ -1,205 +1,225 @@
 package com.sapiens.app.ui.my
 
 import android.util.Log
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Hub
-import androidx.compose.material.icons.filled.Newspaper
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Topic
-import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.RadioButton
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
+import com.sapiens.app.R
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.stableId
+import com.sapiens.app.data.repository.AiConfigFirestoreRepository
 import com.sapiens.app.data.repository.FeedbackRepository
 import com.sapiens.app.data.store.ArticleBookmarksRepository
+import com.sapiens.app.data.store.BookmarkEntry
 import com.sapiens.app.data.store.BookmarkToggleResult
 import com.sapiens.app.data.store.UserPreferencesRepository
 import com.sapiens.app.ui.common.ArticleBottomSheet
 import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.AppShapes
 import com.sapiens.app.ui.theme.Background
+import com.sapiens.app.ui.theme.Card
+import com.sapiens.app.ui.theme.CardPaddingBottom
+import com.sapiens.app.ui.theme.CardPaddingHorizontal
 import com.sapiens.app.ui.theme.RowVertical
 import com.sapiens.app.ui.theme.Spacing
-import com.sapiens.app.ui.theme.SuccessBright
+import com.sapiens.app.ui.theme.Primary
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 
-private val sectorOptions = listOf(
-    "반도체", "AI·빅테크", "2차전지", "바이오", "자동차", "금융", "에너지",
-    "미국 빅테크", "나스닥 ETF", "S&P500 ETF", "원자재", "환율·매크로"
-)
-
-private val morningNewsOptions = listOf(
+private val domesticNewsOptions = listOf(
     "경제", "정치", "국제", "IT·테크", "부동산", "증권", "산업", "사회"
 )
 
-private enum class MyPage(val title: String) {
-    MENU("마이"),
-    ACCOUNT("계정"),
-    THEME("디스플레이"),
-    SECTOR("관심 섹터"),
-    NEWS_CATEGORY("뉴스 수신 분야"),
-    BOOKMARK("저장한 기사"),
-    AI_STATUS("AI 연결 상태")
+private val overseasNewsOptions = listOf(
+    "증시", "테크·반도체", "매크로", "환율", "금리", "원자재", "채권", "암호화폐"
+)
+
+private enum class ExpandableSection {
+    NEWS_CATEGORY,
+    BOOKMARK,
+    API_STATUS
 }
 
 @Composable
 fun MyScreen(
-    isDarkTheme: Boolean,
-    onThemeChange: (Boolean) -> Unit,
+    authViewModel: AuthViewModel,
     bookmarksRepository: ArticleBookmarksRepository,
     feedbackRepository: FeedbackRepository
 ) {
     val context = LocalContext.current
     val preferencesRepository = remember { UserPreferencesRepository(context) }
-    val selectedSectors by preferencesRepository.selectedSectorsFlow.collectAsState(initial = emptySet())
-    val selectedNewsCategories by preferencesRepository.selectedMorningCategoriesFlow.collectAsState(initial = emptySet())
+    val aiConfigRepository = remember { AiConfigFirestoreRepository() }
+    val authUser by authViewModel.authUser.collectAsState()
+    val signInError by authViewModel.signInError.collectAsState()
+
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        authViewModel.onGoogleSignInActivityResult(result.data)
+    }
+
+    LaunchedEffect(signInError) {
+        val msg = signInError ?: return@LaunchedEffect
+        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+        authViewModel.clearSignInError()
+    }
+
+    val selectedDomestic by preferencesRepository.selectedDomesticNewsCategoriesFlow.collectAsState(initial = emptySet())
+    val selectedOverseas by preferencesRepository.selectedOverseasNewsCategoriesFlow.collectAsState(initial = emptySet())
+    val apiClaudeEnabled by preferencesRepository.apiClaudeEnabledFlow.collectAsState(initial = true)
+    val apiGeminiEnabled by preferencesRepository.apiGeminiEnabledFlow.collectAsState(initial = true)
+
     val bookmarkEntries by bookmarksRepository.bookmarksFlow.collectAsState(initial = emptyList())
-    val savedArticles = bookmarkEntries.map { it.article }
     val coroutineScope = rememberCoroutineScope()
 
-    val isLoggedIn = false
-    val userName = "사용자"
-    val userEmail = "user@example.com"
-
-    var currentPage by remember { mutableStateOf(MyPage.MENU) }
+    var expandedSection by remember { mutableStateOf<ExpandableSection?>(null) }
     var selectedBookmarkedArticle by remember { mutableStateOf<Article?>(null) }
 
-    when (currentPage) {
-        MyPage.MENU -> {
-            MyMenuScreen(
-                accountStatus = if (isLoggedIn) "$userName · $userEmail" else "로그인이 필요합니다",
-                themeStatus = if (isDarkTheme) "다크 모드" else "라이트 모드",
-                onClickAccount = { currentPage = MyPage.ACCOUNT },
-                onClickTheme = { currentPage = MyPage.THEME },
-                onClickSector = { currentPage = MyPage.SECTOR },
-                onClickNewsCategory = { currentPage = MyPage.NEWS_CATEGORY },
-                onClickBookmark = { currentPage = MyPage.BOOKMARK },
-                onClickAiStatus = { currentPage = MyPage.AI_STATUS }
+    val sortedBookmarks = remember(bookmarkEntries) {
+        bookmarkEntries.sortedByDescending { it.savedAtMillis }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Background)
+            .verticalScroll(rememberScrollState())
+            .padding(vertical = RowVertical)
+    ) {
+        AccountMenuRow(
+            subtitle = authUser?.email?.let { email -> "$email 로그인 됨" } ?: "로그인이 필요합니다",
+            canOpenGoogleSignIn = authUser == null,
+            onClick = {
+                googleSignInLauncher.launch(authViewModel.googleSignInIntent())
+            }
+        )
+
+        if (authUser != null) {
+            TextButton(
+                onClick = { authViewModel.signOut() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.space16)
+            ) {
+                Text("로그아웃", color = TextSecondary)
+            }
+        }
+
+        ExpandableMenuCard(
+            title = "뉴스 수신 분야",
+            subtitle = domesticSubtitle(selectedDomestic) + " · " + overseasSubtitle(selectedOverseas),
+            iconRes = R.drawable.ico_my_news_category,
+            expanded = expandedSection == ExpandableSection.NEWS_CATEGORY,
+            onToggleExpand = {
+                expandedSection =
+                    if (expandedSection == ExpandableSection.NEWS_CATEGORY) null else ExpandableSection.NEWS_CATEGORY
+            }
+        ) {
+            NewsReceiveCategoriesPanel(
+                domesticSelected = selectedDomestic,
+                overseasSelected = selectedOverseas,
+                onToggleDomestic = { v ->
+                    coroutineScope.launch { preferencesRepository.toggleDomesticNewsCategory(v) }
+                },
+                onToggleOverseas = { v ->
+                    coroutineScope.launch { preferencesRepository.toggleOverseasNewsCategory(v) }
+                }
             )
         }
 
-        MyPage.ACCOUNT -> {
-            DetailScaffold(
-                title = MyPage.ACCOUNT.title,
-                onBack = { currentPage = MyPage.MENU }
-            ) {
-                AccountDetailScreen(
-                    isLoggedIn = isLoggedIn,
-                    userName = userName,
-                    userEmail = userEmail,
-                    onGoogleSignInClick = {
-                        android.widget.Toast.makeText(context, "준비 중입니다", android.widget.Toast.LENGTH_SHORT).show()
-                    },
-                    onSignOutClick = { }
-                )
+        ExpandableMenuCard(
+            title = "저장한 기사",
+            subtitle = if (sortedBookmarks.isEmpty()) "없음" else "${sortedBookmarks.size}건",
+            iconRes = R.drawable.ico_my_bookmark,
+            expanded = expandedSection == ExpandableSection.BOOKMARK,
+            onToggleExpand = {
+                expandedSection =
+                    if (expandedSection == ExpandableSection.BOOKMARK) null else ExpandableSection.BOOKMARK
             }
+        ) {
+            BookmarkPagerPanel(
+                entries = sortedBookmarks,
+                onClickItem = { selectedBookmarkedArticle = it.article }
+            )
         }
 
-        MyPage.SECTOR -> {
-            DetailScaffold(
-                title = MyPage.SECTOR.title,
-                onBack = { currentPage = MyPage.MENU }
-            ) {
-                SectorDetailScreen(
-                    chips = sectorOptions,
-                    selectedValues = selectedSectors,
-                    onToggle = { value ->
-                        coroutineScope.launch { preferencesRepository.toggleSector(value) }
+        ExpandableMenuCard(
+            title = "API 연결 상태",
+            subtitle = null,
+            iconRes = R.drawable.ico_my_ai_status,
+            expanded = expandedSection == ExpandableSection.API_STATUS,
+            onToggleExpand = {
+                expandedSection =
+                    if (expandedSection == ExpandableSection.API_STATUS) null else ExpandableSection.API_STATUS
+            }
+        ) {
+            ApiConnectionPanel(
+                claudeEnabled = apiClaudeEnabled,
+                geminiEnabled = apiGeminiEnabled,
+                onClaudeChange = { v ->
+                    coroutineScope.launch {
+                        preferencesRepository.setApiClaudeEnabled(v)
+                        aiConfigRepository.save(claudeEnabled = v, geminiEnabled = apiGeminiEnabled)
                     }
-                )
-            }
-        }
-
-        MyPage.THEME -> {
-            DetailScaffold(
-                title = MyPage.THEME.title,
-                onBack = { currentPage = MyPage.MENU }
-            ) {
-                ThemeSettingDetailScreen(
-                    isDarkTheme = isDarkTheme,
-                    onSelectDarkTheme = { onThemeChange(true) },
-                    onSelectLightTheme = { onThemeChange(false) }
-                )
-            }
-        }
-
-        MyPage.NEWS_CATEGORY -> {
-            DetailScaffold(
-                title = MyPage.NEWS_CATEGORY.title,
-                onBack = { currentPage = MyPage.MENU }
-            ) {
-                NewsCategoryDetailScreen(
-                    chips = morningNewsOptions,
-                    selectedValues = selectedNewsCategories,
-                    onToggle = { value ->
-                        coroutineScope.launch { preferencesRepository.toggleMorningCategory(value) }
+                },
+                onGeminiChange = { v ->
+                    coroutineScope.launch {
+                        preferencesRepository.setApiGeminiEnabled(v)
+                        aiConfigRepository.save(claudeEnabled = apiClaudeEnabled, geminiEnabled = v)
                     }
-                )
-            }
-        }
-
-        MyPage.BOOKMARK -> {
-            DetailScaffold(
-                title = MyPage.BOOKMARK.title,
-                onBack = { currentPage = MyPage.MENU }
-            ) {
-                BookmarkDetailScreen(
-                    items = savedArticles,
-                    onClickItem = { selectedBookmarkedArticle = it }
-                )
-            }
-        }
-
-        MyPage.AI_STATUS -> {
-            DetailScaffold(
-                title = MyPage.AI_STATUS.title,
-                onBack = { currentPage = MyPage.MENU }
-            ) {
-                AiStatusDetailScreen()
-            }
+                }
+            )
         }
     }
 
@@ -237,246 +257,143 @@ fun MyScreen(
     }
 }
 
+private fun domesticSubtitle(set: Set<String>): String =
+    if (set.isEmpty()) "국내 선택 없음" else "국내 ${set.size}개"
+
+private fun overseasSubtitle(set: Set<String>): String =
+    if (set.isEmpty()) "해외 선택 없음" else "해외 ${set.size}개"
+
 @Composable
-private fun MyMenuScreen(
-    accountStatus: String,
-    themeStatus: String,
-    onClickAccount: () -> Unit,
-    onClickTheme: () -> Unit,
-    onClickSector: () -> Unit,
-    onClickNewsCategory: () -> Unit,
-    onClickBookmark: () -> Unit,
-    onClickAiStatus: () -> Unit
+private fun AccountMenuRow(
+    subtitle: String,
+    canOpenGoogleSignIn: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val menuItems = listOf(
-        MenuItem("계정", accountStatus, Icons.Filled.Person, onClickAccount),
-        MenuItem("디스플레이", themeStatus, Icons.Filled.Settings, onClickTheme),
-        MenuItem("관심 섹터", null, Icons.Filled.Topic, onClickSector),
-        MenuItem("뉴스 수신 분야", null, Icons.Filled.Newspaper, onClickNewsCategory),
-        MenuItem("저장한 기사", null, Icons.Filled.Bookmark, onClickBookmark),
-        MenuItem("AI 연결 상태", null, Icons.Filled.Hub, onClickAiStatus)
-    )
-
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Background),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = RowVertical)
-    ) {
-        item {
-            menuItems.forEachIndexed { index, item ->
-                MenuRow(item = item)
-                if (index < menuItems.lastIndex) {
-                    HorizontalDivider(color = TextSecondary.copy(alpha = 0.2f))
-                }
-            }
-        }
-    }
-}
-
-private data class MenuItem(
-    val title: String,
-    val subtitle: String?,
-    val icon: ImageVector,
-    val onClick: () -> Unit
-)
-
-@Composable
-private fun MenuRow(item: MenuItem) {
-    Row(
-        modifier = Modifier
+    Surface(
+        modifier = modifier
             .fillMaxWidth()
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() }
-            ) { item.onClick() }
-            .padding(horizontal = Spacing.space16, vertical = Spacing.space14),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+            .padding(horizontal = Spacing.space16, vertical = Spacing.space6),
+        shape = AppShapes.card,
+        color = Card
     ) {
         Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    enabled = canOpenGoogleSignIn,
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() }
+                ) { onClick() }
+                .padding(horizontal = CardPaddingHorizontal, vertical = RowVertical),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Spacing.space12),
-            modifier = Modifier.weight(1f)
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Icon(
-                imageVector = item.icon,
-                contentDescription = item.title,
-                tint = Accent
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(Spacing.space2)) {
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = TextPrimary
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.space12),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ico_my_account),
+                    contentDescription = "계정",
+                    modifier = Modifier.size(Spacing.space28),
+                    tint = Primary
                 )
-                item.subtitle?.let { subtitle ->
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.space2)) {
+                    Text(
+                        text = "계정",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextPrimary
+                    )
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
             }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "Google 간편 로그인",
+                tint = TextSecondary
+            )
         }
-
-        Icon(
-            imageVector = Icons.Filled.ChevronRight,
-            contentDescription = null,
-            tint = TextSecondary
-        )
     }
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
-private fun DetailScaffold(
-    title: String,
-    onBack: () -> Unit,
-    content: @Composable () -> Unit
+private fun NewsReceiveCategoriesPanel(
+    domesticSelected: Set<String>,
+    overseasSelected: Set<String>,
+    onToggleDomestic: (String) -> Unit,
+    onToggleOverseas: (String) -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Background)
-    ) {
-        TopAppBar(
-            title = {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = TextPrimary
-                )
-            },
-            navigationIcon = {
-                IconButton(
-                    onClick = onBack,
-                    interactionSource = remember { MutableInteractionSource() }
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "뒤로가기",
-                        tint = TextPrimary
-                    )
-                }
-            }
-        )
-        content()
-    }
-}
-
-@Composable
-private fun AccountDetailScreen(
-    isLoggedIn: Boolean,
-    userName: String,
-    userEmail: String,
-    onGoogleSignInClick: () -> Unit,
-    onSignOutClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(Spacing.space16),
-        verticalArrangement = Arrangement.spacedBy(Spacing.space12)
-    ) {
-        if (!isLoggedIn) {
-            Button(
-                onClick = onGoogleSignInClick,
-                interactionSource = remember { MutableInteractionSource() },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Google로 로그인")
-            }
-            Text(
-                text = "로그인 기능은 현재 준비 중입니다.",
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary
+    var tabIndex by remember { mutableIntStateOf(0) }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        PrimaryTabRow(selectedTabIndex = tabIndex) {
+            Tab(
+                selected = tabIndex == 0,
+                onClick = { tabIndex = 0 },
+                text = { Text("국내 뉴스", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            )
+            Tab(
+                selected = tabIndex == 1,
+                onClick = { tabIndex = 1 },
+                text = { Text("해외 뉴스", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            )
+        }
+        Spacer(modifier = Modifier.height(Spacing.space12))
+        if (tabIndex == 0) {
+            CheckboxCategoryList(
+                labels = domesticNewsOptions,
+                selected = domesticSelected,
+                onToggle = onToggleDomestic
             )
         } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.space12)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(Spacing.space44)
-                            .background(Accent.copy(alpha = 0.2f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = userName.firstOrNull()?.toString() ?: "U",
-                            color = Accent,
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-                    Column {
-                        Text(userName, style = MaterialTheme.typography.titleSmall, color = TextPrimary)
-                        Text(userEmail, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                    }
-                }
-                OutlinedButton(
-                    onClick = onSignOutClick,
-                    interactionSource = remember { MutableInteractionSource() }
-                ) { Text("로그아웃") }
-            }
+            CheckboxCategoryList(
+                labels = overseasNewsOptions,
+                selected = overseasSelected,
+                onToggle = onToggleOverseas
+            )
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SectorDetailScreen(
-    chips: List<String>,
-    selectedValues: Set<String>,
+private fun CheckboxCategoryList(
+    labels: List<String>,
+    selected: Set<String>,
     onToggle: (String) -> Unit
 ) {
-    ChipGrid(chips = chips, selectedValues = selectedValues, onToggle = onToggle)
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun NewsCategoryDetailScreen(
-    chips: List<String>,
-    selectedValues: Set<String>,
-    onToggle: (String) -> Unit
-) {
-    ChipGrid(chips = chips, selectedValues = selectedValues, onToggle = onToggle)
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ChipGrid(
-    chips: List<String>,
-    selectedValues: Set<String>,
-    onToggle: (String) -> Unit
-) {
-    FlowRow(
-        modifier = Modifier.padding(Spacing.space16),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.space8),
-        verticalArrangement = Arrangement.spacedBy(Spacing.space8)
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(Spacing.space4)
     ) {
-        chips.forEach { label ->
-            val selected = label in selectedValues
-            Surface(
-                color = if (selected) Accent.copy(alpha = 0.2f) else Color.Transparent,
-                shape = AppShapes.searchField,
-                modifier = Modifier.clickable(
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() }
-                ) { onToggle(label) }
+        labels.forEach { label ->
+            val checked = label in selected
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { onToggle(label) }
+                    .padding(vertical = Spacing.space6),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.space8)
             ) {
+                Checkbox(
+                    checked = checked,
+                    onCheckedChange = { onToggle(label) }
+                )
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (selected) Accent else TextSecondary,
-                    modifier = Modifier.padding(horizontal = Spacing.space10, vertical = Spacing.space6)
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextPrimary,
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
@@ -484,40 +401,80 @@ private fun ChipGrid(
 }
 
 @Composable
-private fun BookmarkDetailScreen(
-    items: List<Article>,
-    onClickItem: (Article) -> Unit
+private fun BookmarkPagerPanel(
+    entries: List<BookmarkEntry>,
+    onClickItem: (BookmarkEntry) -> Unit
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = Spacing.space16, vertical = RowVertical)
-    ) {
-        item {
-            items.forEachIndexed { index, article ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }
-                        ) { onClickItem(article) }
-                        .padding(vertical = RowVertical)
-                ) {
-                    Text(
-                        text = article.headline,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = TextPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "${article.source} · ${article.time}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
+    if (entries.isEmpty()) {
+        Text(
+            text = "저장한 기사가 없습니다.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextSecondary
+        )
+        return
+    }
+    val chunks = remember(entries) { entries.chunked(5) }
+    val pagerState = rememberPagerState(pageCount = { chunks.size })
+    Column(modifier = Modifier.fillMaxWidth()) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .wrapContentHeight()
+        ) { page ->
+            Column(modifier = Modifier.fillMaxWidth()) {
+                chunks[page].forEachIndexed { index, entry ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }
+                            ) { onClickItem(entry) }
+                            .padding(vertical = Spacing.space10)
+                    ) {
+                        Text(
+                            text = entry.article.headline,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = TextPrimary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "${entry.article.source} · ${entry.article.time}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    }
+                    if (index < chunks[page].lastIndex) {
+                        HorizontalDivider(
+                            thickness = Spacing.hairline,
+                            color = TextSecondary.copy(alpha = 0.2f)
+                        )
+                    }
                 }
-                if (index < items.lastIndex) {
-                    HorizontalDivider(color = TextSecondary.copy(alpha = 0.2f))
+            }
+        }
+        if (chunks.size > 1) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = Spacing.space12),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(chunks.size) { index ->
+                    val selected = pagerState.currentPage == index
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = Spacing.space3)
+                            .height(Spacing.space6)
+                            .width(if (selected) Spacing.space20 else Spacing.space6)
+                            .clip(CircleShape)
+                            .background(
+                                if (selected) Primary else TextSecondary.copy(alpha = 0.4f)
+                            )
+                    )
                 }
             }
         }
@@ -525,104 +482,168 @@ private fun BookmarkDetailScreen(
 }
 
 @Composable
-private fun AiStatusDetailScreen() {
-    Column(modifier = Modifier.padding(Spacing.space16)) {
-        StatusRow(label = "뉴스 요약 AI", healthy = true)
-        StatusRow(label = "시황 리포트 AI", healthy = true)
-        StatusRow(label = "데이터 수집", healthy = true)
-        Text(
-            text = "오전 6:00 업데이트",
-            style = MaterialTheme.typography.bodySmall,
-            color = TextSecondary,
-            modifier = Modifier.padding(top = Spacing.space8)
-        )
-    }
-}
-
-@Composable
-private fun ThemeSettingDetailScreen(
-    isDarkTheme: Boolean,
-    onSelectDarkTheme: () -> Unit,
-    onSelectLightTheme: () -> Unit
+private fun ApiConnectionPanel(
+    claudeEnabled: Boolean,
+    geminiEnabled: Boolean,
+    onClaudeChange: (Boolean) -> Unit,
+    onGeminiChange: (Boolean) -> Unit
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(Spacing.space16),
-        verticalArrangement = Arrangement.spacedBy(Spacing.space8)
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(Spacing.space12)
     ) {
-        ThemeOptionRow(
-            label = "다크 모드",
-            selected = isDarkTheme,
-            onClick = onSelectDarkTheme
+        ApiProviderRow(
+            label = "Claude",
+            enabled = claudeEnabled,
+            onEnabledChange = onClaudeChange
         )
-        ThemeOptionRow(
-            label = "라이트 모드",
-            selected = !isDarkTheme,
-            onClick = onSelectLightTheme
+        ApiProviderRow(
+            label = "Gemini",
+            enabled = geminiEnabled,
+            onEnabledChange = onGeminiChange
         )
     }
 }
 
 @Composable
-private fun ThemeOptionRow(
+private fun ApiProviderRow(
     label: String,
-    selected: Boolean,
-    onClick: () -> Unit
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() },
-                onClick = onClick
-            )
-            .padding(vertical = Spacing.space12),
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
-            color = TextPrimary
+            color = TextPrimary,
+            modifier = Modifier.weight(1f)
         )
-        RadioButton(
-            selected = selected,
-            onClick = onClick,
-            interactionSource = remember { MutableInteractionSource() }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.space10)
+        ) {
+            Switch(
+                checked = enabled,
+                onCheckedChange = onEnabledChange
+            )
+            ConnectionStatusChip(connected = enabled)
+        }
+    }
+}
+
+@Composable
+private fun ConnectionStatusChip(connected: Boolean) {
+    val (text, bg, fg) = if (connected) {
+        Triple(
+            "연결",
+            Accent.copy(alpha = 0.14f),
+            Accent
+        )
+    } else {
+        Triple(
+            "오류",
+            MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+            MaterialTheme.colorScheme.error
+        )
+    }
+    Surface(
+        color = bg,
+        shape = AppShapes.chipTight
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = fg,
+            modifier = Modifier.padding(horizontal = Spacing.space8, vertical = Spacing.space4)
         )
     }
 }
 
 @Composable
-private fun StatusRow(
-    label: String,
-    healthy: Boolean
+private fun ExpandableMenuCard(
+    title: String,
+    subtitle: String?,
+    @DrawableRes iconRes: Int,
+    expanded: Boolean,
+    onToggleExpand: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
 ) {
-    val dotColor = if (healthy) SuccessBright else MaterialTheme.colorScheme.error
-    Row(
-        modifier = Modifier
+    Surface(
+        modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = RowVertical),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = Spacing.space16, vertical = Spacing.space6),
+        shape = AppShapes.card,
+        color = Card
     ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Spacing.space6)
-        ) {
-            Box(
+        Column(Modifier.fillMaxWidth()) {
+            Row(
                 modifier = Modifier
-                    .size(Spacing.space8)
-                    .background(dotColor, CircleShape)
-            )
-            Text(
-                text = if (healthy) "정상" else "오류",
-                style = MaterialTheme.typography.bodySmall,
-                color = dotColor
-            )
+                    .fillMaxWidth()
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { onToggleExpand() }
+                    .padding(horizontal = CardPaddingHorizontal, vertical = RowVertical),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.space12),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        painter = painterResource(iconRes),
+                        contentDescription = title,
+                        modifier = Modifier.size(Spacing.space28),
+                        tint = Primary
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(Spacing.space2)) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextPrimary
+                        )
+                        subtitle?.let { sub ->
+                            Text(
+                                text = sub,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+                Icon(
+                    imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = if (expanded) "접기" else "펼치기",
+                    tint = TextSecondary
+                )
+            }
+            if (expanded) {
+                HorizontalDivider(
+                    thickness = Spacing.hairline,
+                    color = TextSecondary.copy(alpha = 0.2f)
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = CardPaddingHorizontal,
+                            end = CardPaddingHorizontal,
+                            top = Spacing.space12,
+                            bottom = CardPaddingBottom
+                        )
+                ) {
+                    content()
+                }
+            }
         }
     }
 }

@@ -39,6 +39,35 @@ internal fun DocumentSnapshot.parseMarketThemes(field: String = "themes"): List<
     }
 }
 
+/** `market/themes/by_no/{theme_no}` 및 `market/industries/by_no/{no}` 문서 → [MarketTheme]. */
+internal fun DocumentSnapshot.toMarketThemeDoc(): MarketTheme? {
+    if (!exists()) return null
+    val m = data ?: return null
+    val themeName = stringField(m, "theme_name", "themeName", "name")?.trim().orEmpty()
+    if (themeName.isBlank()) return null
+    val changeRate = stringField(m, "change_rate", "changeRate").orEmpty()
+    val themeNo = longField(m, "no", "theme_no", "themeNo") ?: id.trim().toLongOrNull()
+    val stocksRaw = m["stocks"] ?: m["stockList"] ?: m["items"]
+    val stocks = when (stocksRaw) {
+        is List<*> -> stocksRaw.mapNotNull { (it as? Map<*, *>)?.toThemeStock() }
+        else -> {
+            if (stocksRaw != null) {
+                Log.w("FirestoreMappers", "toMarketThemeDoc: stocks 필드가 List가 아님 type=${stocksRaw::class.java.name}")
+            }
+            emptyList()
+        }
+    }
+    val categoryInfo =
+        stringField(m, "description", "categoryInfo", "category_info")?.trim().orEmpty()
+    return MarketTheme(
+        themeName = themeName,
+        changeRate = changeRate,
+        stocks = stocks,
+        themeNo = themeNo,
+        categoryInfo = categoryInfo,
+    )
+}
+
 @Suppress("UNCHECKED_CAST")
 private fun Any?.asArticleList(): List<Article> {
     if (this !is List<*>) return emptyList()
@@ -126,7 +155,7 @@ private fun parseDirection(raw: Any?): MarketDirection = when (raw) {
 }
 
 private fun Map<*, *>.toMarketTheme(): MarketTheme? {
-    val themeName = stringField(this, "theme_name", "themeName")?.trim().orEmpty()
+    val themeName = stringField(this, "theme_name", "themeName", "name")?.trim().orEmpty()
     if (themeName.isBlank()) return null
     val changeRate = stringField(this, "change_rate", "changeRate").orEmpty()
     val themeNo = longField(this, "no", "theme_no", "themeNo")
@@ -140,12 +169,14 @@ private fun Map<*, *>.toMarketTheme(): MarketTheme? {
             emptyList()
         }
     }
+    val categoryInfo =
+        stringField(this, "description", "categoryInfo", "category_info")?.trim().orEmpty()
     return MarketTheme(
         themeName = themeName,
         changeRate = changeRate,
         stocks = stocks,
         themeNo = themeNo,
-        categoryInfo = "",
+        categoryInfo = categoryInfo,
     )
 }
 

@@ -10,7 +10,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.sapiens.app.data.store.UserPreferencesRepository
@@ -18,7 +17,6 @@ import com.sapiens.app.ui.main.MainScreen
 import com.sapiens.app.ui.theme.SapiensTheme
 import com.sapiens.app.ui.theme.applyThemePalette
 import androidx.core.view.WindowCompat
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,8 +54,6 @@ private fun SapiensApp() {
         initial = UserPreferencesRepository.THEME_DARK
     )
     var isDarkTheme by remember { mutableStateOf(true) }
-    val coroutineScope = rememberCoroutineScope()
-
     LaunchedEffect(savedThemeMode) {
         isDarkTheme = savedThemeMode != UserPreferencesRepository.THEME_LIGHT
     }
@@ -67,17 +63,6 @@ private fun SapiensApp() {
     }
 
     SapiensTheme(darkTheme = isDarkTheme) {
-        MainScreen(
-            isDarkTheme = isDarkTheme,
-            onThemeChange = { darkMode ->
-                isDarkTheme = darkMode
-                coroutineScope.launch {
-                    preferencesRepository.setThemeMode(
-                        if (darkMode) UserPreferencesRepository.THEME_DARK
-                        else UserPreferencesRepository.THEME_LIGHT
-                    )
-                }
-            }
-        )
+        MainScreen()
     }
 }

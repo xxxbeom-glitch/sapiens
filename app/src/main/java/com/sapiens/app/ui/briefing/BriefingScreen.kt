@@ -37,8 +37,7 @@ fun BriefingScreen(
     bookmarksRepository: ArticleBookmarksRepository
 ) {
     val isLoading by viewModel.isLoading.collectAsState()
-    val hankyungBriefingArticles by viewModel.hankyungBriefingArticles.collectAsState()
-    val maeilBriefingArticles by viewModel.maeilBriefingArticles.collectAsState()
+    val domesticBriefingArticles by viewModel.domesticBriefingArticles.collectAsState()
     val usArticles by viewModel.usArticles.collectAsState()
     val marketIndices by viewModel.marketIndices.collectAsState()
     val marketUpdatedLabel by viewModel.marketUpdatedLabel.collectAsState()
@@ -71,9 +70,8 @@ fun BriefingScreen(
                 }
 
                 item {
-                    DomesticNewspapersBriefingCard(
-                        hankyungArticles = hankyungBriefingArticles,
-                        maeilArticles = maeilBriefingArticles,
+                    DomesticBriefingMixedCard(
+                        articles = domesticBriefingArticles,
                         onClickArticle = { selectedArticle = it },
                         modifier = Modifier.padding(bottom = Spacing.space8)
                     )

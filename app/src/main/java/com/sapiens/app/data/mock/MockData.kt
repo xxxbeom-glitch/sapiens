@@ -19,10 +19,11 @@ object MockData {
             sourceColor = "kr",
             headline = "데모 한국경제 신문 기사 제목 $i",
             summary = "Firestore briefing/hankyung 이 비었을 때 표시됩니다.",
-            time = "오전 6:${(40 + i).toString().padStart(2, '0')}",
+            time = String.format("2026-04-19 %02d:00", 8 + i),
             category = "경제",
             summaryPoints = listOf("파이프라인 실행 후 실제 한국경제 기사가 동기화됩니다."),
-            tag = "HK"
+            tag = "HK",
+            url = "https://demo.sapiens.invalid/briefing/hankyung/$i"
         )
     }
 
@@ -32,10 +33,11 @@ object MockData {
             sourceColor = "kr",
             headline = "데모 매일경제 신문 기사 제목 $i",
             summary = "Firestore briefing/maeil 이 비었을 때 표시됩니다.",
-            time = "오전 7:${(10 + i).toString().padStart(2, '0')}",
+            time = String.format("2026-04-19 %02d:30", 12 + i),
             category = "매크로",
             summaryPoints = listOf("파이프라인 실행 후 실제 매일경제 기사가 동기화됩니다."),
-            tag = "MK"
+            tag = "MK",
+            url = "https://demo.sapiens.invalid/briefing/maeil/$i"
         )
     }
 
@@ -115,6 +117,9 @@ object MockData {
             )
         )
     )
+
+    /** Firestore `market/industries` 비어 있을 때 업종 탭용(테마와 동일 [MarketTheme] 스키마). */
+    val marketIndustries: List<MarketTheme> = emptyList()
 
     val usReport = USReport(
         date = "4/18 현지시간",

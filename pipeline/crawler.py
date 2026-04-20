@@ -53,6 +53,14 @@ NAVER_STOCK_THEME_LIST_API = (
 )
 NAVER_STOCK_THEME_STOCKS_MAX = 6
 NAVER_STOCK_THEME_FETCH_SLEEP = 0.3
+
+NAVER_STOCK_UPJONG_MAX = 20
+NAVER_STOCK_UPJONG_LIST_API = (
+    "https://stock.naver.com/api/domestic/market/upjong/list"
+    f"?startIdx=0&pageSize={NAVER_STOCK_UPJONG_MAX}&sortType=changeRate"
+)
+NAVER_STOCK_UPJONG_STOCKS_MAX = 6
+NAVER_STOCK_UPJONG_FETCH_SLEEP = 0.3
 _NAVER_ARTICLE_THUMB_CACHE: dict[str, str] = {}
 
 
@@ -1259,6 +1267,8 @@ def _unwrap_json_array(payload: Any) -> list[Any]:
         "data",
         "body",
         "themes",
+        "upjong",
+        "upjongs",
         "items",
         "categories",
         "categoryList",
@@ -1306,6 +1316,18 @@ def _naver_theme_format_price(val: Any) -> str:
         return f"{n:,}"
     except (TypeError, ValueError):
         return s
+
+
+def _naver_theme_category_info_from_payload(payload: Any) -> str:
+    """theme/.../info 응답에서 categoryInfo 문자열 추출. 실패·누락 시 빈 문자열."""
+    if not isinstance(payload, dict):
+        return ""
+    val = payload.get("categoryInfo")
+    if val is None:
+        val = payload.get("categoryinfo")
+    if val is None:
+        return ""
+    return str(val).strip()
 
 
 def _naver_theme_list_from_api(payload: Any) -> list[dict[str, str]]:
@@ -1358,6 +1380,81 @@ def _naver_theme_format_signed_amount(val: Any) -> str:
         return s
 
 
+def _naver_stocklist_now_price_display(now_price: Any) -> str:
+    """stocklist `nowPrice` → 천단위 콤마 현재가 (예: 12890 → \"12,890\")."""
+    if now_price is None:
+        return ""
+    s = str(now_price).strip().replace(",", "")
+    if not s:
+        return ""
+    try:
+        x = float(s)
+        if x != x:  # NaN
+            return ""
+        if abs(x - round(x)) < 1e-9:
+            return f"{int(round(x)):,}"
+        return f"{x:,.2f}"
+    except (TypeError, ValueError):
+        return ""
+
+
+def _naver_stocklist_prev_change_display(prev_change_rate: Any, up_down_gb: Any) -> str | None:
+    """
+    stocklist `prevChangeRate` + `upDownGb` → 등락률 문자열.
+    1=하락, 2=상승, 3=보합, 4=하한가, 5=상한가.
+    1·2인데 등락률 값이 없으면 None (호출측에서 기존 파서로 폴백).
+    """
+    gb = str(up_down_gb or "").strip()
+    if gb == "5":
+        return "상한가"
+    if gb == "4":
+        return "하한가"
+    if gb == "3":
+        return "0%"
+    if gb not in ("1", "2"):
+        return None
+    raw = (
+        str(prev_change_rate).strip().rstrip("%").replace(",", "")
+        if prev_change_rate is not None
+        else ""
+    )
+    if raw == "":
+        return None
+    try:
+        mag = abs(float(raw))
+    except (TypeError, ValueError):
+        return None
+    s = f"{mag:.2f}"
+    if gb == "2":
+        return f"+{s}%"
+    return f"-{s}%"
+
+
+def _naver_stocklist_stock_price_and_change(item: dict) -> tuple[str, str]:
+    """테마·업종 stocklist 공통: nowPrice / prevChangeRate+upDownGb 우선, 없으면 기존 필드 폴백."""
+    now_p = item.get("nowPrice") or item.get("nowprice")
+    price = _naver_stocklist_now_price_display(now_p)
+    chg = _naver_stocklist_prev_change_display(
+        item.get("prevChangeRate"),
+        item.get("upDownGb"),
+    )
+    if not price:
+        price_raw = (
+            item.get("closePrice")
+            or item.get("closeprice")
+            or item.get("now")
+            or item.get("dealPrice")
+            or item.get("price")
+            or item.get("prpr")
+            or item.get("currentPrice")
+            or item.get("stockPrice")
+        )
+        price = _naver_theme_format_price(price_raw)
+    if chg is None:
+        chg = _naver_theme_stock_change_display(item)
+    return price, chg
+
+
 def _naver_theme_stock_change_display(item: dict) -> str:
     """
     stock.naver 테마 종목 1건 기준 등락률 문자열.
@@ -1370,7 +1467,7 @@ def _naver_theme_stock_change_display(item: dict) -> str:
     if gb == "4":
         return "하한가"
     if gb == "3":
-        return "0.00%"
+        return "0%"
 
     fr = item.get("fluctuationsRatio")
     if fr is None or (isinstance(fr, str) and not str(fr).strip()):
@@ -1413,8 +1510,8 @@ def _naver_theme_stock_change_display(item: dict) -> str:
 
 def _naver_theme_stocks_from_api(payload: Any, limit: int) -> list[dict[str, str]]:
     """
-    테마 종목 JSON → [{"name", "price", "change", "code"(있으면)}, ...]
-    최상위 리스트 각 항목: itemname, closePrice, fluctuationsRatio, upDownGb, itemCode 등.
+    테마 stocklist JSON → [{"name", "price", "change", "code"(있으면)}, ...]
+    우선 nowPrice·prevChangeRate·upDownGb ([_naver_stocklist_stock_price_and_change]), 없으면 기존 필드 폴백.
     """
     rows: list[dict[str, str]] = []
     for item in _unwrap_json_array(payload):
@@ -1431,17 +1528,7 @@ def _naver_theme_stocks_from_api(payload: Any, limit: int) -> list[dict[str, str
         ).strip()
         if not name:
             continue
-        price_raw = (
-            item.get("closePrice")
-            or item.get("closeprice")
-            or item.get("now")
-            or item.get("dealPrice")
-            or item.get("price")
-            or item.get("prpr")
-            or item.get("currentPrice")
-            or item.get("stockPrice")
-        )
-        change = _naver_theme_stock_change_display(item)
+        price, change = _naver_stocklist_stock_price_and_change(item)
         code_raw = (
             item.get("itemCode")
             or item.get("itemcode")
@@ -1460,7 +1547,7 @@ def _naver_theme_stocks_from_api(payload: Any, limit: int) -> list[dict[str, str
                 code_str = digits.zfill(6) if len(digits) <= 6 else digits
         row: dict[str, str] = {
             "name": name,
-            "price": _naver_theme_format_price(price_raw),
+            "price": price,
             "change": change,
         }
         if code_str:
@@ -1474,7 +1561,8 @@ def _naver_theme_stocks_from_api(payload: Any, limit: int) -> list[dict[str, str
 def crawl_naver_stock_themes() -> list[dict[str, Any]]:
     """
     네이버 증권 stock.naver.com API — 국내 테마 상위 NAVER_STOCK_THEME_MAX개 및 테마별 종목 최대 NAVER_STOCK_THEME_STOCKS_MAX개.
-    반환: [{"theme_name", "change_rate", "stocks": [{"name","price","change","code"}, ...]}, ...]
+    반환: [{"theme_id", "theme_name", "change_rate", "description", "stocks": [...]}, ...]
+    description: theme/{{no}}/info 의 categoryInfo (실패 시 빈 문자열, 파이프라인 계속).
     """
     try:
         raw_list = _fetch_stock_naver_json(NAVER_STOCK_THEME_LIST_API)
@@ -1505,16 +1593,118 @@ def crawl_naver_stock_themes() -> list[dict[str, Any]]:
                 if raw_stocks is not None
                 else []
             )
+            time.sleep(NAVER_STOCK_THEME_FETCH_SLEEP)
+            info_url = (
+                "https://stock.naver.com/api/domestic/market/theme/"
+                f"{theme_id}/info?marketType=ALL"
+            )
+            raw_info = _fetch_stock_naver_json(info_url)
+            description = _naver_theme_category_info_from_payload(raw_info)
             out.append(
                 {
+                    "theme_id": theme_id,
                     "theme_name": theme_name,
                     "change_rate": change_rate,
+                    "description": description,
                     "stocks": stocks[:NAVER_STOCK_THEME_STOCKS_MAX],
                 }
             )
         return out
     except Exception as e:
         logger.exception("crawl_naver_stock_themes 실패: %s", e)
+        return []
+
+
+def _naver_upjong_stocks_from_api(payload: Any, limit: int) -> list[dict[str, str]]:
+    """
+    업종 종목 JSON → [{"name", "price", "change", "code"(있으면)}, ...]
+    nowPrice(현재가), prevChangeRate(등락률), upDownGb(부호), itemname, itemcode
+    """
+    rows: list[dict[str, str]] = []
+    for item in _unwrap_json_array(payload):
+        if not isinstance(item, dict):
+            continue
+        name = str(
+            item.get("itemname")
+            or item.get("itemName")
+            or item.get("stockName")
+            or item.get("name")
+            or ""
+        ).strip()
+        if not name:
+            continue
+        price, change = _naver_stocklist_stock_price_and_change(item)
+        code_raw = (
+            item.get("itemcode")
+            or item.get("itemCode")
+            or item.get("stockCd")
+            or item.get("stockCode")
+            or item.get("isuCd")
+            or item.get("code")
+        )
+        code_str = ""
+        if code_raw is not None and str(code_raw).strip() != "":
+            digits = "".join(ch for ch in str(code_raw).strip() if ch.isdigit())
+            if digits:
+                code_str = digits.zfill(6) if len(digits) <= 6 else digits
+        row: dict[str, str] = {
+            "name": name,
+            "price": price,
+            "change": change,
+        }
+        if code_str:
+            row["code"] = code_str
+        rows.append(row)
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def crawl_naver_stock_upjong() -> list[dict[str, Any]]:
+    """
+    네이버 증권 국내 업종 상위 NAVER_STOCK_UPJONG_MAX개 및 업종별 종목 최대 NAVER_STOCK_UPJONG_STOCKS_MAX개.
+    반환: [{"industry_id", "industry_name", "change_rate", "stocks": [...]}, ...]
+    """
+    try:
+        raw_list = _fetch_stock_naver_json(NAVER_STOCK_UPJONG_LIST_API)
+        if raw_list is None:
+            return []
+        logger.info("업종 목록 API 응답 앞 500자: %s", str(raw_list)[:500])
+
+        metas = _naver_theme_list_from_api(raw_list)
+        if not metas:
+            logger.warning("crawl_naver_stock_upjong: 업종 목록 파싱 결과 없음")
+            return []
+        metas = metas[:NAVER_STOCK_UPJONG_MAX]
+
+        out: list[dict[str, Any]] = []
+        for meta in metas:
+            time.sleep(NAVER_STOCK_UPJONG_FETCH_SLEEP)
+            industry_id = meta["theme_id"]
+            industry_name = meta["theme_name"]
+            change_rate = meta["change_rate"]
+            stocks_url = (
+                "https://stock.naver.com/api/domestic/market/upjong/"
+                f"{industry_id}/stocklist?marketType=ALL&orderType=priceTop&startIdx=0"
+                f"&pageSize={NAVER_STOCK_UPJONG_STOCKS_MAX}"
+            )
+            raw_stocks = _fetch_stock_naver_json(stocks_url)
+            stocks = (
+                _naver_upjong_stocks_from_api(raw_stocks, NAVER_STOCK_UPJONG_STOCKS_MAX)
+                if raw_stocks is not None
+                else []
+            )
+            out.append(
+                {
+                    "industry_id": industry_id,
+                    "industry_name": industry_name,
+                    "change_rate": change_rate,
+                    "stocks": stocks[:NAVER_STOCK_UPJONG_STOCKS_MAX],
+                }
+            )
+        return out
+    except Exception as e:
+        logger.exception("crawl_naver_stock_upjong 실패: %s", e)
         return []
 
 

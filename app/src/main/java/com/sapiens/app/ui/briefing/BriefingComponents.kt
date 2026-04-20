@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -51,6 +50,7 @@ import com.sapiens.app.ui.theme.Card
 import com.sapiens.app.ui.theme.CardPaddingBottom
 import com.sapiens.app.ui.theme.CardPaddingHorizontal
 import com.sapiens.app.ui.theme.CardPaddingVertical
+import com.sapiens.app.ui.theme.RowVertical
 import com.sapiens.app.ui.theme.MarketDown
 import com.sapiens.app.ui.theme.MarketFlat
 import com.sapiens.app.ui.theme.MarketUp
@@ -61,9 +61,6 @@ import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
 import androidx.compose.foundation.shape.CircleShape
 import kotlinx.coroutines.delay
-
-/** 국내 주요뉴스 페이저: 페이지마다 동일 높이(스와이프 시 상하 점프 방지). 칩+2줄 헤드라인+소제목 4줄+패딩 기준. */
-private val DomesticBriefingPagerFixedHeight = Spacing.space332
 
 @Composable
 fun SectionLabel(
@@ -112,7 +109,12 @@ fun MorningSourceCard(
         border = BorderStroke(Spacing.hairline, TextSecondary.copy(alpha = 0.22f))
     ) {
         Column(
-            modifier = Modifier.padding(Spacing.space12)
+            modifier = Modifier.padding(
+                start = CardPaddingHorizontal,
+                end = CardPaddingHorizontal,
+                top = CardPaddingVertical,
+                bottom = CardPaddingBottom
+            )
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -153,11 +155,13 @@ fun MorningSourceCard(
                 )
             }
 
-            HorizontalDivider(
-                color = TextSecondary.copy(alpha = 0.2f),
-                thickness = Spacing.hairline,
-                modifier = Modifier.padding(top = Spacing.space10)
-            )
+            if (topArticles.size > 1) {
+                HorizontalDivider(
+                    color = TextSecondary.copy(alpha = 0.2f),
+                    thickness = Spacing.hairline,
+                    modifier = Modifier.padding(top = Spacing.space10)
+                )
+            }
 
             topArticles.drop(1).forEachIndexed { index, article ->
                 Row(
@@ -181,7 +185,8 @@ fun MorningSourceCard(
                 if (index < topArticles.drop(1).lastIndex) {
                     HorizontalDivider(
                         color = TextSecondary.copy(alpha = 0.2f),
-                        thickness = Spacing.hairline
+                        thickness = Spacing.hairline,
+                        modifier = Modifier.padding(vertical = RowVertical)
                     )
                 }
             }
@@ -189,18 +194,17 @@ fun MorningSourceCard(
     }
 }
 
+/**
+ * 국내 주요뉴스: 한경·매경 풀 합산 후 발행 시각 기준 상위 10건을 단일 카드로 표시.
+ * (상단 1건 강조 + 하단 나머지 리스트)
+ */
 @Composable
-fun DomesticNewspapersBriefingCard(
-    hankyungArticles: List<Article>,
-    maeilArticles: List<Article>,
+fun DomesticBriefingMixedCard(
+    articles: List<Article>,
     onClickArticle: (Article) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val pages = listOf(hankyungArticles.take(5), maeilArticles.take(5))
-    if (pages[0].isEmpty() && pages[1].isEmpty()) return
-
-    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
-    val publisherLabels = listOf("한국경제", "매일경제")
+    if (articles.isEmpty()) return
 
     Card(
         modifier = modifier
@@ -208,72 +212,19 @@ fun DomesticNewspapersBriefingCard(
             .padding(horizontal = Spacing.space16),
         shape = AppShapes.card
     ) {
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(DomesticBriefingPagerFixedHeight)
-                .clip(AppShapes.card)
-        ) {
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize()
-            ) { page ->
-                NewspaperBriefingFiveList(
-                    articles = pages[page],
-                    publisherChipLabel = publisherLabels[page],
-                    onClickArticle = onClickArticle,
-                    modifier = Modifier.fillMaxSize()
+                .background(Card)
+                .padding(
+                    start = Spacing.space24,
+                    end = Spacing.space24,
+                    top = Spacing.space26,
+                    bottom = Spacing.space26
                 )
-            }
-        }
-    }
-}
-
-/** 브리핑 국내 신문 카드 — 언론사 태그 (CategoryChip보다 한 단계 작게). */
-@Composable
-private fun BriefingPublisherChip(label: String) {
-    Surface(
-        color = Accent.copy(alpha = 0.14f),
-        shape = AppShapes.chipTight
-    ) {
-        Text(
-            text = label,
-            style = SapiensTextStyles.briefingPublisherChip,
-            color = Accent,
-            modifier = Modifier.padding(horizontal = Spacing.space6, vertical = Spacing.space2)
-        )
-    }
-}
-
-@Composable
-private fun NewspaperBriefingFiveList(
-    articles: List<Article>,
-    publisherChipLabel: String,
-    onClickArticle: (Article) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Card)
-            .padding(
-                start = CardPaddingHorizontal,
-                end = CardPaddingHorizontal,
-                top = CardPaddingVertical,
-                bottom = CardPaddingBottom
-            ),
-        verticalArrangement = if (articles.isEmpty()) Arrangement.Center else Arrangement.Top
-    ) {
-        if (articles.isEmpty()) {
-            Text(
-                text = "불러온 기사가 없습니다.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary
-            )
-        } else {
-            val topArticles = articles.take(5)
-            val first = topArticles.first()
-            BriefingPublisherChip(label = publisherChipLabel)
+        ) {
+            val first = articles.first()
+            BriefingPublisherChip(label = first.source.ifBlank { "국내" })
             Spacer(modifier = Modifier.height(Spacing.space8))
             Row(
                 modifier = Modifier
@@ -294,15 +245,18 @@ private fun NewspaperBriefingFiveList(
                 )
             }
 
-            if (topArticles.size > 1) {
+            if (articles.size > 1) {
                 HorizontalDivider(
                     color = TextSecondary.copy(alpha = 0.2f),
                     thickness = Spacing.hairline,
-                    modifier = Modifier.padding(top = Spacing.space10)
+                    modifier = Modifier.padding(
+                        top = Spacing.space6 + Spacing.space2,
+                        bottom = Spacing.space6
+                    )
                 )
             }
 
-            topArticles.drop(1).forEachIndexed { index, article ->
+            articles.drop(1).forEachIndexed { index, article ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -322,14 +276,31 @@ private fun NewspaperBriefingFiveList(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                if (index < topArticles.drop(1).lastIndex) {
+                if (index < articles.drop(1).lastIndex) {
                     HorizontalDivider(
                         color = TextSecondary.copy(alpha = 0.2f),
-                        thickness = Spacing.hairline
+                        thickness = Spacing.hairline,
+                        modifier = Modifier.padding(vertical = Spacing.space6)
                     )
                 }
             }
         }
+    }
+}
+
+/** 브리핑 국내 신문 카드 — 언론사 태그 (CategoryChip보다 한 단계 작게). */
+@Composable
+private fun BriefingPublisherChip(label: String) {
+    Surface(
+        color = Accent.copy(alpha = 0.14f),
+        shape = AppShapes.chipTight
+    ) {
+        Text(
+            text = label,
+            style = SapiensTextStyles.briefingPublisherChip,
+            color = Accent,
+            modifier = Modifier.padding(horizontal = Spacing.space6, vertical = Spacing.space2)
+        )
     }
 }
 
@@ -390,7 +361,7 @@ fun MorningCardPager(
                         top = CardPaddingVertical,
                         bottom = CardPaddingBottom
                     ),
-                verticalArrangement = Arrangement.spacedBy(Spacing.space10)
+                verticalArrangement = Arrangement.Top
             ) {
                 HorizontalPager(
                     state = pagerState,
@@ -405,7 +376,7 @@ fun MorningCardPager(
                                 indication = null,
                                 interactionSource = remember { MutableInteractionSource() }
                             ) { onClickArticle(article) },
-                        verticalArrangement = Arrangement.spacedBy(Spacing.space10)
+                        verticalArrangement = Arrangement.Top
                     ) {
                         Box(
                             modifier = Modifier
@@ -422,6 +393,8 @@ fun MorningCardPager(
                             )
                         }
 
+                        Spacer(modifier = Modifier.height(RowVertical))
+
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -437,7 +410,11 @@ fun MorningCardPager(
                             )
                         }
 
-                        HorizontalDivider(color = TextSecondary.copy(alpha = 0.24f))
+                        HorizontalDivider(
+                            color = TextSecondary.copy(alpha = 0.24f),
+                            thickness = Spacing.hairline,
+                            modifier = Modifier.padding(vertical = RowVertical)
+                        )
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -603,10 +580,10 @@ fun USMajorArticlesCard(
             modifier = Modifier
                 .background(Card)
                 .padding(
-                    start = CardPaddingHorizontal,
-                    end = CardPaddingHorizontal,
-                    top = CardPaddingVertical,
-                    bottom = CardPaddingBottom
+                    start = Spacing.space24,
+                    end = Spacing.space24,
+                    top = Spacing.space26,
+                    bottom = Spacing.space26
                 )
         ) {
             if (articles.isEmpty()) {
@@ -614,7 +591,7 @@ fun USMajorArticlesCard(
                     text = "불러온 기사가 없습니다.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
-                    modifier = Modifier.padding(vertical = Spacing.space16)
+                    modifier = Modifier.padding(vertical = RowVertical)
                 )
             } else {
                 val first = articles.first()
@@ -643,7 +620,10 @@ fun USMajorArticlesCard(
                     HorizontalDivider(
                         color = TextSecondary.copy(alpha = 0.2f),
                         thickness = Spacing.hairline,
-                        modifier = Modifier.padding(top = Spacing.space10)
+                        modifier = Modifier.padding(
+                            top = Spacing.space6 + Spacing.space2,
+                            bottom = Spacing.space6
+                        )
                     )
                 }
 
@@ -670,7 +650,8 @@ fun USMajorArticlesCard(
                     if (index < articles.drop(1).lastIndex) {
                         HorizontalDivider(
                             color = TextSecondary.copy(alpha = 0.2f),
-                            thickness = Spacing.hairline
+                            thickness = Spacing.hairline,
+                            modifier = Modifier.padding(vertical = Spacing.space6)
                         )
                     }
                 }

@@ -7,4 +7,6 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <!-- 앱 기본 다크 배경과 동일 — 시스템 스플래시(12+) 배경용 -->
+    <color name="splash_screen_background">#FF151419</color>
 </resources>

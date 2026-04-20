@@ -48,6 +48,15 @@ val SurfaceHairlineOnDark = Color(0x14FFFFFF)
 /** 어두운 카드 위 얇은 구분선(화이트 ~6%). */
 val DividerOnMutedSurface = Color.White.copy(alpha = 0.06f)
 
+/** 카드·시트 보조 채움·구분선·아이콘 고스트 배경용 알파 토큰. */
+object ContentAlpha {
+    const val onCardSurface = 0.08f
+    const val hairlineOnSecondary = 0.2f
+    const val iconGhost = 0.15f
+    const val modalScrim = 0.6f
+    const val sheetDragHandleOnSecondary = 0.5f
+}
+
 // --- 뉴스 카테고리 칩 (배경, 글자) ---
 object CategoryChipPalette {
     val economyBg = Color(0xFF1A2F1A)

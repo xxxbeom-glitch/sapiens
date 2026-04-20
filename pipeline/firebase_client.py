@@ -11,11 +11,23 @@ from typing import Any, List
 
 import firebase_admin
 from firebase_admin import credentials, firestore
-from google.cloud.firestore import SERVER_TIMESTAMP
+from google.cloud.firestore import DELETE_FIELD, SERVER_TIMESTAMP
 
 logger = logging.getLogger(__name__)
 
 _db: firestore.Client | None = None
+
+# 뉴스·브리핑 피드 문서(단일 문서 + articles 배열). briefing: 한경·매경 = 국내/해외 신문 브리핑 슬롯.
+_NEWS_FEED_DOC_IDS = ("realtime", "popular", "main", "overseas_stocks", "overseas_tech")
+_BRIEFING_FEED_DOC_IDS = ("hankyung", "maeil")  # 제품 상 domestic/overseas 신문 풀과 대응
+
+_SAVED_ARTICLES = "saved_articles"
+_MARKET = "market"
+_MARKET_THEMES_PARENT_DOC = "themes"
+_MARKET_THEMES_SUBCOL = "by_no"
+_MARKET_INDUSTRIES_PARENT_DOC = "industries"
+_MARKET_INDUSTRIES_SUBCOL = "by_no"
+_MARKET_INDICATORS_DOC = "indicators"
 
 
 def _ensure_firebase_app() -> None:
@@ -77,40 +89,120 @@ def _get_db() -> firestore.Client:
     return _db
 
 
+def _list_saved_article_ids(db: firestore.Client) -> set[str]:
+    """saved_articles 컬렉션의 문서 ID(article_id) 집합. 실패 시 빈 집합."""
+    out: set[str] = set()
+    try:
+        for doc in db.collection(_SAVED_ARTICLES).stream():
+            did = (doc.id or "").strip()
+            if did:
+                out.add(did)
+    except Exception as e:
+        logger.exception("saved_articles 문서 ID 조회 실패, 보호 목록 없이 진행: %s", e)
+    return out
+
+
+def _recursive_delete_subcollections(
+    doc_ref: firestore.DocumentReference, protected_ids: set[str]
+) -> None:
+    """문서 하위 모든 서브컬렉션의 문서를 재귀 삭제(문서 ID가 protected_ids인 것은 스킵)."""
+    try:
+        subcols = doc_ref.collections()
+    except Exception as e:
+        logger.warning("서브컬렉션 목록 조회 실패 %s: %s", doc_ref.path, e)
+        return
+    for sub in subcols:
+        try:
+            for child in sub.stream():
+                if child.id in protected_ids:
+                    continue
+                try:
+                    _recursive_delete_subcollections(child.reference, protected_ids)
+                    child.reference.delete()
+                except Exception as e:
+                    logger.exception("하위 문서 삭제 실패 %s: %s", child.reference.path, e)
+        except Exception as e:
+            logger.exception("서브컬렉션 %s/%s 순회 실패: %s", doc_ref.path, sub.id, e)
+
+
+def _delete_feed_document(
+    db: firestore.Client, collection: str, doc_id: str, protected_ids: set[str]
+) -> None:
+    """피드 문서 및(있을 경우) 하위 문서 삭제. 루트 문서 ID는 보호 목록과 무관하게 삭제."""
+    ref = db.collection(collection).document(doc_id)
+    try:
+        snap = ref.get()
+        if not snap.exists:
+            return
+    except Exception as e:
+        logger.exception("피드 문서 조회 실패 %s/%s: %s", collection, doc_id, e)
+        return
+    try:
+        _recursive_delete_subcollections(ref, protected_ids)
+    except Exception as e:
+        logger.exception("피드 하위 삭제 중 오류 %s/%s: %s", collection, doc_id, e)
+    try:
+        ref.delete()
+    except Exception as e:
+        logger.exception("피드 문서 삭제 실패 %s/%s: %s", collection, doc_id, e)
+
+
+def clear_news_and_briefing_feeds() -> None:
+    """
+    크롤링 전 뉴스·브리핑 피드 문서를 비움.
+    saved_articles 에 등록된 article_id와 동일한 ID의 하위 문서는 삭제하지 않음.
+    """
+    db = _get_db()
+    protected = _list_saved_article_ids(db)
+    for doc_id in _NEWS_FEED_DOC_IDS:
+        _delete_feed_document(db, "news", doc_id, protected)
+    for doc_id in _BRIEFING_FEED_DOC_IDS:
+        _delete_feed_document(db, "briefing", doc_id, protected)
+
+
 def save_briefing_hankyung_articles(articles: List[dict[str, Any]]) -> None:
     """briefing/hankyung 문서에 articles + updated_at 저장."""
-    db = _get_db()
-    db.collection("briefing").document("hankyung").set(
-        {
-            "articles": articles,
-            "updated_at": SERVER_TIMESTAMP,
-        },
-        merge=True,
-    )
+    try:
+        db = _get_db()
+        db.collection("briefing").document("hankyung").set(
+            {
+                "articles": articles,
+                "updated_at": SERVER_TIMESTAMP,
+            },
+            merge=False,
+        )
+    except Exception as e:
+        logger.exception("save_briefing_hankyung_articles 실패: %s", e)
 
 
 def save_briefing_maeil_articles(articles: List[dict[str, Any]]) -> None:
     """briefing/maeil 문서에 articles + updated_at 저장."""
-    db = _get_db()
-    db.collection("briefing").document("maeil").set(
-        {
-            "articles": articles,
-            "updated_at": SERVER_TIMESTAMP,
-        },
-        merge=True,
-    )
+    try:
+        db = _get_db()
+        db.collection("briefing").document("maeil").set(
+            {
+                "articles": articles,
+                "updated_at": SERVER_TIMESTAMP,
+            },
+            merge=False,
+        )
+    except Exception as e:
+        logger.exception("save_briefing_maeil_articles 실패: %s", e)
 
 
 def save_us_market_articles(articles: List[dict[str, Any]]) -> None:
     """briefing/us_market 문서에 articles (Yahoo market 뉴스 요약 등)."""
-    db = _get_db()
-    db.collection("briefing").document("us_market").set(
-        {
-            "articles": articles,
-            "updated_at": SERVER_TIMESTAMP,
-        },
-        merge=True,
-    )
+    try:
+        db = _get_db()
+        db.collection("briefing").document("us_market").set(
+            {
+                "articles": articles,
+                "updated_at": SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+    except Exception as e:
+        logger.exception("save_us_market_articles 실패: %s", e)
 
 
 def save_us_articles(articles: List[dict[str, Any]]) -> None:
@@ -119,36 +211,138 @@ def save_us_articles(articles: List[dict[str, Any]]) -> None:
 
 
 def save_market_indicators(indicators: List[dict[str, Any]]) -> None:
-    """briefing/us_market 문서에 indicators 병합 저장."""
-    db = _get_db()
-    db.collection("briefing").document("us_market").set(
-        {
-            "indicators": indicators,
-            "updated_at": SERVER_TIMESTAMP,
-        },
-        merge=True,
-    )
+    """market/indicators 단일 문서에 indicators + updatedAt 덮어쓰기(merge)."""
+    try:
+        db = _get_db()
+        db.collection(_MARKET).document(_MARKET_INDICATORS_DOC).set(
+            {
+                "indicators": indicators,
+                "updatedAt": SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+    except Exception as e:
+        logger.exception("save_market_indicators 실패: %s", e)
 
 
 def save_market_themes(themes: List[dict[str, Any]]) -> None:
-    """market/themes 문서에 테마 랭킹·종목 목록 + updated_at 저장."""
+    """
+    market/themes/by_no/{theme_no} 문서마다 name, change_rate, stocks, description,
+    updatedAt, rank 를 set(merge=True). description: 네이버 테마 info categoryInfo.
+    이번 크롤에 없는 theme_no 문서는 삭제(saved_articles 보호는 테마 경로와 무관).
+    """
     db = _get_db()
-    db.collection("market").document("themes").set(
-        {
-            "themes": themes,
-            "updated_at": SERVER_TIMESTAMP,
-        },
-        merge=True,
+    parent = (
+        db.collection(_MARKET)
+        .document(_MARKET_THEMES_PARENT_DOC)
+        .collection(_MARKET_THEMES_SUBCOL)
     )
+    current_ids: set[str] = set()
+    for rank, theme in enumerate(themes):
+        tid = str(theme.get("theme_id") or theme.get("theme_no") or "").strip()
+        if not tid:
+            logger.warning("save_market_themes: theme_id 없음, 스킵: %s", theme.get("theme_name", "")[:40])
+            continue
+        current_ids.add(tid)
+        name = str(theme.get("theme_name") or "").strip()
+        change_rate = str(theme.get("change_rate") or "")
+        stocks = theme.get("stocks") or []
+        description = str(theme.get("description") or "").strip()
+        payload: dict[str, Any] = {
+            "name": name,
+            "change_rate": change_rate,
+            "stocks": stocks,
+            "description": description,
+            "updatedAt": SERVER_TIMESTAMP,
+            "rank": rank,
+        }
+        try:
+            parent.document(tid).set(payload, merge=True)
+        except Exception as e:
+            logger.exception("테마 문서 저장 실패 theme_no=%s: %s", tid, e)
+
+    try:
+        for doc in parent.stream():
+            if doc.id not in current_ids:
+                try:
+                    doc.reference.delete()
+                except Exception as e:
+                    logger.exception("구 테마 문서 삭제 실패 %s: %s", doc.reference.path, e)
+    except Exception as e:
+        logger.exception("테마 목록 조회(정리) 실패: %s", e)
+
+    # 구버전 단일 문서 market/themes 의 themes[] 배열 필드 제거(서브컬렉션 by_no 는 유지).
+    try:
+        leg_ref = db.collection(_MARKET).document(_MARKET_THEMES_PARENT_DOC)
+        legacy = leg_ref.get()
+        if legacy.exists and "themes" in (legacy.to_dict() or {}):
+            leg_ref.update({"themes": DELETE_FIELD})
+    except Exception as e:
+        logger.warning("구 market/themes 배열 필드 정리 실패(무시): %s", e)
+
+
+def save_market_industries(industries: List[dict[str, Any]]) -> None:
+    """
+    market/industries/by_no/{no} 문서마다 name, change_rate, stocks, updatedAt, rank 를 set(merge=True).
+    이번 크롤에 없는 no 문서는 삭제.
+    """
+    db = _get_db()
+    parent = (
+        db.collection(_MARKET)
+        .document(_MARKET_INDUSTRIES_PARENT_DOC)
+        .collection(_MARKET_INDUSTRIES_SUBCOL)
+    )
+    current_ids: set[str] = set()
+    for rank, row in enumerate(industries):
+        iid = str(
+            row.get("industry_id")
+            or row.get("industry_no")
+            or row.get("no")
+            or ""
+        ).strip()
+        if not iid:
+            logger.warning(
+                "save_market_industries: industry_id 없음, 스킵: %s",
+                str(row.get("industry_name", ""))[:40],
+            )
+            continue
+        current_ids.add(iid)
+        name = str(row.get("industry_name") or row.get("name") or "").strip()
+        change_rate = str(row.get("change_rate") or "")
+        stocks = row.get("stocks") or []
+        payload: dict[str, Any] = {
+            "name": name,
+            "change_rate": change_rate,
+            "stocks": stocks,
+            "updatedAt": SERVER_TIMESTAMP,
+            "rank": rank,
+        }
+        try:
+            parent.document(iid).set(payload, merge=True)
+        except Exception as e:
+            logger.exception("업종 문서 저장 실패 no=%s: %s", iid, e)
+
+    try:
+        for doc in parent.stream():
+            if doc.id not in current_ids:
+                try:
+                    doc.reference.delete()
+                except Exception as e:
+                    logger.exception("구 업종 문서 삭제 실패 %s: %s", doc.reference.path, e)
+    except Exception as e:
+        logger.exception("업종 목록 조회(정리) 실패: %s", e)
 
 
 def save_company_data(ticker: str, data: dict[str, Any]) -> None:
     """companies/{ticker} 문서에 병합 저장 + updated_at."""
-    db = _get_db()
-    db.collection("companies").document(ticker).set(
-        {**data, "updated_at": SERVER_TIMESTAMP},
-        merge=True,
-    )
+    try:
+        db = _get_db()
+        db.collection("companies").document(ticker).set(
+            {**data, "updated_at": SERVER_TIMESTAMP},
+            merge=True,
+        )
+    except Exception as e:
+        logger.exception("save_company_data 실패 [%s]: %s", ticker, e)
 
 
 def save_news_feed(articles: List[dict[str, Any]], feed_type: str) -> None:
@@ -158,35 +352,84 @@ def save_news_feed(articles: List[dict[str, Any]], feed_type: str) -> None:
     """
     if feed_type not in ("realtime", "popular", "main"):
         raise ValueError(f"Invalid feed_type: {feed_type}")
-    db = _get_db()
-    db.collection("news").document(feed_type).set(
-        {
-            "articles": articles,
-            "updated_at": SERVER_TIMESTAMP,
-        },
-        merge=True,
-    )
+    try:
+        db = _get_db()
+        db.collection("news").document(feed_type).set(
+            {
+                "articles": articles,
+                "updated_at": SERVER_TIMESTAMP,
+            },
+            merge=False,
+        )
+    except Exception as e:
+        logger.exception("save_news_feed 실패 [%s]: %s", feed_type, e)
 
 
 def save_overseas_stocks_articles(articles: List[dict[str, Any]]) -> None:
     """news/overseas_stocks 문서에 articles 배열 + updated_at (Yahoo 뉴스 HTML 피드)."""
-    db = _get_db()
-    db.collection("news").document("overseas_stocks").set(
-        {
-            "articles": articles,
-            "updated_at": SERVER_TIMESTAMP,
-        },
-        merge=True,
-    )
+    try:
+        db = _get_db()
+        db.collection("news").document("overseas_stocks").set(
+            {
+                "articles": articles,
+                "updated_at": SERVER_TIMESTAMP,
+            },
+            merge=False,
+        )
+    except Exception as e:
+        logger.exception("save_overseas_stocks_articles 실패: %s", e)
 
 
 def save_overseas_tech_articles(articles: List[dict[str, Any]]) -> None:
     """news/overseas_tech 문서에 articles 배열 + updated_at (Yahoo Tech HTML 피드)."""
-    db = _get_db()
-    db.collection("news").document("overseas_tech").set(
-        {
-            "articles": articles,
-            "updated_at": SERVER_TIMESTAMP,
-        },
-        merge=True,
-    )
+    try:
+        db = _get_db()
+        db.collection("news").document("overseas_tech").set(
+            {
+                "articles": articles,
+                "updated_at": SERVER_TIMESTAMP,
+            },
+            merge=False,
+        )
+    except Exception as e:
+        logger.exception("save_overseas_tech_articles 실패: %s", e)
+
+
+_SETTINGS = "settings"
+_AI_CONFIG_DOC = "ai_config"
+
+
+def get_ai_config() -> dict[str, bool]:
+    """
+    settings/ai_config — 파이프라인 AI 분기용.
+    문서 없거나 필드 없으면 True, True 기본.
+    """
+    defaults: dict[str, bool] = {"claude_enabled": True, "gemini_enabled": True}
+    try:
+        db = _get_db()
+        snap = db.collection(_SETTINGS).document(_AI_CONFIG_DOC).get()
+        if not snap.exists:
+            return dict(defaults)
+        d = snap.to_dict() or {}
+        return {
+            "claude_enabled": bool(d.get("claude_enabled", True)),
+            "gemini_enabled": bool(d.get("gemini_enabled", True)),
+        }
+    except Exception as e:
+        logger.exception("get_ai_config 실패, 기본값 사용: %s", e)
+        return dict(defaults)
+
+
+def set_ai_config_claude_enabled(enabled: bool) -> None:
+    """Claude 폴백 시 원격에서 claude 끄기 등."""
+    try:
+        db = _get_db()
+        db.collection(_SETTINGS).document(_AI_CONFIG_DOC).set(
+            {
+                "claude_enabled": enabled,
+                "updatedAt": SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+    except Exception as e:
+        logger.exception("set_ai_config_claude_enabled(%s) 실패: %s", enabled, e)

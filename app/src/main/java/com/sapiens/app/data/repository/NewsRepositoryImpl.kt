@@ -10,6 +10,7 @@ import com.sapiens.app.data.model.MarketIndexSnapshot
 import com.sapiens.app.data.model.MarketTheme
 import com.sapiens.app.data.mock.MockData
 import com.google.firebase.FirebaseApp
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import java.net.HttpURLConnection
 import java.net.URL
@@ -88,7 +89,7 @@ class NewsRepositoryImpl(
     }.distinctUntilChanged()
 
     override fun getMarketIndicators(): Flow<List<MarketIndicator>> = callbackFlow {
-        val reg = firestore.collection(COLLECTION_BRIEFING).document(DOC_US_MARKET)
+        val reg = firestore.collection(COLLECTION_MARKET).document(DOC_MARKET_INDICATORS)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     trySend(emptyList())
@@ -124,18 +125,24 @@ class NewsRepositoryImpl(
     }.distinctUntilChanged()
 
     override fun getMarketThemes(): Flow<List<MarketTheme>> = callbackFlow {
-        val reg = firestore.collection(COLLECTION_MARKET).document(DOC_MARKET_THEMES)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    trySend(emptyList())
-                    return@addSnapshotListener
-                }
-                if (snapshot == null) {
-                    trySend(emptyList())
-                    return@addSnapshotListener
-                }
-                trySend(snapshot.parseMarketThemes("themes"))
+        val coll = firestore.collection(COLLECTION_MARKET)
+            .document(DOC_MARKET_THEMES_ROOT)
+            .collection(SUB_MARKET_THEMES_BY_NO)
+        val reg = coll.addSnapshotListener { qs, error ->
+            if (error != null) {
+                trySend(emptyList())
+                return@addSnapshotListener
             }
+            if (qs == null) {
+                trySend(emptyList())
+                return@addSnapshotListener
+            }
+            val sorted = qs.documents.sortedWith(
+                compareBy<DocumentSnapshot> { it.getLong("rank") ?: Long.MAX_VALUE }
+                    .thenBy { it.id }
+            )
+            trySend(sorted.mapNotNull { it.toMarketThemeDoc() })
+        }
         awaitClose { reg.remove() }
     }.distinctUntilChanged()
 
@@ -355,7 +362,11 @@ class NewsRepositoryImpl(
         private const val COLLECTION_BRIEFING = "briefing"
         private const val COLLECTION_NEWS = "news"
         private const val COLLECTION_MARKET = "market"
-        private const val DOC_MARKET_THEMES = "themes"
+        /** `market/themes/by_no/{theme_no}` 부모 문서. */
+        private const val DOC_MARKET_THEMES_ROOT = "themes"
+        private const val SUB_MARKET_THEMES_BY_NO = "by_no"
+        /** `market/indicators` 시장 지표 문서. */
+        private const val DOC_MARKET_INDICATORS = "indicators"
         private const val DOC_HANKYUNG = "hankyung"
         private const val DOC_MAEIL = "maeil"
         private const val DOC_US_MARKET = "us_market"

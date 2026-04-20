@@ -1,5 +1,5 @@
 """
-Google Gemini API 기사 요약·시황 생성.
+기사 요약·시황·기업 분석: Firebase settings/ai_config 에 따른 Claude / Gemini 분기.
 """
 from __future__ import annotations
 
@@ -10,11 +10,17 @@ import re
 import time
 from typing import Any
 
+import anthropic
 from google import genai
 
 logger = logging.getLogger(__name__)
 
-MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
+CLAUDE_MODEL = "claude-haiku-4-5-20251001"
+
+# 파이프라인 시작 시 [configure_ai]로 설정 (기본: 둘 다 켜짐).
+_RUNTIME_CLAUDE_ENABLED = True
+_RUNTIME_GEMINI_ENABLED = True
 
 _gemini_client: Any = None
 SYSTEM = (
@@ -26,6 +32,14 @@ SYSTEM = (
 
 _HANGUL_RE = re.compile(r"[가-힣]")
 _LATIN_RE = re.compile(r"[A-Za-z]")
+
+# summarize_article JSON category — 국내·해외 동일. 앱 칩 색상과 맞춤.
+_SUMMARIZE_ARTICLE_CATEGORY_BLOCK = (
+    "category는 반드시 다음 중 하나만 사용하세요: "
+    "경제, IT·테크, 정치, 사회, 국제, 부동산, 산업, 금융, 빅테크\n"
+    "금리, 환율, 통화정책, 중앙은행, 국채·회사채 금리, 유동성 등 **통화·외환·금리·거시 흐름**을 다루는 기사는 **경제**로 분류하세요.\n"
+    "경제 전반·시장 분위기·지표 둔화 등 예전 '매크로'에 해당하는 주제도 **경제**로 분류하세요.\n"
+)
 
 
 def _contains_hangul(text: str) -> bool:
@@ -62,46 +76,64 @@ def _json_object_slice(s: str) -> str | None:
     return None
 
 
-# 비정상 입력(거대 한 줄)에 방어. 일반 잘림 응답의 `}` 누락은 보통 수십 개 이하.
-_MAX_TRAILING_CLOSING_BRACES = 64
+# 비정상 입력(거대 한 줄)에 방어. 잘림 보완용 `]`·`}` 추가 상한.
+_MAX_TRAILING_BRACKET_CLOSES = 128
 
 
-def _try_parse_dict_balance_closing_braces(s: str) -> dict[str, Any] | None:
+def _count_json_brackets_outside_strings(text: str) -> tuple[int, int, int, int]:
     """
-    응답이 잘려 닫는 `}`가 부족한 경우: 첫 `{` 이후 본문에서
-    열린 `{` / 닫힌 `}` 개수를 세서 부족한 수만큼(상한 _MAX_…) `}`를 이어 붙인 뒤
-    `json.loads`를 한 번 더 시도한다. (문자열 내부 괄호는 무시하는 단순 휴리스틱.)
+    문자열·이스케이프 밖에서만 `{` `}` `[` `]` 개수.
+    반환: (open_curly, close_curly, open_square, close_square)
     """
-    t = (s or "").strip()
-    i = t.find("{")
-    if i < 0:
+    oc = cc = osq = csq = 0
+    in_str = False
+    esc = False
+    for ch in text:
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            oc += 1
+        elif ch == "}":
+            cc += 1
+        elif ch == "[":
+            osq += 1
+        elif ch == "]":
+            csq += 1
+    return oc, cc, osq, csq
+
+
+def _try_repair_truncated_json_dict(core: str) -> dict[str, Any] | None:
+    """
+    잘린 JSON 객체 복구: 문자열 밖에서 (열린 [ − 닫힌 ])만큼 `]` 추가,
+    (열린 { − 닫힌 })만큼 `}` 추가 후 json.loads. 순서: ] 먼저, } 나중.
+    """
+    t = (core or "").strip()
+    if not t.startswith("{"):
         return None
-    core = t[i:].strip()
-    if not core.startswith("{"):
+    try:
+        parsed0: Any = json.loads(t)
+        if isinstance(parsed0, dict):
+            return parsed0
+    except json.JSONDecodeError:
+        pass
+    oc, cc, osq, csq = _count_json_brackets_outside_strings(t)
+    need_sq = min(max(0, osq - csq), _MAX_TRAILING_BRACKET_CLOSES)
+    need_br = min(max(0, oc - cc), _MAX_TRAILING_BRACKET_CLOSES)
+    if need_sq == 0 and need_br == 0:
         return None
-    open_c = core.count("{")
-    close_c = core.count("}")
-    deficit = open_c - close_c
-    if deficit <= 0:
-        return None
-    n_add = min(deficit, _MAX_TRAILING_CLOSING_BRACES)
-    if deficit > n_add:
-        logger.warning(
-            "JSON `}` 자동보완: 닫힘 부족 %d개 > 상한 %d — %d개만 이어 붙여 재시도",
-            deficit,
-            _MAX_TRAILING_CLOSING_BRACES,
-            n_add,
-        )
-    candidate = core + ("}" * n_add)
+    candidate = t + ("]" * need_sq) + ("}" * need_br)
     try:
         parsed: Any = json.loads(candidate)
         if isinstance(parsed, dict):
-            logger.info(
-                "JSON 파싱: 닫는 `}` %d개 보완 후 성공 (누락 %d, 적용 %d)",
-                n_add,
-                deficit,
-                n_add,
-            )
+            logger.info("JSON 파싱: 잘림 보완 성공 — ]+%d }+%d", need_sq, need_br)
             return parsed
     except json.JSONDecodeError:
         pass
@@ -111,7 +143,10 @@ def _try_parse_dict_balance_closing_braces(s: str) -> dict[str, Any] | None:
 def _extract_json(text: str) -> dict[str, Any] | str:
     """
     JSON 객체 파싱 시도.
-    성공 시 dict 반환. 실패 시 전처리된 문자열을 그대로 반환(호출부에서 dict 여부로 분기).
+    1) 전체 문자열 json.loads
+    2) 첫 `{` 이후: `]`·`}` 균형 보완 후 json.loads
+    3) 첫 `{`~마지막 `}` 슬라이스 후 동일 보완
+    성공 시 dict. 실패 시 원문 처리 문자열 반환(호출부에서 dict 여부로 분기).
     """
     s = _strip_json_code_fences(text)
     if not s:
@@ -122,8 +157,13 @@ def _extract_json(text: str) -> dict[str, Any] | str:
             return parsed
     except json.JSONDecodeError:
         pass
-    # 첫 `}`~마지막 `}` 슬라이스보다, 열/닫 중괄호 개수로 `}` 누락을 보정하는 쪽이 잘림 응답에 유리
-    fixed = _try_parse_dict_balance_closing_braces(s)
+    i = s.find("{")
+    if i >= 0:
+        from_first = s[i:].strip()
+        fixed = _try_repair_truncated_json_dict(from_first)
+        if fixed is not None:
+            return fixed
+    fixed = _try_repair_truncated_json_dict(s.strip())
     if fixed is not None:
         return fixed
     sub = _json_object_slice(s)
@@ -134,7 +174,7 @@ def _extract_json(text: str) -> dict[str, Any] | str:
                 return parsed
         except json.JSONDecodeError:
             pass
-        fixed_sub = _try_parse_dict_balance_closing_braces(sub)
+        fixed_sub = _try_repair_truncated_json_dict(sub.strip())
         if fixed_sub is not None:
             return fixed_sub
     return s
@@ -152,6 +192,115 @@ def _require_json_dict(text: str) -> dict[str, Any]:
     raise ValueError("model response was not valid JSON object")
 
 
+def configure_ai(*, claude_enabled: bool, gemini_enabled: bool) -> None:
+    """main.py에서 Firebase settings/ai_config 읽은 뒤 호출."""
+    global _RUNTIME_CLAUDE_ENABLED, _RUNTIME_GEMINI_ENABLED
+    _RUNTIME_CLAUDE_ENABLED = bool(claude_enabled)
+    _RUNTIME_GEMINI_ENABLED = bool(gemini_enabled)
+    logger.info(
+        "summarizer AI runtime: claude_enabled=%s gemini_enabled=%s",
+        _RUNTIME_CLAUDE_ENABLED,
+        _RUNTIME_GEMINI_ENABLED,
+    )
+
+
+def _ai_any_news_enabled() -> bool:
+    return _RUNTIME_CLAUDE_ENABLED or _RUNTIME_GEMINI_ENABLED
+
+
+def _ai_any_company_enabled() -> bool:
+    return _RUNTIME_CLAUDE_ENABLED or _RUNTIME_GEMINI_ENABLED
+
+
+def _disable_claude_in_firebase() -> None:
+    """Claude 실패 후 Gemini 폴백 시 원격 설정 끄기 + 런타임 반영."""
+    global _RUNTIME_CLAUDE_ENABLED
+    _RUNTIME_CLAUDE_ENABLED = False
+    try:
+        import firebase_client
+
+        firebase_client.set_ai_config_claude_enabled(False)
+    except Exception as e:
+        logger.warning("Firebase claude_enabled=false 반영 실패: %s", e)
+
+
+def _call_claude(user_content: str) -> str:
+    """Anthropic Messages API. 실패 시 예외, 빈 content 는 빈 문자열."""
+    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not key:
+        raise RuntimeError("ANTHROPIC_API_KEY 가 설정되어 있어야 합니다.")
+    prompt = f"{SYSTEM}\n\n{user_content}"
+    client = anthropic.Anthropic(api_key=key)
+    response = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=4096,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    blocks = getattr(response, "content", None) or []
+    if not blocks:
+        return ""
+    first = blocks[0]
+    raw = getattr(first, "text", None)
+    if raw is None and isinstance(first, dict):
+        raw = first.get("text")
+    return str(raw or "").strip()
+
+
+def _call_news_llm(user_content: str) -> str:
+    """
+    뉴스/브리핑/시황/큐레이션.
+    - 둘 다 false → 빈 문자열(호출측에서 요약 스킵·원제목 폴백).
+    - Claude만 true → Claude만.
+    - Gemini만 true → Gemini만.
+    - 둘 다 true → Claude 우선, 실패·빈 응답 시 Gemini 폴백 + Firebase claude_enabled=false.
+    """
+    if not _ai_any_news_enabled():
+        return ""
+    if _RUNTIME_CLAUDE_ENABLED and not _RUNTIME_GEMINI_ENABLED:
+        try:
+            return _call_claude(user_content)
+        except Exception as e:
+            logger.warning("Claude 뉴스/요약 호출 실패: %s", e)
+            return ""
+    if _RUNTIME_GEMINI_ENABLED and not _RUNTIME_CLAUDE_ENABLED:
+        return str(_call_gemini(user_content) or "").strip()
+    # 둘 다 true
+    try:
+        raw = _call_claude(user_content)
+        if raw:
+            return raw
+    except Exception as e:
+        logger.warning("Claude 뉴스/요약 호출 실패: %s", e)
+    logger.info("뉴스 요약: Claude 실패 또는 빈 응답 → Gemini 폴백, settings/ai_config claude 비활성화")
+    _disable_claude_in_firebase()
+    return str(_call_gemini(user_content) or "").strip()
+
+
+def _call_company_llm(user_content: str) -> str:
+    """
+    종목 분석. 분기 규칙은 [_call_news_llm] 과 동일 (Claude 우선, 둘 다 켜짐 시 동일 폴백).
+    """
+    if not _ai_any_company_enabled():
+        return ""
+    if _RUNTIME_CLAUDE_ENABLED and not _RUNTIME_GEMINI_ENABLED:
+        try:
+            return _call_claude(user_content)
+        except Exception as e:
+            logger.warning("Claude 기업 분석 호출 실패: %s", e)
+            return ""
+    if _RUNTIME_GEMINI_ENABLED and not _RUNTIME_CLAUDE_ENABLED:
+        return str(_call_gemini(user_content) or "").strip()
+    try:
+        raw = _call_claude(user_content)
+        if raw:
+            return raw
+    except Exception as e:
+        logger.warning("Claude 기업 분석 호출 실패: %s", e)
+    logger.info("기업 분석: Claude 실패 또는 빈 응답 → Gemini 폴백, settings/ai_config claude 비활성화")
+    _disable_claude_in_firebase()
+    return str(_call_gemini(user_content) or "").strip()
+
+
 def _get_gemini_client() -> Any:
     global _gemini_client
     if _gemini_client is not None:
@@ -163,14 +312,71 @@ def _get_gemini_client() -> Any:
     return _gemini_client
 
 
+def _stub_company_ai_result() -> dict[str, Any]:
+    """종목 분석 API 미사용 시 Firestore 호환 기본값."""
+    hs = {
+        "debt_ratio_status": "안정",
+        "current_ratio_status": "안정",
+        "equity_ratio_status": "안정",
+        "cash_status": "안정",
+        "interest_status": "안정",
+    }
+    return {
+        "business": "",
+        "revenue_model": "",
+        "outlook_2026": "",
+        "risk_factors": "",
+        "capital": "",
+        "health_summary": "",
+        "ai_analyst_summary": "",
+        "health_status": hs,
+        "health_score": 3,
+    }
+
+
+def _finalize_company_ai_dict(data: dict[str, Any]) -> dict[str, Any]:
+    required_str_keys = (
+        "business",
+        "revenue_model",
+        "outlook_2026",
+        "risk_factors",
+        "capital",
+        "health_summary",
+        "ai_analyst_summary",
+    )
+    for k in required_str_keys:
+        if k not in data or data[k] is None:
+            data[k] = ""
+        else:
+            data[k] = str(data[k])
+    hs = data.get("health_status")
+    if not isinstance(hs, dict):
+        hs = {}
+        data["health_status"] = hs
+    for hk in (
+        "debt_ratio_status",
+        "current_ratio_status",
+        "equity_ratio_status",
+        "cash_status",
+        "interest_status",
+    ):
+        hs.setdefault(hk, "안정")
+    try:
+        sc = int(data.get("health_score"))
+    except (TypeError, ValueError):
+        sc = 3
+    data["health_score"] = max(0, min(5, sc))
+    return data
+
+
 def _call_gemini(user_content: str) -> str:
     try:
         client = _get_gemini_client()
         prompt = f"{SYSTEM}\n\n{user_content}"
         response = client.models.generate_content(
-            model=MODEL,
+            model=GEMINI_MODEL,
             contents=prompt,
-            config={"max_output_tokens": 2048},
+            config={"max_output_tokens": 4096},
         )
         raw = getattr(response, "text", None)
         if raw is None:
@@ -203,6 +409,10 @@ def summarize_article(
         )
         return {"headline": "", "category": "", "summary_points": []}
 
+    if not _ai_any_news_enabled():
+        logger.info("summarize_article: Claude/Gemini 모두 off — 원문 폴백용 스텁")
+        return {"headline": "", "category": "", "summary_points": []}
+
     if body_stripped:
         article_block = (
             f"제목: {title}\n"
@@ -232,8 +442,7 @@ def summarize_article(
             "다음 뉴스를 분석해 JSON만 출력하세요.\n"
             f'키: "headline", "category", "summary_points"\n'
             "headline은 반드시 한국어로 작성하세요. 원문이 영어면 자연스러운 한국어 제목으로 번역하세요.\n"
-            "category는 반드시 다음 중 하나: "
-            "경제, IT, 정치, 사회, 국제, 부동산, 산업, 금융, 매크로, 빅테크\n"
+            f"{_SUMMARIZE_ARTICLE_CATEGORY_BLOCK}"
             f"{pts_count_rule}"
             "각 summary_points 항목은 **하나의 완전한 문장**으로 끝내세요. "
             "항목별 글자 수·길이 상한을 두지 말고, 읽기 자연스러운 분량으로 쓰세요.\n"
@@ -253,8 +462,7 @@ def summarize_article(
             f"다음 뉴스를 분석해 JSON만 출력하세요.\n"
             f'키: "headline", "category", "summary_points"\n'
             f"headline은 반드시 한국어로 작성하세요. 원문이 영어면 자연스러운 한국어 제목으로 번역하세요.\n"
-            f'category는 반드시 다음 중 하나: '
-            f"경제, IT, 정치, 사회, 국제, 부동산, 산업, 금융, 매크로, 빅테크\n"
+            f"{_SUMMARIZE_ARTICLE_CATEGORY_BLOCK}"
             f"summary_points는 기사 핵심을 빠짐없이 담은 문자열 배열로 작성하세요.\n"
             f"중요한 사실·수치·배경·영향을 누락하지 말고, 내용을 함축하거나 생략하지 마세요.\n"
             f"구체성 규칙(headline·summary_points 모두 적용):\n"
@@ -272,7 +480,7 @@ def summarize_article(
     last_err: Exception | None = None
     for attempt in range(2):
         try:
-            raw = _call_gemini(user)
+            raw = _call_news_llm(user)
             data = _require_json_dict(raw)
             if "headline" not in data or "category" not in data or "summary_points" not in data:
                 raise ValueError(f"Invalid JSON keys: {data.keys()}")
@@ -319,10 +527,13 @@ def translate_headline_to_korean(
         f"headline_en: {src}\n"
         f"context: {ctx[:400]}\n"
     )
+    if not _ai_any_news_enabled():
+        return src
+
     last_err: Exception | None = None
     for attempt in range(2):
         try:
-            raw = _call_gemini(user)
+            raw = _call_news_llm(user)
             data = _require_json_dict(raw)
             ko = str(data.get("headline_ko", "")).strip()
             if not ko:
@@ -351,10 +562,13 @@ def generate_market_report(
         '반드시 JSON 한 개만: {"report": "..."}\n\n'
         f"[지표]\n{ind_lines or '(없음)'}\n\n[뉴스]\n{headlines or '(없음)'}\n"
     )
+    if not _ai_any_news_enabled():
+        return {"report": ""}
+
     last_err: Exception | None = None
     for attempt in range(2):
         try:
-            raw = _call_gemini(user)
+            raw = _call_news_llm(user)
             data = _require_json_dict(raw)
             if "report" not in data:
                 raise ValueError("missing report")
@@ -380,6 +594,9 @@ def curate_us_market_articles(
     if n <= 8:
         return [dict(x) for x in items]
 
+    if not _ai_any_news_enabled():
+        return [dict(items[i]) for i in range(8)]
+
     lines: list[str] = []
     for i, it in enumerate(items):
         t = str(it.get("title", ""))[:220]
@@ -399,7 +616,7 @@ def curate_us_market_articles(
     last_err: Exception | None = None
     for attempt in range(2):
         try:
-            raw = _call_gemini(user)
+            raw = _call_news_llm(user)
             data = _require_json_dict(raw)
             idxs = data.get("selected_indices", [])
             if not isinstance(idxs, list) or not idxs:
@@ -461,7 +678,7 @@ def analyze_company(
     profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
-    Gemini 기반 기업 서술·건전성 라벨·점수·AI 증권 의견.
+    기업 서술·건전성 라벨·점수·AI 증권 의견 (Firebase ai_config 에 따른 Claude / Gemini).
     """
     profile = profile or {}
     payload = {
@@ -484,44 +701,16 @@ def analyze_company(
         "health_score: 0~5 정수.\n\n"
         + json.dumps(payload, ensure_ascii=False)[:45000]
     )
+    if not _ai_any_company_enabled():
+        logger.info("analyze_company: AI 모두 off — 스텁 저장")
+        return _stub_company_ai_result()
+
     last_err: Exception | None = None
     for attempt in range(2):
         try:
-            raw = _call_gemini(user)
+            raw = _call_company_llm(user)
             data = _require_json_dict(raw)
-            # 누락된 키는 에러 없이 채워서 진행 (문자열 필드는 "", health_status는 {})
-            required_str_keys = (
-                "business",
-                "revenue_model",
-                "outlook_2026",
-                "risk_factors",
-                "capital",
-                "health_summary",
-                "ai_analyst_summary",
-            )
-            for k in required_str_keys:
-                if k not in data or data[k] is None:
-                    data[k] = ""
-                else:
-                    data[k] = str(data[k])
-            hs = data.get("health_status")
-            if not isinstance(hs, dict):
-                hs = {}
-                data["health_status"] = hs
-            for hk in (
-                "debt_ratio_status",
-                "current_ratio_status",
-                "equity_ratio_status",
-                "cash_status",
-                "interest_status",
-            ):
-                hs.setdefault(hk, "안정")
-            try:
-                sc = int(data.get("health_score"))
-            except (TypeError, ValueError):
-                sc = 3
-            data["health_score"] = max(0, min(5, sc))
-            return data
+            return _finalize_company_ai_dict(data)
         except Exception as e:
             last_err = e
             logger.warning("analyze_company 재시도 (%s): %s", attempt + 1, e)

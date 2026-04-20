@@ -73,6 +73,11 @@ def run() -> None:
 
     t0 = time.perf_counter()
 
+    try:
+        firebase_client.clear_news_and_briefing_feeds()
+    except Exception as e:
+        logger.exception("뉴스·브리핑 피드 삭제 단계 실패, 크롤링 계속: %s", e)
+
     # 1) 국내
     domestic = crawler.crawl_domestic()
     domestic["realtime"] = crawler.dedupe_items(domestic["realtime"])
@@ -91,6 +96,7 @@ def run() -> None:
     # 3) 시장 지표 + 네이버 테마
     indicators = crawler.crawl_market_indicators()
     naver_themes = crawler.crawl_naver_stock_themes()
+    naver_upjong = crawler.crawl_naver_stock_upjong()
 
     counts = {
         "realtime": len(domestic["realtime"]),
@@ -103,10 +109,17 @@ def run() -> None:
         "briefing_maeil_pool": len(pool_maeil),
         "indicators": len(indicators),
         "theme_count": len(naver_themes),
+        "upjong_count": len(naver_upjong),
     }
     logger.info("크롤 완료: %s", counts)
 
-    # 4) Gemini 요약 (국내 탭별)
+    ai_cfg = firebase_client.get_ai_config()
+    summarizer.configure_ai(
+        claude_enabled=bool(ai_cfg.get("claude_enabled", True)),
+        gemini_enabled=bool(ai_cfg.get("gemini_enabled", True)),
+    )
+
+    # 4) AI 요약 (국내 탭별 — Firebase settings/ai_config 분기)
     fs_realtime: list[dict] = []
     for row in summarizer.summarize_batch(domestic["realtime"]):
         ai = row.pop("_ai", None)
@@ -172,6 +185,7 @@ def run() -> None:
     firebase_client.save_us_market_articles(fs_us_market)
     firebase_client.save_market_indicators(indicators)
     firebase_client.save_market_themes(naver_themes)
+    firebase_client.save_market_industries(naver_upjong)
     firebase_client.save_news_feed(fs_realtime, "realtime")
     firebase_client.save_news_feed(fs_popular, "popular")
     firebase_client.save_news_feed(fs_main, "main")

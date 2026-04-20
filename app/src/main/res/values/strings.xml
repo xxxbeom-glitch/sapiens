@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">Sapiens</string>
+    <string name="market_tab_theme">테마</string>
+    <string name="market_tab_industry">업종</string>
+    <string name="market_tab_foreign">해외</string>
+    <!-- google-services.json(com.sapiens.app) OAuth client_type 3(Web) — GoogleSignIn requestIdToken -->
+    <string name="google_oauth_web_client_id" translatable="false">200339538980-dcns3vafkransdp86o3sd74n1ontbb1j.apps.googleusercontent.com</string>
 </resources>

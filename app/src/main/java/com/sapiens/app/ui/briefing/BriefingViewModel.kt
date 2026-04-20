@@ -24,11 +24,13 @@ class BriefingViewModel(
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    private val _hankyungBriefingArticles = MutableStateFlow(MockData.briefingHankyungArticles)
-    val hankyungBriefingArticles: StateFlow<List<Article>> = _hankyungBriefingArticles.asStateFlow()
-
-    private val _maeilBriefingArticles = MutableStateFlow(MockData.briefingMaeilArticles)
-    val maeilBriefingArticles: StateFlow<List<Article>> = _maeilBriefingArticles.asStateFlow()
+    private val _domesticBriefingArticles = MutableStateFlow(
+        mergeDomesticBriefingArticles(
+            MockData.briefingHankyungArticles,
+            MockData.briefingMaeilArticles
+        )
+    )
+    val domesticBriefingArticles: StateFlow<List<Article>> = _domesticBriefingArticles.asStateFlow()
 
     private val _usArticles = MutableStateFlow(MockData.usArticles)
     val usArticles: StateFlow<List<Article>> = _usArticles.asStateFlow()
@@ -53,8 +55,9 @@ class BriefingViewModel(
                 Triple(hankyung to maeil, us, indicators)
             }.collect { (papers, us, indicators) ->
                 val (hankyung, maeil) = papers
-                _hankyungBriefingArticles.value = hankyung.ifEmpty { MockData.briefingHankyungArticles }
-                _maeilBriefingArticles.value = maeil.ifEmpty { MockData.briefingMaeilArticles }
+                val h = hankyung.ifEmpty { MockData.briefingHankyungArticles }
+                val m = maeil.ifEmpty { MockData.briefingMaeilArticles }
+                _domesticBriefingArticles.value = mergeDomesticBriefingArticles(h, m)
                 _usArticles.value = us.ifEmpty { MockData.usArticles }
                 _marketIndicators.value = indicators.ifEmpty { MockData.marketIndicators }
                 _isLoading.value = false
