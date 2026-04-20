@@ -84,8 +84,10 @@ def run() -> None:
     domestic["popular"] = crawler.dedupe_items(domestic["popular"])
     domestic["main"] = crawler.dedupe_items(domestic["main"])
 
-    # 2) 해외: Yahoo Finance(뉴스+테크 HTML) + NAVER 아침 신문(한경+매경)
-    overseas_stocks, overseas_tech, yahoo_merged = crawler.crawl_yahoo_overseas_stocks_and_tech()
+    # 2) 해외: Reuters/CNBC RSS + NAVER 아침 신문(한경+매경)
+    overseas_stocks = crawler.crawl_rss_overseas_stocks()
+    overseas_tech = crawler.crawl_rss_overseas_tech()
+    briefing_overseas_raw = crawler.crawl_rss_briefing_overseas()
     newspaper_hankyung = crawler.crawl_hankyung_newspaper()
     newspaper_maeil = crawler.crawl_maeil_newspaper()
     pool_hankyung = _sorted_newspaper_top(newspaper_hankyung, BRIEFING_NEWSPAPER_N)
@@ -102,7 +104,7 @@ def run() -> None:
         "main": len(domestic["main"]),
         "overseas_stocks": len(overseas_stocks),
         "overseas_tech": len(overseas_tech),
-        "yahoo_merged": len(yahoo_merged),
+        "briefing_overseas_rss": len(briefing_overseas_raw),
         "briefing_hankyung_pool": len(pool_hankyung),
         "briefing_maeil_pool": len(pool_maeil),
         "indicators": len(indicators),
@@ -137,7 +139,7 @@ def run() -> None:
     fs_hankyung = _summarize_newspaper_pool_for_briefing(summarizer, pool_hankyung)
     fs_maeil = _summarize_newspaper_pool_for_briefing(summarizer, pool_maeil)
 
-    # Yahoo: 스톡/테크 각각 전체 요약 → news/overseas_* (기존과 동일)
+    # 해외 RSS(스톡/테크) 각각 전체 요약 → news/overseas_*
     fs_overseas_stocks: list[dict] = []
     for row in summarizer.summarize_batch(overseas_stocks):
         ai = row.pop("_ai", None)
@@ -150,21 +152,21 @@ def run() -> None:
         if ai:
             fs_overseas_tech.append(summarizer.merge_to_firestore_article(row, ai))
 
-    # 미국 시황 브리핑: 합친(raw) → Gemini 8개 엄선 → 요약 → briefing/us_market
-    yahoo_picked: list[dict] = []
-    if yahoo_merged:
+    # 미국 시황 브리핑: RSS(raw) → Gemini 8개 엄선 → 요약 → briefing/us_market
+    us_pool: list[dict] = []
+    if briefing_overseas_raw:
         try:
-            yahoo_picked = summarizer.curate_us_market_articles(yahoo_merged)
+            us_pool = summarizer.curate_us_market_articles(briefing_overseas_raw)
         except Exception as e:
             logger.warning("curate_us_market_articles 실패, 전체로 요약 시도: %s", e)
-            yahoo_picked = yahoo_merged[:8]
+            us_pool = briefing_overseas_raw[:8]
     fs_us_market: list[dict] = []
-    for row in summarizer.summarize_batch(yahoo_picked):
+    for row in summarizer.summarize_batch(us_pool):
         ai = row.pop("_ai", None)
         if ai:
             fs_us_market.append(summarizer.merge_to_firestore_article(row, ai))
 
-    # 시황 3문장 리포트: 국내 지표 + Yahoo 스톡·테크 전체 요약(피드)
+    # 시황 3문장 리포트: 국내 지표 + 해외 RSS 스톡·테크 요약(피드)
     try:
         fs_for_report: list[dict] = list(fs_overseas_stocks) + list(fs_overseas_tech)
         report = summarizer.generate_market_report(indicators, fs_for_report)

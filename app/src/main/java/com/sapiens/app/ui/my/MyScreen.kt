@@ -8,7 +8,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -34,7 +33,6 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -47,7 +45,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -55,7 +52,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.painterResource
@@ -77,9 +73,7 @@ import com.sapiens.app.ui.theme.AppShapes
 import com.sapiens.app.ui.theme.Background
 import com.sapiens.app.ui.theme.Card
 import com.sapiens.app.ui.theme.CardPaddingBottom
-import com.sapiens.app.ui.theme.ContentAlpha
 import com.sapiens.app.ui.theme.OnPrimaryFixed
-import com.sapiens.app.ui.theme.Hair
 import com.sapiens.app.ui.theme.CardPaddingHorizontal
 import com.sapiens.app.ui.theme.RowVertical
 import com.sapiens.app.ui.theme.Spacing
@@ -89,22 +83,7 @@ import com.sapiens.app.ui.theme.TextSecondary
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/** 파이프라인·기사 칩과 동일한 통합 카테고리(국내/해외 공통). */
-private val newsCategoryOptions = listOf(
-    "경제",
-    "테크&반도체",
-    "증시",
-    "정치",
-    "국제",
-    "부동산",
-    "산업",
-    "사회",
-    "빅테크",
-    "암호화폐",
-)
-
 private enum class ExpandableSection {
-    NEWS_CATEGORY,
     BOOKMARK,
     API_STATUS
 }
@@ -133,8 +112,6 @@ fun MyScreen(
         authViewModel.clearSignInError()
     }
 
-    val selectedDomestic by preferencesRepository.selectedDomesticNewsCategoriesFlow.collectAsState(initial = emptySet())
-    val selectedOverseas by preferencesRepository.selectedOverseasNewsCategoriesFlow.collectAsState(initial = emptySet())
     val apiSelectedModel by preferencesRepository.apiSelectedModelFlow.collectAsState(
         initial = AiSelectedModel.GEMINI
     )
@@ -145,16 +122,8 @@ fun MyScreen(
     var expandedSection by remember { mutableStateOf<ExpandableSection?>(null) }
     var selectedBookmarkedArticle by remember { mutableStateOf<Article?>(null) }
 
-    var draftDomestic by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var draftOverseas by remember { mutableStateOf<Set<String>>(emptySet()) }
     var draftAiModel by remember { mutableStateOf(AiSelectedModel.GEMINI) }
 
-    LaunchedEffect(expandedSection == ExpandableSection.NEWS_CATEGORY) {
-        if (expandedSection == ExpandableSection.NEWS_CATEGORY) {
-            draftDomestic = preferencesRepository.selectedDomesticNewsCategoriesFlow.first()
-            draftOverseas = preferencesRepository.selectedOverseasNewsCategoriesFlow.first()
-        }
-    }
     LaunchedEffect(expandedSection == ExpandableSection.API_STATUS) {
         if (expandedSection == ExpandableSection.API_STATUS) {
             draftAiModel = preferencesRepository.apiSelectedModelFlow.first()
@@ -188,58 +157,6 @@ fun MyScreen(
                     .padding(horizontal = Spacing.space16)
             ) {
                 Text("로그아웃", color = TextSecondary)
-            }
-        }
-
-        ExpandableMenuCard(
-            title = "뉴스 수신 분야",
-            subtitle = domesticSubtitle(selectedDomestic) + " · " + overseasSubtitle(selectedOverseas),
-            iconRes = R.drawable.ico_my_news_category,
-            expanded = expandedSection == ExpandableSection.NEWS_CATEGORY,
-            onToggleExpand = {
-                expandedSection =
-                    if (expandedSection == ExpandableSection.NEWS_CATEGORY) null else ExpandableSection.NEWS_CATEGORY
-            }
-        ) {
-            NewsReceiveCategoriesPanel(
-                domesticSelected = draftDomestic,
-                overseasSelected = draftOverseas,
-                onToggleDomestic = { v ->
-                    draftDomestic = draftDomestic.toMutableSet().apply {
-                        if (!add(v)) remove(v)
-                    }
-                },
-                onToggleOverseas = { v ->
-                    draftOverseas = draftOverseas.toMutableSet().apply {
-                        if (!add(v)) remove(v)
-                    }
-                }
-            )
-            Spacer(modifier = Modifier.height(Spacing.space12))
-            Button(
-                onClick = {
-                    coroutineScope.launch {
-                        preferencesRepository.setDomesticNewsCategories(draftDomestic)
-                        preferencesRepository.setOverseasNewsCategories(draftOverseas)
-                        Toast.makeText(context, "저장했습니다", Toast.LENGTH_SHORT).show()
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = AppShapes.button,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Primary,
-                    contentColor = OnPrimaryFixed
-                ),
-                elevation = ButtonDefaults.buttonElevation(
-                    defaultElevation = Spacing.space0,
-                    pressedElevation = Spacing.space0
-                )
-            ) {
-                Text(
-                    text = "저장",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
             }
         }
 
@@ -349,12 +266,6 @@ fun MyScreen(
     }
 }
 
-private fun domesticSubtitle(set: Set<String>): String =
-    if (set.isEmpty()) "국내 선택 없음" else "국내 ${set.size}개"
-
-private fun overseasSubtitle(set: Set<String>): String =
-    if (set.isEmpty()) "해외 선택 없음" else "해외 ${set.size}개"
-
 @Composable
 private fun AccountMenuRow(
     subtitle: String,
@@ -412,120 +323,6 @@ private fun AccountMenuRow(
                 contentDescription = "Google 간편 로그인",
                 tint = TextSecondary
             )
-        }
-    }
-}
-
-@Composable
-private fun NewsRegionToggleTabRow(
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val tabs = listOf("국내 뉴스", "해외 뉴스")
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(AppShapes.pill)
-            .border(width = Spacing.space1, color = Hair, shape = AppShapes.pill)
-            .background(Color.Transparent)
-            .padding(Spacing.space2),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.space2)
-    ) {
-        tabs.forEachIndexed { index, label ->
-            val selected = index == selectedIndex
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(AppShapes.pillInner)
-                    .background(
-                        if (selected) Primary.copy(alpha = ContentAlpha.onCardSurface)
-                        else Color.Transparent
-                    )
-                    .clickable(
-                        indication = null,
-                        interactionSource = remember { MutableInteractionSource() }
-                    ) { onSelect(index) }
-                    .padding(vertical = Spacing.space8, horizontal = Spacing.space4),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = label,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (selected) TextPrimary else TextSecondary,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun NewsReceiveCategoriesPanel(
-    domesticSelected: Set<String>,
-    overseasSelected: Set<String>,
-    onToggleDomestic: (String) -> Unit,
-    onToggleOverseas: (String) -> Unit
-) {
-    var tabIndex by remember { mutableIntStateOf(0) }
-    Column(modifier = Modifier.fillMaxWidth()) {
-        NewsRegionToggleTabRow(
-            selectedIndex = tabIndex,
-            onSelect = { tabIndex = it }
-        )
-        Spacer(modifier = Modifier.height(Spacing.space12))
-        if (tabIndex == 0) {
-            CheckboxCategoryList(
-                labels = newsCategoryOptions,
-                selected = domesticSelected,
-                onToggle = onToggleDomestic
-            )
-        } else {
-            CheckboxCategoryList(
-                labels = newsCategoryOptions,
-                selected = overseasSelected,
-                onToggle = onToggleOverseas
-            )
-        }
-    }
-}
-
-@Composable
-private fun CheckboxCategoryList(
-    labels: List<String>,
-    selected: Set<String>,
-    onToggle: (String) -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(Spacing.space4)
-    ) {
-        labels.forEach { label ->
-            val checked = label in selected
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(
-                        indication = null,
-                        interactionSource = remember { MutableInteractionSource() }
-                    ) { onToggle(label) }
-                    .padding(vertical = Spacing.space6),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Spacing.space8)
-            ) {
-                Checkbox(
-                    checked = checked,
-                    onCheckedChange = { onToggle(label) }
-                )
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextPrimary,
-                    modifier = Modifier.weight(1f)
-                )
-            }
         }
     }
 }

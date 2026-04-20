@@ -1,13 +1,13 @@
-"""
-네이버 금융 / Yahoo Finance(HTML) 뉴스 크롤러 + 종목 재무·증권가 크롤링.
+﻿"""
+네이버 금융 / 해외 RSS(Reuters·CNBC) 뉴스 + 종목 재무(Yahoo API)·증권가 크롤링.
 (토스증권 Playwright `crawl_tossinvest_news` 는 보존. `crawl_domestic` 에서는 미사용.)
 """
 from __future__ import annotations
 
+import calendar
 import difflib
 import json
 import logging
-from collections import Counter
 import os
 import re
 import sys
@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import parse_qs, urljoin, urlparse
 
+import feedparser
 import pytz
 import requests
 from bs4 import BeautifulSoup
@@ -195,33 +196,6 @@ def _fetch_naver_article_body(article: dict[str, Any]) -> str:
         return ""
 
 
-def _fetch_yahoo_article_body(url: str) -> str:
-    """Yahoo Finance 기사 페이지 본문 추출. 실패 시 빈 문자열."""
-    u = (url or "").strip()
-    if not u:
-        return ""
-    html = _fetch(u)
-    if not html:
-        return ""
-    try:
-        soup = BeautifulSoup(html, "lxml")
-        for sel in (
-            "div.caas-body",
-            "div.caas-content",
-            "[data-testid='article-body']",
-            "article",
-        ):
-            el = soup.select_one(sel)
-            if el:
-                t = _element_to_plain_article_text(el)
-                if len(t) >= 80:
-                    return t[:ARTICLE_BODY_MAX_CHARS]
-        return ""
-    except Exception as e:
-        logger.debug("yahoo article body 실패 %s: %s", u[:80], e)
-        return ""
-
-
 def _attach_naver_article_bodies(rows: list[dict[str, Any]], pause_sec: float = 0.06) -> None:
     """각 row에 `body` 키 채움. 본문 요청 URL은 row['url']만 사용."""
     for row in rows:
@@ -260,15 +234,6 @@ def _filter_briefing_newspaper_rows_by_body(
             press_code or "?",
         )
     return kept
-
-
-def _attach_yahoo_article_bodies(rows: list[dict[str, Any]], pause_sec: float = 0.06) -> None:
-    """각 row에 `body` 키 채움 (Yahoo Finance 기사 URL)."""
-    for row in rows:
-        u = (row.get("url") or "").strip()
-        row["body"] = _fetch_yahoo_article_body(u) if u else ""
-        if pause_sec > 0:
-            time.sleep(pause_sec)
 
 
 def _normalize_url(url: str) -> str:
@@ -867,791 +832,135 @@ def crawl_tossinvest_news() -> dict[str, list[dict[str, Any]]]:
     return empty
 
 
-YAHOO_FINANCE = "https://finance.yahoo.com"
-YAHOO_MAX_LIST_ITEMS = 10
-# 해외(stocks+tech) 합산 시간 필터·목표량용: 목록에서 충분히 긁은 뒤 절대시간 파싱·창 확장(6h→12h→24h→48h)
-YAHOO_OVERSEAS_FETCH_CAP = 100
-YAHOO_OVERSEAS_MERGE_TARGET = 30
-YAHOO_OVERSEAS_TIME_WINDOWS_HOURS: tuple[float, ...] = (6.0, 12.0, 24.0, 48.0)
-# js-stream-content 등 넓은 셀렉터가 과다 매칭될 때 상한(성능·로그 가독).
-YAHOO_LIST_MAX_ROOTS_SCAN = 500
+# --- 해외 뉴스: Reuters / CNBC RSS (48시간 이내, URL 중복 제거, 피드당 합산 목표 15건) ---
+RSS_OVERSEAS_MAX_AGE_HOURS = 48.0
+RSS_OVERSEAS_TARGET_ITEMS = 15
 
-# 직전 `crawl_yahoo_stocks` / `crawl_yahoo_tech` 가 사용한 해외 파이프라인 진단(한 프로세스·마지막 실행).
-_yahoo_overseas_last_pipeline_diag: dict[str, Any] = {}
-
-_yahoo_overseas_bundle_cache: (
-    tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]] | None
-) = None
-
-
-def _resolve_yahoo_href(href: str) -> str:
-    h = (href or "").strip()
-    if not h or h.startswith("#") or "javascript" in h.lower():
-        return ""
-    if h.startswith("http://") or h.startswith("https://"):
-        return h.split("#")[0]
-    if h.startswith("//"):
-        return ("https:" + h).split("#")[0]
-    return urljoin(YAHOO_FINANCE, h).split("#")[0]
+RSS_FEEDS_BRIEFING_OVERSEAS: list[str] = [
+    "https://feeds.reuters.com/reuters/businessNews",
+    "https://www.cnbc.com/id/10000664/device/rss/rss.html",
+]
+RSS_FEEDS_OVERSEAS_STOCKS: list[str] = [
+    "https://feeds.reuters.com/reuters/businessNews",
+    "https://www.cnbc.com/id/20409666/device/rss/rss.html",
+]
+RSS_FEEDS_OVERSEAS_TECH: list[str] = [
+    "https://feeds.reuters.com/reuters/technologyNews",
+    "https://www.cnbc.com/id/19854910/device/rss/rss.html",
+]
 
 
-def _parse_yahoo_publishing_line(text: str) -> tuple[str, str]:
-    """
-    div.publishing 한 줄: 언론사 • 날짜 형태(• 또는 ·) 앞/뒤.
-    """
-    s = re.sub(r"\s+", " ", (text or "").strip())
-    for sep in ("•", "·", "|"):
-        if sep in s:
-            a, b = s.split(sep, 1)
-            return a.strip(), b.strip()
-    return s, ""
-
-
-def _parse_yahoo_published_at_utc(raw: str, now: datetime) -> datetime | None:
-    """
-    Yahoo 목록의 published 문자열 → UTC aware datetime (UTC).
-    약어: '5h ago', '1d ago', '4mo ago', '30m ago', '2y ago' (mo=30일, y=365일).
-    서술형: '2 hours ago', '1 day ago', … 절대일자 등.
-    파싱 실패 시 None.
-    """
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
-    s = re.sub(r"\s+", " ", (raw or "").strip())
-    if not s:
-        return None
-    sl = s.lower()
-    if sl == "just now":
-        return now
-    # Yahoo 단축 상대시간 (예: 4mo ago, 13h ago) — 'mo'를 'm'보다 먼저 매칭
-    m_short = re.match(r"(?is)^(\d+)\s*(mo|h|d|y|m|s|w)\s+ago\s*$", s)
-    if m_short:
-        n = int(m_short.group(1))
-        if n < 0:
-            return None
-        u = m_short.group(2).lower()
-        if u == "mo":
-            return now - timedelta(days=30 * n)
-        if u == "h":
-            return now - timedelta(hours=n)
-        if u == "d":
-            return now - timedelta(days=n)
-        if u == "y":
-            return now - timedelta(days=365 * n)
-        if u == "m":
-            return now - timedelta(minutes=n)
-        if u == "s":
-            return now - timedelta(seconds=n)
-        if u == "w":
-            return now - timedelta(weeks=n)
-        return None
-    if sl in ("an hour ago", "a hour ago"):
-        return now - timedelta(hours=1)
-    if sl == "a minute ago":
-        return now - timedelta(minutes=1)
-    if sl == "a second ago":
-        return now - timedelta(seconds=1)
-    if sl == "a day ago":
-        return now - timedelta(days=1)
-    if sl == "a week ago":
-        return now - timedelta(weeks=1)
-    m = re.match(
-        r"(?is)^(\d+)\s*(second|seconds|minute|minutes|hour|hours|day|days|week|weeks|month|months|year|years)\s+ago\s*$",
-        s,
-    )
-    if m:
-        n = int(m.group(1))
-        u = m.group(2).lower()
-        if u.startswith("second"):
-            return now - timedelta(seconds=n)
-        if u.startswith("minute"):
-            return now - timedelta(minutes=n)
-        if u.startswith("hour"):
-            return now - timedelta(hours=n)
-        if u.startswith("day"):
-            return now - timedelta(days=n)
-        if u.startswith("week"):
-            return now - timedelta(weeks=n)
-        if u.startswith("month"):
-            return now - timedelta(days=30 * n)
-        if u.startswith("year"):
-            return now - timedelta(days=365 * n)
-        return None
-    if " at " in s:
-        for fmt in ("%b %d, %Y at %I:%M %p", "%b %d, %Y at %I:%M%p", "%B %d, %Y at %I:%M %p"):
-            try:
-                return datetime.strptime(s, fmt).replace(tzinfo=timezone.utc)
-            except ValueError:
-                continue
-    for fmt in ("%b %d, %Y", "%B %d, %Y"):
+def _rss_entry_published_utc(entry: Any) -> datetime | None:
+    """feedparser entry → UTC aware datetime. 실패 시 None."""
+    tt = getattr(entry, "published_parsed", None) or getattr(entry, "updated_parsed", None)
+    if tt:
         try:
-            base = datetime.strptime(s, fmt).replace(tzinfo=timezone.utc)
-            return base.replace(hour=12, minute=0, second=0, microsecond=0)
-        except ValueError:
-            continue
-    m3 = re.match(r"(?is)^(\d{4})-(\d{2})-(\d{2})\s*$", s)
-    if m3:
-        y, mo, d = int(m3.group(1)), int(m3.group(2)), int(m3.group(3))
-        try:
-            return datetime(y, mo, d, 12, 0, 0, tzinfo=timezone.utc)
-        except ValueError:
-            return None
-    return None
-
-
-def _merge_yahoo_stocks_tech_with_origin(
-    stocks: list[dict[str, Any]],
-    tech: list[dict[str, Any]],
-) -> list[tuple[dict[str, Any], str]]:
-    """stocks 우선, URL 기준 중복 제거 후 (row, 'stocks'|'tech')."""
-    seen: set[str] = set()
-    merged: list[tuple[dict[str, Any], str]] = []
-    for row in stocks:
-        u = (row.get("url") or "").strip()
-        if not u or u in seen:
-            continue
-        seen.add(u)
-        merged.append((row, "stocks"))
-    for row in tech:
-        u = (row.get("url") or "").strip()
-        if not u or u in seen:
-            continue
-        seen.add(u)
-        merged.append((row, "tech"))
-    return merged
-
-
-def _yahoo_rows_with_published_utc(
-    merged: list[tuple[dict[str, Any], str]],
-    now: datetime,
-) -> tuple[list[tuple[dict[str, Any], str, datetime]], int]:
-    """published_at 파싱 성공한 행만 (ISO 문자열로 갱신). 실패 행은 제외. 반환: (rows, parse_fail_count)."""
-    out: list[tuple[dict[str, Any], str, datetime]] = []
-    parse_fail = 0
-    for row, origin in merged:
-        hint = (row.get("published_at") or "").strip()
-        parsed = _parse_yahoo_published_at_utc(hint, now)
-        if parsed is None:
-            parse_fail += 1
-            continue
-        r2 = dict(row)
-        r2["published_at"] = parsed.isoformat()
-        out.append((r2, origin, parsed))
-    return out, parse_fail
-
-
-def _yahoo_curate_by_time_windows(
-    pre: list[tuple[dict[str, Any], str, datetime]],
-    now: datetime,
-    target: int,
-) -> tuple[list[tuple[dict[str, Any], str]], list[tuple[float, int]]]:
-    """
-    6h→12h→24h→48h 윈도우 확장. target 이상이면 그 시점에서 상한 target.
-    마지막 창까지도 부족하면 그때까지 통과한 기사만.
-    반환: (curated, [(hours, eligible_count), ...])
-    """
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
-    last: list[tuple[dict[str, Any], str]] = []
-    step_counts: list[tuple[float, int]] = []
-    for h in YAHOO_OVERSEAS_TIME_WINDOWS_HOURS:
-        cutoff = now - timedelta(hours=h)
-        eligible = [(r, o) for (r, o, p) in pre if p >= cutoff]
-        last = eligible
-        step_counts.append((h, len(eligible)))
-        logger.info(
-            "Yahoo 시간필터: 최근 %.0f시간 이내 %d건 (시각 파싱 통과 전체 %d건, 목표 %d건)",
-            h,
-            len(eligible),
-            len(pre),
-            target,
-        )
-        if len(eligible) >= target:
-            return eligible[:target], step_counts
-    return last, step_counts
-
-
-def _yahoo_split_stocks_tech(curated: list[tuple[dict[str, Any], str]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    stocks: list[dict[str, Any]] = []
-    tech: list[dict[str, Any]] = []
-    for row, origin in curated:
-        if origin == "stocks":
-            stocks.append(row)
-        else:
-            tech.append(row)
-    return stocks, tech
-
-
-def _compute_yahoo_overseas_curated() -> tuple[
-    list[dict[str, Any]],
-    list[dict[str, Any]],
-    list[dict[str, Any]],
-]:
-    """뉴스+테크 HTML 수집 → URL 병합 → 절대시간 파싱 → 6h/12h/24h 목표 30건 → 본문 첨부."""
-    global _yahoo_overseas_last_pipeline_diag
-    u_news = f"{YAHOO_FINANCE}/news/"
-    u_tech = f"{YAHOO_FINANCE}/topic/tech/"
-    diag_stocks: dict[str, Any] = {}
-    diag_tech: dict[str, Any] = {}
+            ts = calendar.timegm(tt)
+            return datetime.fromtimestamp(ts, tz=timezone.utc)
+        except (TypeError, ValueError, OSError, OverflowError):
+            pass
+    raw = (getattr(entry, "published", None) or getattr(entry, "updated", None) or "").strip()
+    if not raw:
+        return None
     try:
-        stocks_raw = _crawl_yahoo_finance_list_url(
-            u_news, YAHOO_OVERSEAS_FETCH_CAP, attach_bodies=False, diag=diag_stocks
-        )
-        tech_raw = _crawl_yahoo_finance_list_url(
-            u_tech, YAHOO_OVERSEAS_FETCH_CAP, attach_bodies=False, diag=diag_tech
-        )
-    except Exception as e:
-        logger.exception("Yahoo overseas raw fetch 실패: %s", e)
-        _yahoo_overseas_last_pipeline_diag = {
-            "error": str(e),
-            "stocks_diag": diag_stocks,
-            "tech_diag": diag_tech,
-        }
-        return [], [], []
-    merged = _merge_yahoo_stocks_tech_with_origin(stocks_raw, tech_raw)
-    logger.info(
-        "Yahoo [시간필터 전] raw 기사(목록 파싱·URL 병합 후 unique)=%d건 "
-        "(stocks_raw=%d + tech_raw=%d → 중복 제거 후)",
-        len(merged),
-        len(stocks_raw),
-        len(tech_raw),
-    )
-    now = datetime.now(timezone.utc)
-    pre, parse_fail_merged = _yahoo_rows_with_published_utc(merged, now)
-    logger.info(
-        "Yahoo [시간필터 직전] published_at 시각 파싱 성공=%d건 실패(스킵)=%d건",
-        len(pre),
-        parse_fail_merged,
-    )
-    if merged and not pre:
-        hints = [str((row.get("published_at") or ""))[:80] for row, _ in merged[:8]]
-        logger.warning(
-            "Yahoo: 병합 URL %d건 중 published_at 시각 파싱 성공 0건(전부 스킵). "
-            "날짜 문자열 형식 변경 가능. 샘플: %s",
-            len(merged),
-            hints,
-        )
-    curated, time_steps = _yahoo_curate_by_time_windows(pre, now, YAHOO_OVERSEAS_MERGE_TARGET)
-    stocks_f, tech_f = _yahoo_split_stocks_tech(curated)
-    merged_ordered = [r for r, _ in curated]
-    logger.info(
-        "Yahoo [시간필터 후] 남은 기사=%d건 (stocks=%d tech=%d) 단계별후보=%s",
-        len(merged_ordered),
-        len(stocks_f),
-        len(tech_f),
-        time_steps,
-    )
-    _attach_yahoo_article_bodies(stocks_f)
-    _attach_yahoo_article_bodies(tech_f)
-    _yahoo_overseas_last_pipeline_diag = {
-        "stocks_raw_rows": len(stocks_raw),
-        "tech_raw_rows": len(tech_raw),
-        "stocks_html_diag": diag_stocks,
-        "tech_html_diag": diag_tech,
-        "merged_unique_before_time_filter": len(merged),
-        "published_parse_ok": len(pre),
-        "published_parse_dropped": parse_fail_merged,
-        "time_window_hours": list(YAHOO_OVERSEAS_TIME_WINDOWS_HOURS),
-        "time_filter_steps_eligible": time_steps,
-        "after_time_filter_merged": len(merged_ordered),
-        "final_stocks": len(stocks_f),
-        "final_tech": len(tech_f),
-        "target": YAHOO_OVERSEAS_MERGE_TARGET,
-        # 하위 호환 키
-        "merged_unique_urls": len(merged),
-        "final_merged": len(merged_ordered),
-    }
-    logger.info(
-        "Yahoo overseas: stocks_raw=%d tech_raw=%d merged_unique=%d parsed_ok=%d parse_drop=%d -> "
-        "time_windows %s -> merged=%d stocks=%d tech=%d (target=%d) | HTML li stocks=%s tech=%s",
-        len(stocks_raw),
-        len(tech_raw),
-        len(merged),
-        len(pre),
-        parse_fail_merged,
-        time_steps,
-        len(merged_ordered),
-        len(stocks_f),
-        len(tech_f),
-        YAHOO_OVERSEAS_MERGE_TARGET,
-        diag_stocks.get("li_stream_story"),
-        diag_tech.get("li_stream_story"),
-    )
-    if not merged_ordered:
-        logger.warning(
-            "Yahoo overseas 최종 0건: HTTP stocks=%s tech=%s | roots stocks=%s tech=%s | "
-            "rows stocks=%d tech=%d | 병합 unique=%d | 시각 OK=%d 실패=%d | 시간창=%s | "
-            "필드실패 stocks=%s tech=%s",
-            diag_stocks.get("http_status"),
-            diag_tech.get("http_status"),
-            diag_stocks.get("li_stream_story"),
-            diag_tech.get("li_stream_story"),
-            len(stocks_raw),
-            len(tech_raw),
-            len(merged),
-            len(pre),
-            parse_fail_merged,
-            time_steps,
-            diag_stocks.get("parse_fail_reasons"),
-            diag_tech.get("parse_fail_reasons"),
-        )
-    return stocks_f, tech_f, merged_ordered
+        from email.utils import parsedate_to_datetime
+
+        dt = parsedate_to_datetime(raw)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 
-def _ensure_yahoo_overseas_bundle_cached() -> tuple[
-    list[dict[str, Any]],
-    list[dict[str, Any]],
-    list[dict[str, Any]],
-]:
-    global _yahoo_overseas_bundle_cache
-    if _yahoo_overseas_bundle_cache is None:
-        _yahoo_overseas_bundle_cache = _compute_yahoo_overseas_curated()
-    return _yahoo_overseas_bundle_cache
-
-
-def _first_img_src_in(root: Any) -> str:
-    for img in root.find_all("img", src=True):
-        src = (img.get("src") or "").strip()
-        if not src or src.startswith("data:"):
-            continue
-        if src.startswith("//"):
-            return "https:" + src
-        if src.startswith("/"):
-            return urljoin(YAHOO_FINANCE, src)
-        if src.startswith("http"):
-            return src.split("#")[0]
-    return ""
-
-
-def _yahoo_selector_probe_counts(soup: BeautifulSoup) -> dict[str, int]:
-    """디버그: 주요 후보 셀렉터별 매칭 개수(실제 HTML과의 대조용)."""
-    probes: list[tuple[str, str]] = [
-        ("li.stream-item.story-item", "li.stream-item.story-item"),
-        ("li.stream-item", "li.stream-item"),
-        ("li.js-stream-content", "li.js-stream-content"),
-        ("section.storyitem", 'section[data-testid="storyitem"]'),
-        ("section.StoryItem", 'section[data-testid="StoryItem"]'),
-        ("a.titles", "a.titles"),
-        ("h3.clamp", "h3.clamp"),
-    ]
-    return {label: len(soup.select(sel)) for label, sel in probes}
-
-
-def _yahoo_story_roots_from_sections(soup: BeautifulSoup) -> list[Any]:
-    """section[data-testid=storyitem] 기준으로 상위 li|article|div 를 스토리 루트로 수집."""
-    roots: list[Any] = []
-    seen: set[int] = set()
-    for sec in soup.select(
-        'section[data-testid="storyitem"], section[data-testid="StoryItem"]',
-    ):
-        p = sec.find_parent("li") or sec.find_parent("article") or sec.find_parent("div")
-        if p is None:
-            p = sec
-        pid = id(p)
-        if pid not in seen:
-            seen.add(pid)
-            roots.append(p)
-    return roots
-
-
-def _yahoo_collect_story_root_nodes(soup: BeautifulSoup) -> tuple[list[Any], str]:
-    """
-    스토리 카드 루트 노드 목록과 사용한 전략 라벨.
-    우선순위: stream-item.story-item → js-stream-content → stream-item → section 기반.
-    """
-    strategies: list[tuple[str, str]] = [
-        ("li.stream-item.story-item", "li.stream-item.story-item"),
-        ("li.js-stream-content", "li.js-stream-content"),
-        ("li.stream-item", "li.stream-item"),
-    ]
-    for label, sel in strategies:
-        els = soup.select(sel)
-        if els:
-            return list(els), label
-    roots = _yahoo_story_roots_from_sections(soup)
-    if roots:
-        return roots, "section[storyitem|StoryItem]→ancestor(li|article|div)"
-    return [], "(none)"
-
-
-def _yahoo_fallback_title_anchor(section: Any) -> Any:
-    """a.titles 없을 때 제목 링크 추정."""
-    for cand in section.select("a[href]"):
-        href = (cand.get("href") or "").strip()
-        if not href or href.startswith("#"):
-            continue
-        text = cand.get_text(strip=True) or ""
-        if len(text) < 4:
-            continue
-        hl = href.lower()
-        if "/news/" in hl or "/videos/" in hl or "/quote/" in hl or "finance.yahoo.com" in hl:
-            return cand
-    h3 = section.select_one("h3")
-    if h3 is not None:
-        pa = h3.find_parent("a")
-        if pa is not None and (pa.get("href") or "").strip():
-            return pa
-    return None
-
-
-def _parse_yahoo_finance_story_item_detailed(root: Any) -> tuple[dict[str, Any] | None, str]:
-    """
-    Yahoo 뉴스 스트림 한 건 파싱. 실패 시 (None, 사유코드).
-    root: li.stream-item… 또는 section의 조상 래퍼.
-    """
-    section = root.select_one('section[data-testid="storyitem"]') or root.select_one(
-        'section[data-testid="StoryItem"]',
-    )
-    if section is None and getattr(root, "name", None) == "section":
-        tid = (root.get("data-testid") or "").strip()
-        if tid.lower() == "storyitem":
-            section = root
-    if section is None:
-        return None, "no_section"
-
-    a = None
-    for cand in section.select("a[href]"):
-        classes = cand.get("class") or []
-        if isinstance(classes, str):
-            classes = classes.split()
-        if "titles" in classes:
-            a = cand
-            break
-    if a is None:
-        a = _yahoo_fallback_title_anchor(section)
-    if a is None:
-        return None, "no_title_anchor"
-
-    href = (a.get("href") or "").strip()
-    url = _resolve_yahoo_href(href)
-    if not url:
-        return None, "no_url"
-
-    h3 = (
-        section.select_one("h3.clamp")
-        or section.select_one("h3")
-        or root.select_one("h3.clamp")
-        or root.select_one("h3")
-    )
-    title = ""
-    if h3 is not None and h3.get_text(strip=True):
-        title = h3.get_text(strip=True)
-    if not title and a.get("title"):
-        title = str(a.get("title", "")).strip()
-    if not title:
-        title = a.get_text(strip=True) or ""
-    if len(title) < 2:
-        return None, "title_too_short"
-
-    pub = section.select_one("div.publishing") or root.select_one("div.publishing")
-    pub_t = pub.get_text(" ", strip=True) if pub else ""
-    source, date_hint = _parse_yahoo_publishing_line(pub_t)
-    if not source and pub_t:
-        source = pub_t
-    if not source:
-        source = "Yahoo Finance"
-
-    thumb = _first_img_src_in(root)
-    t_for_sum = title
-    summary = (t_for_sum[:SUMMARY_CHARS] + ("…" if len(t_for_sum) > SUMMARY_CHARS else "")).strip()
+def _rss_row_from_entry(entry: Any, source_label: str, now: datetime) -> dict[str, Any] | None:
+    title = (getattr(entry, "title", None) or "").strip()
+    link = (getattr(entry, "link", None) or "").strip()
+    if not title or not link:
+        return None
+    pub_dt = _rss_entry_published_utc(entry)
+    if pub_dt is None:
+        return None
+    if now - pub_dt > timedelta(hours=RSS_OVERSEAS_MAX_AGE_HOURS):
+        return None
+    raw_sum = getattr(entry, "summary", None) or getattr(entry, "description", None) or ""
+    try:
+        summ_plain = BeautifulSoup(str(raw_sum), "lxml").get_text(" ", strip=True)
+    except Exception:
+        summ_plain = str(raw_sum)
+    summ_plain = re.sub(r"\s+", " ", summ_plain).strip()
+    summ = (summ_plain[:SUMMARY_CHARS] + ("…" if len(summ_plain) > SUMMARY_CHARS else "")).strip()
     return {
         "title": title,
-        "summary": summary,
-        "source": source,
-        "url": _normalize_url(url),
-        "published_at": date_hint,
+        "summary": summ,
+        "source": (source_label or "RSS").strip()[:120],
+        "url": _normalize_url(link.split("#")[0]),
+        "published_at": pub_dt.isoformat(),
         "category": "",
-        "thumbnail_url": thumb,
-    }, "ok"
+        "thumbnail_url": "",
+        "body": "",
+    }
 
 
-def _parse_yahoo_finance_story_item(root: Any) -> dict[str, Any] | None:
-    """section[data-testid=storyitem], a.titles(또는 폴백 링크), h3, div.publishing."""
-    row, _reason = _parse_yahoo_finance_story_item_detailed(root)
-    return row
-
-
-def _crawl_yahoo_finance_list_url(
-    page_url: str,
-    max_n: int,
-    *,
-    attach_bodies: bool = True,
-    diag: dict[str, Any] | None = None,
-) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    d = diag if diag is not None else {}
-    d.clear()
-    d["page_url"] = page_url
-    log_h = "YahooList"
-    try:
-        html, status, fetch_err = _fetch_http_debug(page_url, log_label=log_h)
-        d["http_status"] = status
-        d["http_fetch_error"] = fetch_err
-        if not html:
-            d["html_len"] = 0
-            logger.warning(
-                "Yahoo 목록 HTML 없음: page=%s http_status=%s err=%s",
-                page_url,
-                status,
-                fetch_err,
-            )
-            return out
-        d["html_len"] = len(html)
-        hl = html[:2000].lower()
-        if any(
-            k in hl
-            for k in (
-                "consent",
-                "captcha",
-                "robot check",
-                "are you human",
-                "unusual traffic",
-                "enable javascript",
-                "noscript",
-            )
-        ):
-            logger.warning(
-                "Yahoo 목록 HTML에 동의/봇·차단·스크립트 필요 징후: page=%s html_len=%d http=%s",
-                page_url,
-                len(html),
-                status,
-            )
-        soup = BeautifulSoup(html, "lxml")
-        probe = _yahoo_selector_probe_counts(soup)
-        d["selector_probe_counts"] = probe
-        logger.info(
-            "%s: 셀렉터 프로브 counts=%s page=%s http=%s",
-            log_h,
-            probe,
-            page_url,
-            status,
-        )
-
-        li_els, strat = _yahoo_collect_story_root_nodes(soup)
-        d["selector_strategy"] = strat
-        d["li_stream_story"] = len(li_els)
-        scan_roots = li_els
-        if len(li_els) > YAHOO_LIST_MAX_ROOTS_SCAN:
-            logger.warning(
-                "%s: 스토리 루트 후보 %d건 → 상위 %d건만 필드 파싱 스캔",
-                log_h,
-                len(li_els),
-                YAHOO_LIST_MAX_ROOTS_SCAN,
-            )
-            scan_roots = li_els[:YAHOO_LIST_MAX_ROOTS_SCAN]
-        logger.info(
-            "%s: 스토리 루트 %d건 (전략=%s) page=%s",
-            log_h,
-            len(li_els),
-            strat,
-            page_url,
-        )
-
-        seen: set[str] = set()
-        reason_counter: Counter[str] = Counter()
-        dup_skip = 0
-        for node in scan_roots:
-            row, reason = _parse_yahoo_finance_story_item_detailed(node)
-            if not row:
-                reason_counter[reason] += 1
+def _crawl_rss_feed_urls(urls: list[str], *, max_items: int) -> list[dict[str, Any]]:
+    """여러 RSS URL 순회 → 48h 이내 항목만, URL 기준 중복 제거 후 최대 max_items."""
+    rows: list[dict[str, Any]] = []
+    seen_url: set[str] = set()
+    now = datetime.now(timezone.utc)
+    for feed_url in urls:
+        try:
+            text, status, err = _fetch_http_debug(feed_url, log_label="RSS")
+            if not text:
+                logger.warning("RSS 본문 없음 url=%s http=%s err=%s", feed_url, status, err)
                 continue
-            u = (row.get("url") or "").strip()
-            if not u:
-                reason_counter["empty_url_after_row"] += 1
-                continue
-            if u in seen:
-                dup_skip += 1
-                continue
-            seen.add(u)
-            out.append(row)
-            if len(out) >= max_n:
-                break
-
-        parse_fail = int(sum(reason_counter.values()))
-        d["parse_fail_reasons"] = dict(reason_counter)
-        d["dup_url_skipped"] = dup_skip
-        d["rows_out"] = len(out)
-        d["parse_fail_li"] = parse_fail
-        d["roots_scanned"] = len(scan_roots)
-
-        logger.info(
-            "%s: 필드 파싱 요약 roots=%d rows_out=%d dup_skip=%d reasons=%s page=%s",
-            log_h,
-            len(li_els),
-            len(out),
-            dup_skip,
-            dict(reason_counter),
-            page_url,
-        )
-
-        if not li_els:
-            logger.error(
-                "%s: 스토리 루트 0건 — 마크업 변경 가능. probe=%s page=%s html_len=%d http=%s",
-                log_h,
-                probe,
-                page_url,
-                len(html),
-                status,
-            )
-        elif not out:
-            logger.warning(
-                "%s: 루트는 %d건이나 유효 기사 0건 reasons=%s dup=%d page=%s",
-                log_h,
-                len(li_els),
-                dict(reason_counter),
-                dup_skip,
-                page_url,
-            )
-        else:
-            logger.info(
-                "%s: 목록 파싱 OK page=%s rows=%d roots=%d",
-                log_h,
-                page_url,
-                len(out),
-                len(li_els),
-            )
-        if attach_bodies:
-            _attach_yahoo_article_bodies(out)
-    except Exception as e:
-        logger.exception(
-            "Yahoo 목록 HTML 파싱·처리 중 예외 page=%s: %s",
-            page_url,
-            e,
-        )
-        d["exception"] = repr(e)
-    return out
-
-
-def crawl_yahoo_overseas_stocks_and_tech() -> tuple[
-    list[dict[str, Any]],
-    list[dict[str, Any]],
-    list[dict[str, Any]],
-]:
-    """
-    Yahoo 뉴스(/news/) + 테크(/topic/tech/)를 한 번에 수집.
-    URL 중복 제거 후 published_at 파싱 성공분만 사용, 6h→12h→24h→48h 시간 창으로 최대 30건.
-    반환: (overseas_stocks, overseas_tech, yahoo_merged_curated_order)
-    """
-    try:
-        s, t, m = _ensure_yahoo_overseas_bundle_cached()
-        ns, nt, nm = len(s), len(t), len(m)
-        _log_yahoo_pipeline_diag_common(
-            _yahoo_overseas_last_pipeline_diag,
-            "crawl_yahoo_overseas_stocks_and_tech",
-            max(ns, nt, nm),
-        )
-        return list(s), list(t), list(m)
-    except Exception as e:
-        logger.exception("crawl_yahoo_overseas_stocks_and_tech 실패: %s", e)
-        return [], [], []
-
-
-def _log_yahoo_pipeline_diag_common(d: dict[str, Any], label: str, returned: int) -> None:
-    """해외 파이프라인 직후 진단: HTTP·셀렉터·필드 파싱 vs 시각 파싱 vs 시간창."""
-    if not d:
-        logger.info("%s: 반환 %d건 (진단 dict 비어 있음 — 예외 직후 등)", label, returned)
-        return
-    sd = d.get("stocks_html_diag") or {}
-    td = d.get("tech_html_diag") or {}
-    logger.info(
-        "%s: 반환 %d건 | HTTP stocks=%s tech=%s | roots stocks=%s(%s) tech=%s(%s) | "
-        "probe_stocks=%s probe_tech=%s | 필드실패 stocks=%s tech=%s | "
-        "시간필터전unique=%d 시각파싱OK=%d 시각파싱제외=%d | 시간창(시간h,후보)=%s | 시간필터후=%d",
-        label,
-        returned,
-        sd.get("http_status"),
-        td.get("http_status"),
-        sd.get("li_stream_story"),
-        sd.get("selector_strategy"),
-        td.get("li_stream_story"),
-        td.get("selector_strategy"),
-        sd.get("selector_probe_counts"),
-        td.get("selector_probe_counts"),
-        sd.get("parse_fail_reasons"),
-        td.get("parse_fail_reasons"),
-        d.get("merged_unique_before_time_filter", d.get("merged_unique_urls", -1)),
-        d.get("published_parse_ok", -1),
-        d.get("published_parse_dropped", -1),
-        d.get("time_filter_steps_eligible"),
-        d.get("after_time_filter_merged", d.get("final_merged", -1)),
-    )
-    if returned == 0:
+            parsed = feedparser.parse(text)
+            feed_title = ""
+            fd = getattr(parsed, "feed", None)
+            if fd is not None and getattr(fd, "title", None):
+                feed_title = str(fd.title).strip()
+            source_label = feed_title or urlparse(feed_url).netloc or "RSS"
+            for entry in getattr(parsed, "entries", None) or []:
+                row = _rss_row_from_entry(entry, source_label, now)
+                if not row:
+                    continue
+                u = (row.get("url") or "").strip()
+                if not u or u in seen_url:
+                    continue
+                seen_url.add(u)
+                rows.append(row)
+                if len(rows) >= max_items:
+                    logger.info(
+                        "RSS 수집 완료: %d건 (상한 %d) feeds_scanned=%s",
+                        len(rows),
+                        max_items,
+                        urls,
+                    )
+                    return rows
+        except Exception as e:
+            logger.exception("RSS 처리 실패 feed=%s: %s", feed_url, e)
+    if not rows:
         logger.warning(
-            "%s: 0건 — 원인 분기: (1) http_status≠200 또는 roots=0 → 요청/차단/HTML변경. "
-            "(2) parse_fail_reasons 집중 → 필드 셀렉터 불일치. "
-            "(3) 시각파싱OK=0 → published_at 문자열 형식. "
-            "(4) 시각파싱OK>0 & 시간필터후=0 → 시간창(time_filter_steps).",
-            label,
+            "RSS 수집 0건 (48h·파싱·필터) feeds=%s",
+            urls,
         )
+    else:
+        logger.info("RSS 수집: %d건 (상한 %d)", len(rows), max_items)
+    return rows
 
 
-def _log_yahoo_crawl_entrypoint(name: str, returned: int) -> None:
-    _log_yahoo_pipeline_diag_common(_yahoo_overseas_last_pipeline_diag, name, returned)
+def crawl_rss_overseas_stocks() -> list[dict[str, Any]]:
+    """뉴스 탭 Stocks: Reuters Business + CNBC Markets Insider."""
+    return _crawl_rss_feed_urls(RSS_FEEDS_OVERSEAS_STOCKS, max_items=RSS_OVERSEAS_TARGET_ITEMS)
 
 
-def _log_yahoo_feed_workflow_dispatch(
-    fn_label: str,
-    *,
-    feed_diag: dict[str, Any],
-    returned_count: int,
-) -> None:
-    """workflow_dispatch 로그용: 요청 1)~5) 한 피드(stocks 또는 tech) 기준."""
-    pipe = _yahoo_overseas_last_pipeline_diag
-    logger.info(
-        "%s [확인] (1) HTTP status=%s url=%s | "
-        "(2) 셀렉터 루트=%d strategy=%r probe=%s | "
-        "(3) 필드파싱 실패 reasons=%s rows_out=%s | "
-        "(4) 시간필터 전 파이프 unique URL=%s | (5) 시간필터 후 이 목록 반환=%d",
-        fn_label,
-        feed_diag.get("http_status"),
-        feed_diag.get("page_url"),
-        int(feed_diag.get("li_stream_story") or 0),
-        feed_diag.get("selector_strategy"),
-        feed_diag.get("selector_probe_counts"),
-        feed_diag.get("parse_fail_reasons"),
-        feed_diag.get("rows_out"),
-        pipe.get("merged_unique_before_time_filter", pipe.get("merged_unique_urls")),
-        returned_count,
-    )
+def crawl_rss_overseas_tech() -> list[dict[str, Any]]:
+    """뉴스 탭 Tech: Reuters Tech + CNBC Tech."""
+    return _crawl_rss_feed_urls(RSS_FEEDS_OVERSEAS_TECH, max_items=RSS_OVERSEAS_TARGET_ITEMS)
 
 
-def crawl_yahoo_stocks() -> list[dict[str, Any]]:
-    """
-    Yahoo Finance 뉴스 메인 스트림 (요청이 차단될 수 있어 빈 리스트일 수 있음).
-    https://finance.yahoo.com/news/
-    해외 파이프라인은 `crawl_yahoo_overseas_stocks_and_tech`와 동일 캐시를 사용한다.
-    """
-    try:
-        s, _, _ = _ensure_yahoo_overseas_bundle_cached()
-        _log_yahoo_crawl_entrypoint("crawl_yahoo_stocks", len(s))
-        _log_yahoo_feed_workflow_dispatch(
-            "crawl_yahoo_stocks",
-            feed_diag=_yahoo_overseas_last_pipeline_diag.get("stocks_html_diag") or {},
-            returned_count=len(s),
-        )
-        return list(s)
-    except Exception as e:
-        logger.exception("crawl_yahoo_stocks 실패: %s", e)
-        return []
-
-
-def crawl_yahoo_tech() -> list[dict[str, Any]]:
-    """
-    Tech 토픽 뉴스 스트림.
-    https://finance.yahoo.com/topic/tech/
-    해외 파이프라인은 `crawl_yahoo_overseas_stocks_and_tech`와 동일 캐시를 사용한다.
-    """
-    try:
-        _, t, _ = _ensure_yahoo_overseas_bundle_cached()
-        _log_yahoo_crawl_entrypoint("crawl_yahoo_tech", len(t))
-        _log_yahoo_feed_workflow_dispatch(
-            "crawl_yahoo_tech",
-            feed_diag=_yahoo_overseas_last_pipeline_diag.get("tech_html_diag") or {},
-            returned_count=len(t),
-        )
-        return list(t)
-    except Exception as e:
-        logger.exception("crawl_yahoo_tech 실패: %s", e)
-        return []
+def crawl_rss_briefing_overseas() -> list[dict[str, Any]]:
+    """브리핑 해외: Reuters Business + CNBC Markets."""
+    return _crawl_rss_feed_urls(RSS_FEEDS_BRIEFING_OVERSEAS, max_items=RSS_OVERSEAS_TARGET_ITEMS)
 
 
 NAVER_MEDIA = "https://media.naver.com"
