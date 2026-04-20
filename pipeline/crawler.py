@@ -1,5 +1,5 @@
 ﻿"""
-네이버 금융 / 해외 RSS(Reuters·CNBC) 뉴스 + 종목 재무(Yahoo API)·증권가 크롤링.
+네이버 금융 / 해외 RSS(CNBC·The Guardian·The Verge·Ars Technica 등) 뉴스 + 종목 재무(Yahoo API)·증권가 크롤링.
 (토스증권 Playwright `crawl_tossinvest_news` 는 보존. `crawl_domestic` 에서는 미사용.)
 """
 from __future__ import annotations
@@ -832,21 +832,23 @@ def crawl_tossinvest_news() -> dict[str, list[dict[str, Any]]]:
     return empty
 
 
-# --- 해외 뉴스: Reuters / CNBC RSS (48시간 이내, URL 중복 제거, 피드당 합산 목표 15건) ---
+# --- 해외 뉴스: CNBC / Guardian / Verge / Ars RSS (48h, URL 중복 제거, 카테고리당 합산 15건) ---
 RSS_OVERSEAS_MAX_AGE_HOURS = 48.0
 RSS_OVERSEAS_TARGET_ITEMS = 15
 
 RSS_FEEDS_BRIEFING_OVERSEAS: list[str] = [
-    "https://feeds.reuters.com/reuters/businessNews",
     "https://www.cnbc.com/id/10000664/device/rss/rss.html",
+    "https://www.cnbc.com/id/20409666/device/rss/rss.html",
+    "https://www.theguardian.com/business/rss",
 ]
 RSS_FEEDS_OVERSEAS_STOCKS: list[str] = [
-    "https://feeds.reuters.com/reuters/businessNews",
-    "https://www.cnbc.com/id/20409666/device/rss/rss.html",
+    "https://www.cnbc.com/id/10000664/device/rss/rss.html",
+    "https://www.theguardian.com/business/rss",
 ]
 RSS_FEEDS_OVERSEAS_TECH: list[str] = [
-    "https://feeds.reuters.com/reuters/technologyNews",
     "https://www.cnbc.com/id/19854910/device/rss/rss.html",
+    "https://www.theverge.com/rss/index.xml",
+    "https://feeds.arstechnica.com/arstechnica/index/",
 ]
 
 
@@ -889,7 +891,10 @@ def _rss_row_from_entry(entry: Any, source_label: str, now: datetime) -> dict[st
     except Exception:
         summ_plain = str(raw_sum)
     summ_plain = re.sub(r"\s+", " ", summ_plain).strip()
-    summ = (summ_plain[:SUMMARY_CHARS] + ("…" if len(summ_plain) > SUMMARY_CHARS else "")).strip()
+    if not summ_plain:
+        summ = ""
+    else:
+        summ = (summ_plain[:SUMMARY_CHARS] + ("…" if len(summ_plain) > SUMMARY_CHARS else "")).strip()
     return {
         "title": title,
         "summary": summ,
@@ -937,7 +942,7 @@ def _crawl_rss_feed_urls(urls: list[str], *, max_items: int) -> list[dict[str, A
                     )
                     return rows
         except Exception as e:
-            logger.exception("RSS 처리 실패 feed=%s: %s", feed_url, e)
+            logger.warning("RSS 피드 처리 실패(스킵, 파이프라인 계속) url=%s: %s", feed_url, e)
     if not rows:
         logger.warning(
             "RSS 수집 0건 (48h·파싱·필터) feeds=%s",
@@ -949,17 +954,17 @@ def _crawl_rss_feed_urls(urls: list[str], *, max_items: int) -> list[dict[str, A
 
 
 def crawl_rss_overseas_stocks() -> list[dict[str, Any]]:
-    """뉴스 탭 Stocks: Reuters Business + CNBC Markets Insider."""
+    """뉴스 탭 Stocks(증시/경제): CNBC Markets + The Guardian business."""
     return _crawl_rss_feed_urls(RSS_FEEDS_OVERSEAS_STOCKS, max_items=RSS_OVERSEAS_TARGET_ITEMS)
 
 
 def crawl_rss_overseas_tech() -> list[dict[str, Any]]:
-    """뉴스 탭 Tech: Reuters Tech + CNBC Tech."""
+    """뉴스 탭 Tech: CNBC Tech + The Verge + Ars Technica."""
     return _crawl_rss_feed_urls(RSS_FEEDS_OVERSEAS_TECH, max_items=RSS_OVERSEAS_TARGET_ITEMS)
 
 
 def crawl_rss_briefing_overseas() -> list[dict[str, Any]]:
-    """브리핑 해외: Reuters Business + CNBC Markets."""
+    """브리핑 해외 주요: CNBC Markets + CNBC Markets Insider + Guardian business."""
     return _crawl_rss_feed_urls(RSS_FEEDS_BRIEFING_OVERSEAS, max_items=RSS_OVERSEAS_TARGET_ITEMS)
 
 

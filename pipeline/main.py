@@ -84,7 +84,7 @@ def run() -> None:
     domestic["popular"] = crawler.dedupe_items(domestic["popular"])
     domestic["main"] = crawler.dedupe_items(domestic["main"])
 
-    # 2) 해외: Reuters/CNBC RSS + NAVER 아침 신문(한경+매경)
+    # 2) 해외: CNBC·Guardian·Verge·Ars RSS + NAVER 아침 신문(한경+매경)
     overseas_stocks = crawler.crawl_rss_overseas_stocks()
     overseas_tech = crawler.crawl_rss_overseas_tech()
     briefing_overseas_raw = crawler.crawl_rss_briefing_overseas()

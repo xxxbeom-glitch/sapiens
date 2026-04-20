@@ -698,7 +698,12 @@ private fun MarketIndexCard(
     Column(
         modifier = modifier
             .background(SurfaceMuted, AppShapes.cardNested)
-            .padding(Spacing.space14),
+            .padding(
+                start = CardPaddingHorizontal,
+                end = CardPaddingHorizontal,
+                top = CardPaddingVertical,
+                bottom = CardPaddingBottom
+            ),
         verticalArrangement = Arrangement.spacedBy(Spacing.space6)
     ) {
         Text(

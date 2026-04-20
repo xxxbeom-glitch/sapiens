@@ -366,7 +366,7 @@ def save_news_feed(articles: List[dict[str, Any]], feed_type: str) -> None:
 
 
 def save_overseas_stocks_articles(articles: List[dict[str, Any]]) -> None:
-    """news/overseas_stocks 문서에 articles 배열 + updated_at (Reuters/CNBC RSS)."""
+    """news/overseas_stocks 문서에 articles 배열 + updated_at (CNBC·Guardian 등 RSS)."""
     try:
         db = _get_db()
         db.collection("news").document("overseas_stocks").set(
@@ -381,7 +381,7 @@ def save_overseas_stocks_articles(articles: List[dict[str, Any]]) -> None:
 
 
 def save_overseas_tech_articles(articles: List[dict[str, Any]]) -> None:
-    """news/overseas_tech 문서에 articles 배열 + updated_at (Reuters/CNBC RSS)."""
+    """news/overseas_tech 문서에 articles 배열 + updated_at (CNBC·Verge·Ars 등 RSS)."""
     try:
         db = _get_db()
         db.collection("news").document("overseas_tech").set(
