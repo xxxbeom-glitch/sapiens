@@ -7,6 +7,7 @@ from __future__ import annotations
 import difflib
 import json
 import logging
+from collections import Counter
 import os
 import re
 import sys
@@ -287,6 +288,52 @@ def _fetch(url: str) -> str | None:
     except Exception as e:
         logger.warning("요청 실패 %s: %s", url, e)
         return None
+
+
+def _fetch_http_debug(url: str, *, log_label: str = "HTTP") -> tuple[str | None, int | None, str | None]:
+    """
+    Yahoo 디버그용: (본문, status_code, 에러문자열).
+    workflow_dispatch 로그용으로 status·응답 크기를 항상 남김.
+    """
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+        status = int(r.status_code)
+        nbytes = len(r.content or b"")
+        enc = r.encoding or r.apparent_encoding or "utf-8"
+        logger.info(
+            "%s: status=%s url=%s response_bytes=%s encoding=%s",
+            log_label,
+            status,
+            url,
+            nbytes,
+            enc,
+        )
+        if status != 200:
+            snippet = (r.text or "")[:800].replace("\n", " ")
+            logger.warning(
+                "%s: 비-200 응답 body_prefix=%r",
+                log_label,
+                snippet,
+            )
+        r.raise_for_status()
+        r.encoding = r.apparent_encoding or "utf-8"
+        return r.text, status, None
+    except requests.HTTPError as e:
+        resp = getattr(e, "response", None)
+        status = int(resp.status_code) if resp is not None and resp.status_code is not None else None
+        snippet = ((resp.text or "")[:800] if resp is not None else "").replace("\n", " ")
+        logger.warning(
+            "%s: HTTPError status=%s url=%s err=%s body_prefix=%r",
+            log_label,
+            status,
+            url,
+            e,
+            snippet,
+        )
+        return None, status, str(e)
+    except requests.RequestException as e:
+        logger.warning("%s: RequestException url=%s: %s", log_label, url, e)
+        return None, None, str(e)
 
 
 def _fetch_json(url: str, headers: dict[str, str] | None = None) -> dict[str, Any] | None:
@@ -826,6 +873,8 @@ YAHOO_MAX_LIST_ITEMS = 10
 YAHOO_OVERSEAS_FETCH_CAP = 100
 YAHOO_OVERSEAS_MERGE_TARGET = 30
 YAHOO_OVERSEAS_TIME_WINDOWS_HOURS: tuple[float, ...] = (6.0, 12.0, 24.0)
+# js-stream-content 등 넓은 셀렉터가 과다 매칭될 때 상한(성능·로그 가독).
+YAHOO_LIST_MAX_ROOTS_SCAN = 500
 
 # 직전 `crawl_yahoo_stocks` / `crawl_yahoo_tech` 가 사용한 해외 파이프라인 진단(한 프로세스·마지막 실행).
 _yahoo_overseas_last_pipeline_diag: dict[str, Any] = {}
@@ -1032,8 +1081,20 @@ def _compute_yahoo_overseas_curated() -> tuple[
         }
         return [], [], []
     merged = _merge_yahoo_stocks_tech_with_origin(stocks_raw, tech_raw)
+    logger.info(
+        "Yahoo [시간필터 전] raw 기사(목록 파싱·URL 병합 후 unique)=%d건 "
+        "(stocks_raw=%d + tech_raw=%d → 중복 제거 후)",
+        len(merged),
+        len(stocks_raw),
+        len(tech_raw),
+    )
     now = datetime.now(timezone.utc)
     pre, parse_fail_merged = _yahoo_rows_with_published_utc(merged, now)
+    logger.info(
+        "Yahoo [시간필터 직전] published_at 시각 파싱 성공=%d건 실패(스킵)=%d건",
+        len(pre),
+        parse_fail_merged,
+    )
     if merged and not pre:
         hints = [str((row.get("published_at") or ""))[:80] for row, _ in merged[:8]]
         logger.warning(
@@ -1045,6 +1106,13 @@ def _compute_yahoo_overseas_curated() -> tuple[
     curated, time_steps = _yahoo_curate_by_time_windows(pre, now, YAHOO_OVERSEAS_MERGE_TARGET)
     stocks_f, tech_f = _yahoo_split_stocks_tech(curated)
     merged_ordered = [r for r, _ in curated]
+    logger.info(
+        "Yahoo [시간필터 후] 남은 기사=%d건 (stocks=%d tech=%d) 단계별후보=%s",
+        len(merged_ordered),
+        len(stocks_f),
+        len(tech_f),
+        time_steps,
+    )
     _attach_yahoo_article_bodies(stocks_f)
     _attach_yahoo_article_bodies(tech_f)
     _yahoo_overseas_last_pipeline_diag = {
@@ -1052,15 +1120,18 @@ def _compute_yahoo_overseas_curated() -> tuple[
         "tech_raw_rows": len(tech_raw),
         "stocks_html_diag": diag_stocks,
         "tech_html_diag": diag_tech,
-        "merged_unique_urls": len(merged),
+        "merged_unique_before_time_filter": len(merged),
         "published_parse_ok": len(pre),
         "published_parse_dropped": parse_fail_merged,
         "time_window_hours": list(YAHOO_OVERSEAS_TIME_WINDOWS_HOURS),
         "time_filter_steps_eligible": time_steps,
-        "final_merged": len(merged_ordered),
+        "after_time_filter_merged": len(merged_ordered),
         "final_stocks": len(stocks_f),
         "final_tech": len(tech_f),
         "target": YAHOO_OVERSEAS_MERGE_TARGET,
+        # 하위 호환 키
+        "merged_unique_urls": len(merged),
+        "final_merged": len(merged_ordered),
     }
     logger.info(
         "Yahoo overseas: stocks_raw=%d tech_raw=%d merged_unique=%d parsed_ok=%d parse_drop=%d -> "
@@ -1080,16 +1151,21 @@ def _compute_yahoo_overseas_curated() -> tuple[
     )
     if not merged_ordered:
         logger.warning(
-            "Yahoo overseas 최종 0건: HTML stocks rows=%d (li=%s) tech rows=%d (li=%s), "
-            "병합 URL=%d, 시각 파싱 성공=%d·실패=%d, 시간창 단계=%s",
-            len(stocks_raw),
+            "Yahoo overseas 최종 0건: HTTP stocks=%s tech=%s | roots stocks=%s tech=%s | "
+            "rows stocks=%d tech=%d | 병합 unique=%d | 시각 OK=%d 실패=%d | 시간창=%s | "
+            "필드실패 stocks=%s tech=%s",
+            diag_stocks.get("http_status"),
+            diag_tech.get("http_status"),
             diag_stocks.get("li_stream_story"),
-            len(tech_raw),
             diag_tech.get("li_stream_story"),
+            len(stocks_raw),
+            len(tech_raw),
             len(merged),
             len(pre),
             parse_fail_merged,
             time_steps,
+            diag_stocks.get("parse_fail_reasons"),
+            diag_tech.get("parse_fail_reasons"),
         )
     return stocks_f, tech_f, merged_ordered
 
@@ -1105,8 +1181,8 @@ def _ensure_yahoo_overseas_bundle_cached() -> tuple[
     return _yahoo_overseas_bundle_cache
 
 
-def _first_img_src_in(li) -> str:
-    for img in li.find_all("img", src=True):
+def _first_img_src_in(root: Any) -> str:
+    for img in root.find_all("img", src=True):
         src = (img.get("src") or "").strip()
         if not src or src.startswith("data:"):
             continue
@@ -1119,15 +1195,92 @@ def _first_img_src_in(li) -> str:
     return ""
 
 
-def _parse_yahoo_finance_story_item(li) -> dict[str, Any] | None:
+def _yahoo_selector_probe_counts(soup: BeautifulSoup) -> dict[str, int]:
+    """디버그: 주요 후보 셀렉터별 매칭 개수(실제 HTML과의 대조용)."""
+    probes: list[tuple[str, str]] = [
+        ("li.stream-item.story-item", "li.stream-item.story-item"),
+        ("li.stream-item", "li.stream-item"),
+        ("li.js-stream-content", "li.js-stream-content"),
+        ("section.storyitem", 'section[data-testid="storyitem"]'),
+        ("section.StoryItem", 'section[data-testid="StoryItem"]'),
+        ("a.titles", "a.titles"),
+        ("h3.clamp", "h3.clamp"),
+    ]
+    return {label: len(soup.select(sel)) for label, sel in probes}
+
+
+def _yahoo_story_roots_from_sections(soup: BeautifulSoup) -> list[Any]:
+    """section[data-testid=storyitem] 기준으로 상위 li|article|div 를 스토리 루트로 수집."""
+    roots: list[Any] = []
+    seen: set[int] = set()
+    for sec in soup.select(
+        'section[data-testid="storyitem"], section[data-testid="StoryItem"]',
+    ):
+        p = sec.find_parent("li") or sec.find_parent("article") or sec.find_parent("div")
+        if p is None:
+            p = sec
+        pid = id(p)
+        if pid not in seen:
+            seen.add(pid)
+            roots.append(p)
+    return roots
+
+
+def _yahoo_collect_story_root_nodes(soup: BeautifulSoup) -> tuple[list[Any], str]:
     """
-    li.stream-item.story-item — section[data-testid=storyitem], a.titles, h3.clamp, div.publishing, img
+    스토리 카드 루트 노드 목록과 사용한 전략 라벨.
+    우선순위: stream-item.story-item → js-stream-content → stream-item → section 기반.
     """
-    section = li.select_one('section[data-testid="storyitem"]') or li.select_one(
+    strategies: list[tuple[str, str]] = [
+        ("li.stream-item.story-item", "li.stream-item.story-item"),
+        ("li.js-stream-content", "li.js-stream-content"),
+        ("li.stream-item", "li.stream-item"),
+    ]
+    for label, sel in strategies:
+        els = soup.select(sel)
+        if els:
+            return list(els), label
+    roots = _yahoo_story_roots_from_sections(soup)
+    if roots:
+        return roots, "section[storyitem|StoryItem]→ancestor(li|article|div)"
+    return [], "(none)"
+
+
+def _yahoo_fallback_title_anchor(section: Any) -> Any:
+    """a.titles 없을 때 제목 링크 추정."""
+    for cand in section.select("a[href]"):
+        href = (cand.get("href") or "").strip()
+        if not href or href.startswith("#"):
+            continue
+        text = cand.get_text(strip=True) or ""
+        if len(text) < 4:
+            continue
+        hl = href.lower()
+        if "/news/" in hl or "/videos/" in hl or "/quote/" in hl or "finance.yahoo.com" in hl:
+            return cand
+    h3 = section.select_one("h3")
+    if h3 is not None:
+        pa = h3.find_parent("a")
+        if pa is not None and (pa.get("href") or "").strip():
+            return pa
+    return None
+
+
+def _parse_yahoo_finance_story_item_detailed(root: Any) -> tuple[dict[str, Any] | None, str]:
+    """
+    Yahoo 뉴스 스트림 한 건 파싱. 실패 시 (None, 사유코드).
+    root: li.stream-item… 또는 section의 조상 래퍼.
+    """
+    section = root.select_one('section[data-testid="storyitem"]') or root.select_one(
         'section[data-testid="StoryItem"]',
     )
-    if not section:
-        return None
+    if section is None and getattr(root, "name", None) == "section":
+        tid = (root.get("data-testid") or "").strip()
+        if tid.lower() == "storyitem":
+            section = root
+    if section is None:
+        return None, "no_section"
+
     a = None
     for cand in section.select("a[href]"):
         classes = cand.get("class") or []
@@ -1137,23 +1290,32 @@ def _parse_yahoo_finance_story_item(li) -> dict[str, Any] | None:
             a = cand
             break
     if a is None:
-        return None
+        a = _yahoo_fallback_title_anchor(section)
+    if a is None:
+        return None, "no_title_anchor"
+
     href = (a.get("href") or "").strip()
     url = _resolve_yahoo_href(href)
     if not url:
-        return None
-    h3 = section.select_one("h3.clamp") or li.select_one("h3.clamp")
+        return None, "no_url"
+
+    h3 = (
+        section.select_one("h3.clamp")
+        or section.select_one("h3")
+        or root.select_one("h3.clamp")
+        or root.select_one("h3")
+    )
     title = ""
-    if h3 and h3.get_text(strip=True):
+    if h3 is not None and h3.get_text(strip=True):
         title = h3.get_text(strip=True)
     if not title and a.get("title"):
-        title = a.get("title", "").strip()
+        title = str(a.get("title", "")).strip()
     if not title:
         title = a.get_text(strip=True) or ""
     if len(title) < 2:
-        return None
+        return None, "title_too_short"
 
-    pub = section.select_one("div.publishing") or li.select_one("div.publishing")
+    pub = section.select_one("div.publishing") or root.select_one("div.publishing")
     pub_t = pub.get_text(" ", strip=True) if pub else ""
     source, date_hint = _parse_yahoo_publishing_line(pub_t)
     if not source and pub_t:
@@ -1161,7 +1323,7 @@ def _parse_yahoo_finance_story_item(li) -> dict[str, Any] | None:
     if not source:
         source = "Yahoo Finance"
 
-    thumb = _first_img_src_in(li)
+    thumb = _first_img_src_in(root)
     t_for_sum = title
     summary = (t_for_sum[:SUMMARY_CHARS] + ("…" if len(t_for_sum) > SUMMARY_CHARS else "")).strip()
     return {
@@ -1172,7 +1334,13 @@ def _parse_yahoo_finance_story_item(li) -> dict[str, Any] | None:
         "published_at": date_hint,
         "category": "",
         "thumbnail_url": thumb,
-    }
+    }, "ok"
+
+
+def _parse_yahoo_finance_story_item(root: Any) -> dict[str, Any] | None:
+    """section[data-testid=storyitem], a.titles(또는 폴백 링크), h3, div.publishing."""
+    row, _reason = _parse_yahoo_finance_story_item_detailed(root)
+    return row
 
 
 def _crawl_yahoo_finance_list_url(
@@ -1186,44 +1354,82 @@ def _crawl_yahoo_finance_list_url(
     d = diag if diag is not None else {}
     d.clear()
     d["page_url"] = page_url
+    log_h = "YahooList"
     try:
-        html = _fetch(page_url)
+        html, status, fetch_err = _fetch_http_debug(page_url, log_label=log_h)
+        d["http_status"] = status
+        d["http_fetch_error"] = fetch_err
         if not html:
             d["html_len"] = 0
             logger.warning(
-                "Yahoo 목록 HTML 비어 있음(요청 실패·차단 가능): page=%s",
+                "Yahoo 목록 HTML 없음: page=%s http_status=%s err=%s",
                 page_url,
+                status,
+                fetch_err,
             )
             return out
         d["html_len"] = len(html)
-        hl = html[:1200].lower()
-        if any(k in hl for k in ("consent", "captcha", "robot check", "are you human", "unusual traffic")):
+        hl = html[:2000].lower()
+        if any(
+            k in hl
+            for k in (
+                "consent",
+                "captcha",
+                "robot check",
+                "are you human",
+                "unusual traffic",
+                "enable javascript",
+                "noscript",
+            )
+        ):
             logger.warning(
-                "Yahoo 목록 HTML에 동의/봇·차단 페이지 징후: page=%s html_len=%d",
+                "Yahoo 목록 HTML에 동의/봇·차단·스크립트 필요 징후: page=%s html_len=%d http=%s",
                 page_url,
                 len(html),
+                status,
             )
         soup = BeautifulSoup(html, "lxml")
-        primary_sel = "li.stream-item.story-item"
-        li_els = soup.select(primary_sel)
-        d["selector_used"] = primary_sel
-        if not li_els:
-            fallback_sel = "li.stream-item"
-            li_try = soup.select(fallback_sel)
-            if li_try:
-                li_els = li_try
-                d["selector_used"] = fallback_sel
+        probe = _yahoo_selector_probe_counts(soup)
+        d["selector_probe_counts"] = probe
+        logger.info(
+            "%s: 셀렉터 프로브 counts=%s page=%s http=%s",
+            log_h,
+            probe,
+            page_url,
+            status,
+        )
+
+        li_els, strat = _yahoo_collect_story_root_nodes(soup)
+        d["selector_strategy"] = strat
         d["li_stream_story"] = len(li_els)
+        scan_roots = li_els
+        if len(li_els) > YAHOO_LIST_MAX_ROOTS_SCAN:
+            logger.warning(
+                "%s: 스토리 루트 후보 %d건 → 상위 %d건만 필드 파싱 스캔",
+                log_h,
+                len(li_els),
+                YAHOO_LIST_MAX_ROOTS_SCAN,
+            )
+            scan_roots = li_els[:YAHOO_LIST_MAX_ROOTS_SCAN]
+        logger.info(
+            "%s: 스토리 루트 %d건 (전략=%s) page=%s",
+            log_h,
+            len(li_els),
+            strat,
+            page_url,
+        )
+
         seen: set[str] = set()
-        parse_fail = 0
+        reason_counter: Counter[str] = Counter()
         dup_skip = 0
-        for li in li_els:
-            row = _parse_yahoo_finance_story_item(li)
+        for node in scan_roots:
+            row, reason = _parse_yahoo_finance_story_item_detailed(node)
             if not row:
-                parse_fail += 1
+                reason_counter[reason] += 1
                 continue
             u = (row.get("url") or "").strip()
             if not u:
+                reason_counter["empty_url_after_row"] += 1
                 continue
             if u in seen:
                 dup_skip += 1
@@ -1232,31 +1438,49 @@ def _crawl_yahoo_finance_list_url(
             out.append(row)
             if len(out) >= max_n:
                 break
-        d["parse_fail_li"] = parse_fail
+
+        parse_fail = int(sum(reason_counter.values()))
+        d["parse_fail_reasons"] = dict(reason_counter)
         d["dup_url_skipped"] = dup_skip
         d["rows_out"] = len(out)
+        d["parse_fail_li"] = parse_fail
+        d["roots_scanned"] = len(scan_roots)
+
+        logger.info(
+            "%s: 필드 파싱 요약 roots=%d rows_out=%d dup_skip=%d reasons=%s page=%s",
+            log_h,
+            len(li_els),
+            len(out),
+            dup_skip,
+            dict(reason_counter),
+            page_url,
+        )
+
         if not li_els:
             logger.error(
-                "Yahoo 목록 파싱: 스토리 li 매칭 0건( primary=%s ) — 마크업 변경 가능. page=%s html_len=%d",
-                d.get("selector_used", primary_sel),
+                "%s: 스토리 루트 0건 — 마크업 변경 가능. probe=%s page=%s html_len=%d http=%s",
+                log_h,
+                probe,
                 page_url,
                 len(html),
+                status,
             )
         elif not out:
             logger.warning(
-                "Yahoo 목록 파싱: li=%d건이나 유효 기사 0건(parse_fail=%d dup=%d): page=%s",
+                "%s: 루트는 %d건이나 유효 기사 0건 reasons=%s dup=%d page=%s",
+                log_h,
                 len(li_els),
-                parse_fail,
+                dict(reason_counter),
                 dup_skip,
                 page_url,
             )
         else:
             logger.info(
-                "Yahoo 목록 파싱 OK: page=%s li=%d rows=%d parse_fail_li=%d",
+                "%s: 목록 파싱 OK page=%s rows=%d roots=%d",
+                log_h,
                 page_url,
-                len(li_els),
                 len(out),
-                parse_fail,
+                len(li_els),
             )
         if attach_bodies:
             _attach_yahoo_article_bodies(out)
@@ -1295,37 +1519,72 @@ def crawl_yahoo_overseas_stocks_and_tech() -> tuple[
 
 
 def _log_yahoo_pipeline_diag_common(d: dict[str, Any], label: str, returned: int) -> None:
-    """해외 파이프라인 직후 진단: HTML 파싱 vs 시각 파싱 vs 시간창."""
+    """해외 파이프라인 직후 진단: HTTP·셀렉터·필드 파싱 vs 시각 파싱 vs 시간창."""
     if not d:
         logger.info("%s: 반환 %d건 (진단 dict 비어 있음 — 예외 직후 등)", label, returned)
         return
     sd = d.get("stocks_html_diag") or {}
     td = d.get("tech_html_diag") or {}
     logger.info(
-        "%s: 반환 %d건 | HTML rows stocks_raw=%d(li=%s) tech_raw=%d(li=%s) | "
-        "병합URL=%d 시각파싱OK=%d 시각파싱제외=%d | 시간창(시간h,후보건)=%s",
+        "%s: 반환 %d건 | HTTP stocks=%s tech=%s | roots stocks=%s(%s) tech=%s(%s) | "
+        "probe_stocks=%s probe_tech=%s | 필드실패 stocks=%s tech=%s | "
+        "시간필터전unique=%d 시각파싱OK=%d 시각파싱제외=%d | 시간창(시간h,후보)=%s | 시간필터후=%d",
         label,
         returned,
-        d.get("stocks_raw_rows", -1),
+        sd.get("http_status"),
+        td.get("http_status"),
         sd.get("li_stream_story"),
-        d.get("tech_raw_rows", -1),
+        sd.get("selector_strategy"),
         td.get("li_stream_story"),
-        d.get("merged_unique_urls", -1),
+        td.get("selector_strategy"),
+        sd.get("selector_probe_counts"),
+        td.get("selector_probe_counts"),
+        sd.get("parse_fail_reasons"),
+        td.get("parse_fail_reasons"),
+        d.get("merged_unique_before_time_filter", d.get("merged_unique_urls", -1)),
         d.get("published_parse_ok", -1),
         d.get("published_parse_dropped", -1),
         d.get("time_filter_steps_eligible"),
+        d.get("after_time_filter_merged", d.get("final_merged", -1)),
     )
     if returned == 0:
         logger.warning(
-            "%s: 0건 — 원인 분기: (1) stocks_raw·tech_raw·li_stream_story가 0이면 HTML/선택자·차단. "
-            "(2) 시각파싱OK이 0이면 published_at 형식. "
-            "(3) 시각파싱OK>0인데 반환 0이면 시간창(time_filter_steps)에서 전부 제외.",
+            "%s: 0건 — 원인 분기: (1) http_status≠200 또는 roots=0 → 요청/차단/HTML변경. "
+            "(2) parse_fail_reasons 집중 → 필드 셀렉터 불일치. "
+            "(3) 시각파싱OK=0 → published_at 문자열 형식. "
+            "(4) 시각파싱OK>0 & 시간필터후=0 → 시간창(time_filter_steps).",
             label,
         )
 
 
 def _log_yahoo_crawl_entrypoint(name: str, returned: int) -> None:
     _log_yahoo_pipeline_diag_common(_yahoo_overseas_last_pipeline_diag, name, returned)
+
+
+def _log_yahoo_feed_workflow_dispatch(
+    fn_label: str,
+    *,
+    feed_diag: dict[str, Any],
+    returned_count: int,
+) -> None:
+    """workflow_dispatch 로그용: 요청 1)~5) 한 피드(stocks 또는 tech) 기준."""
+    pipe = _yahoo_overseas_last_pipeline_diag
+    logger.info(
+        "%s [확인] (1) HTTP status=%s url=%s | "
+        "(2) 셀렉터 루트=%d strategy=%r probe=%s | "
+        "(3) 필드파싱 실패 reasons=%s rows_out=%s | "
+        "(4) 시간필터 전 파이프 unique URL=%s | (5) 시간필터 후 이 목록 반환=%d",
+        fn_label,
+        feed_diag.get("http_status"),
+        feed_diag.get("page_url"),
+        int(feed_diag.get("li_stream_story") or 0),
+        feed_diag.get("selector_strategy"),
+        feed_diag.get("selector_probe_counts"),
+        feed_diag.get("parse_fail_reasons"),
+        feed_diag.get("rows_out"),
+        pipe.get("merged_unique_before_time_filter", pipe.get("merged_unique_urls")),
+        returned_count,
+    )
 
 
 def crawl_yahoo_stocks() -> list[dict[str, Any]]:
@@ -1337,6 +1596,11 @@ def crawl_yahoo_stocks() -> list[dict[str, Any]]:
     try:
         s, _, _ = _ensure_yahoo_overseas_bundle_cached()
         _log_yahoo_crawl_entrypoint("crawl_yahoo_stocks", len(s))
+        _log_yahoo_feed_workflow_dispatch(
+            "crawl_yahoo_stocks",
+            feed_diag=_yahoo_overseas_last_pipeline_diag.get("stocks_html_diag") or {},
+            returned_count=len(s),
+        )
         return list(s)
     except Exception as e:
         logger.exception("crawl_yahoo_stocks 실패: %s", e)
@@ -1352,6 +1616,11 @@ def crawl_yahoo_tech() -> list[dict[str, Any]]:
     try:
         _, t, _ = _ensure_yahoo_overseas_bundle_cached()
         _log_yahoo_crawl_entrypoint("crawl_yahoo_tech", len(t))
+        _log_yahoo_feed_workflow_dispatch(
+            "crawl_yahoo_tech",
+            feed_diag=_yahoo_overseas_last_pipeline_diag.get("tech_html_diag") or {},
+            returned_count=len(t),
+        )
         return list(t)
     except Exception as e:
         logger.exception("crawl_yahoo_tech 실패: %s", e)
