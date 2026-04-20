@@ -1,6 +1,7 @@
 package com.sapiens.app.data.store
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -24,6 +25,7 @@ class UserPreferencesRepository(
     private val themeKey = stringPreferencesKey("theme")
     private val apiSelectedModelKey = stringPreferencesKey("api_selected_model")
     private val lastRestoredCloudBackupMsKey = longPreferencesKey("last_restored_cloud_backup_ms")
+    private val pushNotificationsEnabledKey = booleanPreferencesKey("push_notifications_enabled")
 
     val themeModeFlow: Flow<String> = context.dataStore.data
         .map { preferences -> preferences[themeKey] ?: THEME_DARK }
@@ -33,6 +35,16 @@ class UserPreferencesRepository(
             preferences[apiSelectedModelKey]?.let { AiSelectedModel.normalize(it) }
                 ?: AiSelectedModel.GEMINI
         }
+
+    /** 푸시 알림 수신 여부(마이 탭 토글). 기본값 true — 기존 동작과 맞춤. */
+    val pushNotificationsEnabledFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences -> preferences[pushNotificationsEnabledKey] ?: true }
+
+    suspend fun setPushNotificationsEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[pushNotificationsEnabledKey] = enabled
+        }
+    }
 
     suspend fun setApiSelectedModel(model: String) {
         val normalized = AiSelectedModel.normalize(model)
@@ -61,6 +73,7 @@ class UserPreferencesRepository(
         return mapOf(
             "theme" to (prefs[themeKey] ?: THEME_DARK),
             "apiSelectedModel" to AiSelectedModel.normalize(prefs[apiSelectedModelKey]),
+            "pushNotificationsEnabled" to (prefs[pushNotificationsEnabledKey] ?: true),
         )
     }
 
@@ -81,6 +94,9 @@ class UserPreferencesRepository(
                     }
                     preferences[apiSelectedModelKey] = inferred
                 }
+            }
+            (data["pushNotificationsEnabled"] as? Boolean)?.let {
+                preferences[pushNotificationsEnabledKey] = it
             }
         }
     }

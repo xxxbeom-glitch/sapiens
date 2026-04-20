@@ -442,6 +442,7 @@ def get_ai_config() -> dict[str, str]:
 
 
 _PUSH_SCHEDULE = "push_schedule"
+_PIPELINE_LOGS = "pipeline_logs"
 
 
 def write_push_schedule_entry(
@@ -474,6 +475,41 @@ def write_push_schedule_entry(
         logger.info("push_schedule 저장: %s (%s)", doc_id, section)
     except Exception as e:
         logger.exception("push_schedule 저장 실패 doc_id=%s: %s", doc_id, e)
+
+
+def write_pipeline_log(
+    *,
+    doc_id: str,
+    section: str,
+    started_at_iso_kst: str,
+    finished_at_iso_kst: str,
+    duration_seconds: int,
+    input_tokens: int,
+    output_tokens: int,
+    total_tokens: int,
+    model: str,
+    status: str,
+    error_message: str | None,
+) -> None:
+    """파이프라인 실행 1회 분량 로그 (토큰·구간·성공/실패)."""
+    try:
+        db = _get_db()
+        payload: dict[str, Any] = {
+            "section": section,
+            "started_at": started_at_iso_kst,
+            "finished_at": finished_at_iso_kst,
+            "duration_seconds": int(duration_seconds),
+            "input_tokens": int(input_tokens),
+            "output_tokens": int(output_tokens),
+            "total_tokens": int(total_tokens),
+            "model": model,
+            "status": status,
+            "error_message": error_message,
+        }
+        db.collection(_PIPELINE_LOGS).document(doc_id).set(payload, merge=False)
+        logger.info("pipeline_logs 저장: %s (%s)", doc_id, section)
+    except Exception as e:
+        logger.exception("pipeline_logs 저장 실패 doc_id=%s: %s", doc_id, e)
 
 
 def set_ai_config_selected_model(model: str) -> None:

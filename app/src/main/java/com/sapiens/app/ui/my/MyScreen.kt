@@ -1,11 +1,15 @@
 package com.sapiens.app.ui.my
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -31,12 +35,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
@@ -56,6 +63,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
+import com.sapiens.app.BuildConfig
 import com.sapiens.app.R
 import com.sapiens.app.data.model.AiSelectedModel
 import com.sapiens.app.data.model.Article
@@ -66,6 +74,7 @@ import com.sapiens.app.data.store.ArticleBookmarksRepository
 import com.sapiens.app.data.store.BookmarkEntry
 import com.sapiens.app.data.store.BookmarkToggleResult
 import com.sapiens.app.data.store.UserPreferencesRepository
+import com.sapiens.app.messaging.FcmTopicSync
 import com.sapiens.app.ui.common.ArticleBottomSheet
 import com.sapiens.app.ui.common.ArticleBottomSheetKind
 import com.sapiens.app.ui.common.transformNaverFinanceNewsReadUrlForMobile
@@ -85,7 +94,8 @@ import kotlinx.coroutines.launch
 
 private enum class ExpandableSection {
     BOOKMARK,
-    API_STATUS
+    API_STATUS,
+    SETTINGS,
 }
 
 @Composable
@@ -115,9 +125,29 @@ fun MyScreen(
     val apiSelectedModel by preferencesRepository.apiSelectedModelFlow.collectAsState(
         initial = AiSelectedModel.GEMINI
     )
+    val pushNotificationsEnabled by preferencesRepository.pushNotificationsEnabledFlow.collectAsState(
+        initial = true
+    )
 
     val bookmarkEntries by bookmarksRepository.bookmarksFlow.collectAsState(initial = emptyList())
     val coroutineScope = rememberCoroutineScope()
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            coroutineScope.launch {
+                preferencesRepository.setPushNotificationsEnabled(true)
+                FcmTopicSync.subscribeAll()
+            }
+        } else {
+            Toast.makeText(
+                context,
+                "알림을 받으려면 설정에서 알림 권한을 허용해 주세요.",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
 
     var expandedSection by remember { mutableStateOf<ExpandableSection?>(null) }
     var selectedBookmarkedArticle by remember { mutableStateOf<Article?>(null) }
@@ -158,6 +188,65 @@ fun MyScreen(
             ) {
                 Text("로그아웃", color = TextSecondary)
             }
+        }
+
+        val notifPermitted = FcmTopicSync.hasNotificationPermission(context)
+        val pushSubtitle = when {
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU -> "브리핑·뉴스·마켓 알림"
+            pushNotificationsEnabled && !notifPermitted ->
+                "설정에서 알림 권한을 허용해 주세요"
+            else -> "브리핑·뉴스·마켓 알림"
+        }
+        PushNotificationMenuRow(
+            subtitle = pushSubtitle,
+            checked = pushNotificationsEnabled,
+            onCheckedChange = { wantOn ->
+                if (wantOn) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        when (
+                            ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.POST_NOTIFICATIONS,
+                            )
+                        ) {
+                            PackageManager.PERMISSION_GRANTED -> {
+                                coroutineScope.launch {
+                                    preferencesRepository.setPushNotificationsEnabled(true)
+                                    FcmTopicSync.subscribeAll()
+                                }
+                            }
+                            else -> {
+                                notificationPermissionLauncher.launch(
+                                    Manifest.permission.POST_NOTIFICATIONS,
+                                )
+                            }
+                        }
+                    } else {
+                        coroutineScope.launch {
+                            preferencesRepository.setPushNotificationsEnabled(true)
+                            FcmTopicSync.subscribeAll()
+                        }
+                    }
+                } else {
+                    coroutineScope.launch {
+                        preferencesRepository.setPushNotificationsEnabled(false)
+                        FcmTopicSync.unsubscribeAll()
+                    }
+                }
+            },
+        )
+
+        ExpandableMenuCard(
+            title = "설정",
+            subtitle = "앱 정보",
+            iconRes = R.drawable.ic_app_brand_0z,
+            expanded = expandedSection == ExpandableSection.SETTINGS,
+            onToggleExpand = {
+                expandedSection =
+                    if (expandedSection == ExpandableSection.SETTINGS) null else ExpandableSection.SETTINGS
+            },
+        ) {
+            SettingsAppInfoPanel(versionName = BuildConfig.VERSION_NAME)
         }
 
         ExpandableMenuCard(
@@ -263,6 +352,99 @@ fun MyScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun SettingsAppInfoPanel(versionName: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.space16),
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_app_brand_0z),
+            contentDescription = "앱 아이콘",
+            modifier = Modifier.size(Spacing.space64),
+            tint = Primary,
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(Spacing.space4),
+        ) {
+            Text(
+                text = "Sapiens",
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = "버전 $versionName",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PushNotificationMenuRow(
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.space16, vertical = Spacing.space6),
+        shape = AppShapes.card,
+        color = Card
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = CardPaddingHorizontal, vertical = RowVertical),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.space12),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Notifications,
+                    contentDescription = "푸시 알림",
+                    modifier = Modifier.size(Spacing.space28),
+                    tint = Primary
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.space2)) {
+                    Text(
+                        text = "푸시 알림",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = OnPrimaryFixed,
+                    checkedTrackColor = Primary,
+                    uncheckedThumbColor = TextSecondary,
+                    uncheckedTrackColor = TextSecondary.copy(alpha = 0.35f),
+                ),
+            )
+        }
     }
 }
 

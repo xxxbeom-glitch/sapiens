@@ -9,22 +9,29 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
-import com.google.firebase.messaging.FirebaseMessaging
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.lifecycleScope
 import com.sapiens.app.data.store.UserPreferencesRepository
+import com.sapiens.app.messaging.FcmTopicSync
 import com.sapiens.app.ui.main.MainScreen
 import com.sapiens.app.ui.theme.SapiensTheme
 import com.sapiens.app.ui.theme.applyThemePalette
-import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -33,7 +40,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        maybeRequestNotificationPermission()
+        lifecycleScope.launch {
+            val enabled = UserPreferencesRepository(this@MainActivity)
+                .pushNotificationsEnabledFlow.first()
+            if (enabled) {
+                maybeRequestNotificationPermission()
+            }
+        }
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = AndroidColor.TRANSPARENT
@@ -102,9 +115,13 @@ private fun SapiensApp(
     onNotificationSectionConsumed: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    val appContext = context.applicationContext
     val preferencesRepository = remember { UserPreferencesRepository(context = context) }
     val savedThemeMode by preferencesRepository.themeModeFlow.collectAsState(
         initial = UserPreferencesRepository.THEME_DARK
+    )
+    val pushNotificationsEnabled by preferencesRepository.pushNotificationsEnabledFlow.collectAsState(
+        initial = true
     )
     var isDarkTheme by remember { mutableStateOf(true) }
     LaunchedEffect(savedThemeMode) {
@@ -115,15 +132,23 @@ private fun SapiensApp(
         applyThemePalette(isDarkTheme)
     }
 
-    LaunchedEffect(Unit) {
-        val messaging = FirebaseMessaging.getInstance()
-        for (topic in listOf("briefing_update", "news_update", "market_update")) {
-            try {
-                messaging.subscribeToTopic(topic).await()
-            } catch (e: Exception) {
-                android.util.Log.w("SapiensApp", "FCM 토픽 구독 실패: $topic", e)
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(pushNotificationsEnabled) {
+        FcmTopicSync.syncFromPreference(appContext, pushNotificationsEnabled)
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, pushNotificationsEnabled) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                scope.launch {
+                    val enabled = preferencesRepository.pushNotificationsEnabledFlow.first()
+                    FcmTopicSync.syncFromPreference(appContext, enabled)
+                }
             }
         }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     SapiensTheme(darkTheme = isDarkTheme) {

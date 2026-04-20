@@ -24,6 +24,10 @@ SELECTED_MODEL_GEMINI = "gemini"
 # 파이프라인 시작 시 [configure_ai]로 설정 (기본: gemini).
 _RUNTIME_SELECTED_MODEL = SELECTED_MODEL_GEMINI
 
+_token_input_total: int = 0
+_token_output_total: int = 0
+_token_model: str = ""
+
 _gemini_client: Any = None
 SYSTEM = (
     "당신은 한국 투자자를 위한 금융 뉴스 에디터입니다.\n"
@@ -255,6 +259,83 @@ def configure_ai(*, selected_model: str) -> None:
     logger.info("summarizer AI runtime: selected_model=%s", _RUNTIME_SELECTED_MODEL)
 
 
+def reset_token_counters() -> None:
+    global _token_input_total, _token_output_total, _token_model
+    _token_input_total = 0
+    _token_output_total = 0
+    _token_model = ""
+
+
+def get_token_usage() -> dict[str, Any]:
+    return {
+        "input": _token_input_total,
+        "output": _token_output_total,
+        "total": _token_input_total + _token_output_total,
+        "model": _token_model,
+    }
+
+
+def _append_model_label(label: str) -> None:
+    global _token_model
+    s = (label or "").strip()
+    if not s:
+        return
+    parts = [p.strip() for p in _token_model.split(",") if p.strip()] if _token_model else []
+    if s not in parts:
+        parts.append(s)
+        _token_model = ",".join(parts)
+
+
+def _usage_meta_get_int(obj: Any, *names: str) -> int:
+    if obj is None:
+        return 0
+    if isinstance(obj, dict):
+        for n in names:
+            v = obj.get(n)
+            if v is not None:
+                try:
+                    return int(v)
+                except (TypeError, ValueError):
+                    pass
+        return 0
+    for n in names:
+        v = getattr(obj, n, None)
+        if v is not None:
+            try:
+                return int(v)
+            except (TypeError, ValueError):
+                pass
+    return 0
+
+
+def _accumulate_gemini_usage(response: Any) -> None:
+    global _token_input_total, _token_output_total
+    um = getattr(response, "usage_metadata", None)
+    if um is None:
+        return
+    inp = _usage_meta_get_int(um, "prompt_token_count", "promptTokenCount")
+    out = _usage_meta_get_int(um, "candidates_token_count", "candidatesTokenCount")
+    _token_input_total += max(0, inp)
+    _token_output_total += max(0, out)
+    _append_model_label(GEMINI_MODEL)
+
+
+def _accumulate_claude_usage(response: Any) -> None:
+    global _token_input_total, _token_output_total
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return
+    if isinstance(usage, dict):
+        inp = int(usage.get("input_tokens") or 0)
+        out = int(usage.get("output_tokens") or 0)
+    else:
+        inp = int(getattr(usage, "input_tokens", None) or 0)
+        out = int(getattr(usage, "output_tokens", None) or 0)
+    _token_input_total += max(0, inp)
+    _token_output_total += max(0, out)
+    _append_model_label(CLAUDE_MODEL)
+
+
 def _ai_any_news_enabled() -> bool:
     return True
 
@@ -287,6 +368,10 @@ def _call_claude(user_content: str) -> str:
         max_tokens=4096,
         messages=[{"role": "user", "content": prompt}],
     )
+    try:
+        _accumulate_claude_usage(response)
+    except Exception as e:
+        logger.warning("Claude usage 집계 실패(무시): %s", e)
     blocks = getattr(response, "content", None) or []
     if not blocks:
         return ""
@@ -412,6 +497,10 @@ def _call_gemini(user_content: str) -> str:
             contents=prompt,
             config={"max_output_tokens": 4096},
         )
+        try:
+            _accumulate_gemini_usage(response)
+        except Exception as e:
+            logger.warning("Gemini usage 집계 실패(무시): %s", e)
         raw = getattr(response, "text", None)
         if raw is None:
             return ""

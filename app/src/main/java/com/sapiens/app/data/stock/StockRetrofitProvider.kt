@@ -2,6 +2,7 @@ package com.sapiens.app.data.stock
 
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.sapiens.app.data.stock.api.KrxDataSystemApi
 import com.sapiens.app.data.stock.api.MStockApi
 import com.sapiens.app.data.stock.api.PublicDataStockApi
 import com.sapiens.app.data.stock.api.StockNaverNewsApi
@@ -24,6 +25,29 @@ internal object StockRetrofitProvider {
         OkHttpClient.Builder()
             .addInterceptor { chain ->
                 val req = chain.request().newBuilder()
+                    .header(
+                        "User-Agent",
+                        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
+                            "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+                    )
+                    .header("Accept", "application/json, text/plain, */*")
+                    .build()
+                chain.proceed(req)
+            }
+            .addInterceptor(log)
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .build()
+    }
+
+    private val krxOkHttp: OkHttpClient by lazy {
+        val log = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BASIC
+        }
+        OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val req = chain.request().newBuilder()
+                    .header("Referer", "https://data.krx.co.kr/")
                     .header(
                         "User-Agent",
                         "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
@@ -75,5 +99,14 @@ internal object StockRetrofitProvider {
             .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
             .create(PublicDataStockApi::class.java)
+    }
+
+    val krxDataSystem: KrxDataSystemApi by lazy {
+        Retrofit.Builder()
+            .baseUrl("https://data.krx.co.kr/")
+            .client(krxOkHttp)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+            .create(KrxDataSystemApi::class.java)
     }
 }

@@ -49,6 +49,14 @@ android {
         compose = true
         buildConfig = true
     }
+    packaging {
+        resources {
+            pickFirsts += listOf(
+                "META-INF/androidx.versionedparcelable_versionedparcelable.version",
+                "META-INF/androidx.core_core.version",
+            )
+        }
+    }
 }
 
 dependencies {
@@ -86,7 +94,9 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     // 동일 API(barteksc 기반). JitPack `com.github.barteksc:android-pdf-viewer`는 해석 실패가 많아 Maven Central 포크 사용.
-    implementation("com.github.mhiew:android-pdf-viewer:3.2.0-beta.1")
+    implementation("com.github.mhiew:android-pdf-viewer:3.2.0-beta.1") {
+        exclude(group = "com.android.support")
+    }
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

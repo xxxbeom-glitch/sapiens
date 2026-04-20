@@ -21,32 +21,34 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import java.util.Locale
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.graphics.ColorUtils
+import androidx.core.view.WindowCompat
 import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
@@ -56,8 +58,7 @@ import com.sapiens.app.data.stock.StockDetailUiState
 import com.sapiens.app.data.stock.StockNewsItem
 import com.sapiens.app.data.stock.StockReportItem
 import com.sapiens.app.data.model.Article
-import com.sapiens.app.ui.common.PdfViewerDialog
-import com.sapiens.app.ui.news.NewsFeedRow
+import com.sapiens.app.ui.briefing.SectionLabel
 import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.AppShapes
 import com.sapiens.app.ui.theme.Background
@@ -68,9 +69,6 @@ import com.sapiens.app.ui.theme.CardPaddingHorizontal
 import com.sapiens.app.ui.theme.CardPaddingVertical
 import com.sapiens.app.ui.theme.CardSpacing
 import com.sapiens.app.ui.theme.ContentAlpha
-import com.sapiens.app.ui.theme.MarketDown
-import com.sapiens.app.ui.theme.MarketFlat
-import com.sapiens.app.ui.theme.MarketUp
 import com.sapiens.app.ui.theme.RowVertical
 import com.sapiens.app.ui.theme.SapiensTextStyles
 import com.sapiens.app.ui.theme.SheetHorizontal
@@ -87,18 +85,9 @@ fun StockDetailBottomSheet(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
-    var pdfViewerState by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     LaunchedEffect(stockCode) {
         viewModel.load(stockCode)
-    }
-
-    pdfViewerState?.let { (pdfUrl, pdfTitle) ->
-        PdfViewerDialog(
-            url = pdfUrl,
-            title = pdfTitle,
-            onDismiss = { pdfViewerState = null },
-        )
     }
 
     fun openUrl(url: String) {
@@ -110,16 +99,33 @@ fun StockDetailBottomSheet(
     }
 
     Dialog(
-        onDismissRequest = {
-            pdfViewerState = null
-            onDismissRequest()
-        },
+        onDismissRequest = onDismissRequest,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
             dismissOnBackPress = true,
             dismissOnClickOutside = false,
         ),
     ) {
+        val view = LocalView.current
+        DisposableEffect(Background) {
+            val window = (view.parent as? DialogWindowProvider)?.window
+            if (window != null) {
+                val previousColor = window.statusBarColor
+                val controller = WindowCompat.getInsetsController(window, window.decorView)
+                val previousLightIcons = controller.isAppearanceLightStatusBars
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+                window.statusBarColor = Background.toArgb()
+                controller.isAppearanceLightStatusBars =
+                    ColorUtils.calculateLuminance(Background.toArgb()) > 0.5
+                onDispose {
+                    window.statusBarColor = previousColor
+                    controller.isAppearanceLightStatusBars = previousLightIcons
+                    WindowCompat.setDecorFitsSystemWindows(window, true)
+                }
+            } else {
+                onDispose { }
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -147,7 +153,7 @@ fun StockDetailBottomSheet(
                                 onClick = onDismissRequest,
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
-                                    .padding(top = RowVertical)
+                                    .padding(top = Spacing.space28)
                                     .padding(horizontal = SheetHorizontal)
                             )
                         }
@@ -170,7 +176,7 @@ fun StockDetailBottomSheet(
                                 onClick = onDismissRequest,
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
-                                    .padding(top = RowVertical)
+                                    .padding(top = Spacing.space28)
                                     .padding(horizontal = SheetHorizontal)
                             )
                         }
@@ -180,9 +186,6 @@ fun StockDetailBottomSheet(
                             modifier = Modifier.weight(1f),
                             data = s.data,
                             onOpenUrl = ::openUrl,
-                            onOpenReportPdf = { url, title ->
-                                pdfViewerState = url to title
-                            },
                             onDismissRequest = onDismissRequest
                         )
                     }
@@ -197,25 +200,24 @@ private fun StockDetailCloseIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    IconButton(
-        onClick = onClick,
-        modifier = modifier,
-        interactionSource = remember { MutableInteractionSource() }
+    Box(
+        modifier = modifier
+            .size(Spacing.space24)
+            .clip(CircleShape)
+            .background(TextSecondary.copy(alpha = ContentAlpha.iconGhost))
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .size(Spacing.space40)
-                .clip(CircleShape)
-                .background(TextSecondary.copy(alpha = ContentAlpha.iconGhost)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Close,
-                contentDescription = "닫기",
-                tint = TextPrimary,
-                modifier = Modifier.size(Spacing.space18)
-            )
-        }
+        Icon(
+            imageVector = Icons.Default.Close,
+            contentDescription = "닫기",
+            tint = TextPrimary,
+            modifier = Modifier.size(Spacing.space14)
+        )
     }
 }
 
@@ -233,19 +235,17 @@ private fun rememberSvgImageLoader(): ImageLoader {
 private fun StockDetailContent(
     data: StockDetailUi,
     onOpenUrl: (String) -> Unit,
-    onOpenReportPdf: (String, String) -> Unit,
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val svgLoader = rememberSvgImageLoader()
     val logoUrl =
         "https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock${data.code}.svg"
-    val changeColor = when (data.isRising) {
-        true -> MarketUp
-        false -> MarketDown
-        null -> MarketFlat
-    }
     val dividerColor = TextSecondary.copy(alpha = ContentAlpha.hairlineOnSecondary)
+    val reports3 = data.reports.take(3)
+    val news3 = data.news.take(3)
+    val financialUnitSubtitle =
+        data.financialValueUnit.trim().takeIf { it.isNotBlank() }?.let { "단위: $it" }
 
     Column(
         modifier = modifier
@@ -256,7 +256,7 @@ private fun StockDetailContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = SheetHorizontal)
-                .padding(top = RowVertical)
+                .padding(top = Spacing.space28, bottom = Spacing.space16)
         ) {
             StockDetailCloseIconButton(
                 onClick = onDismissRequest,
@@ -265,7 +265,7 @@ private fun StockDetailContent(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(end = Spacing.space48)
+                    .padding(end = Spacing.space32)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -298,24 +298,6 @@ private fun StockDetailContent(
                         )
                     }
                 }
-                Row(
-                    modifier = Modifier.padding(top = CardSpacing),
-                    verticalAlignment = Alignment.Bottom,
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.space10)
-                ) {
-                    Text(
-                        text = data.closePrice,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = data.fluctuationsRatio,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = changeColor
-                    )
-                }
             }
         }
 
@@ -324,100 +306,107 @@ private fun StockDetailContent(
             color = dividerColor,
             modifier = Modifier.fillMaxWidth()
         )
-        Spacer(modifier = Modifier.height(Spacing.space24))
 
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth()
-                .padding(horizontal = SheetHorizontal),
-            contentPadding = PaddingValues(bottom = BottomSheetBottomPadding)
+                .fillMaxWidth(),
+            contentPadding = PaddingValues(
+                top = Spacing.space8,
+                bottom = BottomSheetBottomPadding + Spacing.space8
+            )
         ) {
             item {
-                Spacer(Modifier.height(CardSpacing))
-                Text(
-                    text = "투자 정보",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextPrimary
-                )
-                Spacer(Modifier.height(CardSpacing))
-                InvestmentMetricCardGrid(
-                    metrics = listOf(
-                        "시가총액" to data.marketCap,
-                        "PER" to data.per,
-                        "PBR" to data.pbr,
-                        "EPS" to data.eps,
-                        "배당수익률" to data.dividendYield,
-                        "주당배당금" to data.dps,
+                SectionLabel(title = "투자 정보")
+            }
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.space16)
+                        .padding(bottom = Spacing.space8)
+                ) {
+                    InvestmentMetricCardGrid(
+                        metrics = listOf(
+                            "시가총액" to data.marketCap,
+                            "PER" to data.per,
+                            "PBR" to data.pbr,
+                            "EPS" to data.eps,
+                            "배당수익률" to data.dividendYield,
+                            "주당배당금" to data.dps,
+                        )
                     )
-                )
+                }
             }
             if (data.financialYears.isNotEmpty()) {
                 item {
-                    Spacer(Modifier.height(CardSpacing))
-                    Text(
-                        text = "매출·영업이익 (연간)",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = TextPrimary
+                    Spacer(modifier = Modifier.height(Spacing.space18))
+                    SectionLabel(
+                        title = "매출·영업이익 (연간)",
+                        subtitle = financialUnitSubtitle
                     )
-                    if (data.financialValueUnit.isNotBlank()) {
-                        Spacer(Modifier.height(Spacing.space4))
-                        Text(
-                            text = "단위: ${data.financialValueUnit}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary,
-                        )
+                }
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Spacing.space16)
+                            .padding(bottom = Spacing.space8)
+                    ) {
+                        FinancialYearCardGrid(rows = data.financialYears)
                     }
-                    Spacer(Modifier.height(CardSpacing))
-                    FinancialYearCardGrid(rows = data.financialYears)
                 }
             }
             item {
-                val reports3 = data.reports.take(3)
-                val news3 = data.news.take(3)
-                Spacer(Modifier.height(CardSpacing))
-                Text(
-                    text = "리포트",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextPrimary
-                )
-                Spacer(Modifier.height(CardSpacing))
-                if (reports3.isEmpty()) {
-                    Text(
-                        "리포트가 없습니다.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary
-                    )
-                } else {
-                    StockDetailNewsStyleFeed(
-                        items = reports3.map { it.toArticle() },
-                        onClickItem = { article ->
-                            onOpenReportPdf(article.url, article.headline)
-                        }
-                    )
+                Spacer(modifier = Modifier.height(Spacing.space18))
+                SectionLabel(title = "리포트")
+            }
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.space16)
+                        .padding(bottom = Spacing.space8)
+                ) {
+                    if (reports3.isEmpty()) {
+                        Text(
+                            text = "리포트가 없습니다.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary
+                        )
+                    } else {
+                        StockDetailMetaHeadlineCardFeed(
+                            items = reports3.map { it.toArticle() },
+                            metaFor = { it.reportMetaLine() },
+                            onClickItem = { onOpenUrl(it.url) }
+                        )
+                    }
                 }
-                Spacer(Modifier.height(CardSpacing))
-                Text(
-                    text = "뉴스",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextPrimary
-                )
-                Spacer(Modifier.height(CardSpacing))
-                if (news3.isEmpty()) {
-                    Text(
-                        "뉴스가 없습니다.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary
-                    )
-                } else {
-                    StockDetailNewsStyleFeed(
-                        items = news3.map { it.toArticle() },
-                        onClickItem = { onOpenUrl(it.url) }
-                    )
+            }
+            item {
+                Spacer(modifier = Modifier.height(Spacing.space18))
+                SectionLabel(title = "뉴스")
+            }
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.space16)
+                        .padding(bottom = Spacing.space8)
+                ) {
+                    if (news3.isEmpty()) {
+                        Text(
+                            text = "뉴스가 없습니다.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary
+                        )
+                    } else {
+                        StockDetailMetaHeadlineCardFeed(
+                            items = news3.map { it.toArticle() },
+                            metaFor = { it.newsMetaLine() },
+                            onClickItem = { onOpenUrl(it.url) }
+                        )
+                    }
                 }
             }
         }
@@ -556,22 +545,22 @@ private fun FinancialYearCardGrid(rows: List<FinancialYearRow>) {
     }
 }
 
-/** 뉴스 탭 [NewsScreen] `LazyColumn`과 동일: Background 위 Card + RowVertical·구분선 */
+/** [NewsFeedList]과 동일한 카드·구분선; 메타(증권사·날짜 등)는 타이틀 위 한 줄. */
 @Composable
-private fun StockDetailNewsStyleFeed(
+private fun StockDetailMetaHeadlineCardFeed(
     items: List<Article>,
+    metaFor: (Article) -> String,
     onClickItem: (Article) -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = RowVertical)
             .background(Card, AppShapes.card)
     ) {
         items.forEachIndexed { index, article ->
-            NewsFeedRow(
-                item = article,
-                rank = null,
+            StockDetailMetaHeadlineRow(
+                metaLine = metaFor(article),
+                headline = article.headline,
                 onClick = { onClickItem(article) }
             )
             if (index < items.lastIndex) {
@@ -586,15 +575,58 @@ private fun StockDetailNewsStyleFeed(
     }
 }
 
+@Composable
+private fun StockDetailMetaHeadlineRow(
+    metaLine: String,
+    headline: String,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                onClick = onClick
+            )
+            .padding(horizontal = CardPaddingHorizontal, vertical = RowVertical),
+        verticalArrangement = Arrangement.spacedBy(Spacing.space8)
+    ) {
+        if (metaLine.isNotBlank()) {
+            Text(
+                text = metaLine,
+                style = MaterialTheme.typography.labelSmall,
+                color = TextSecondary
+            )
+        }
+        Text(
+            text = headline,
+            style = MaterialTheme.typography.titleSmall,
+            color = TextPrimary
+        )
+    }
+}
+
+private fun Article.reportMetaLine(): String = time.trim()
+
+private fun Article.newsMetaLine(): String {
+    val s = source.trim()
+    val t = time.trim()
+    return when {
+        s.isNotBlank() && t.isNotBlank() -> "$s · $t"
+        else -> s.ifBlank { t }
+    }
+}
+
 private fun StockReportItem.toArticle(): Article {
     val broker = brokerName.trim().ifBlank { "증권" }
     val d = date.trim().ifBlank { "-" }
     return Article(
-        source = "목표가 ${goalPrice.trim().ifBlank { "-" }} · ${opinion.trim().ifBlank { "-" }}",
+        source = "",
         headline = title,
         summary = "",
         time = "$broker · $d",
-        category = "리포트",
+        category = "",
         tag = broker,
         url = url
     )
@@ -605,7 +637,7 @@ private fun StockNewsItem.toArticle(): Article = Article(
     headline = title,
     summary = "",
     time = date.trim().ifBlank { "-" },
-    category = "뉴스",
+    category = "",
     tag = "",
     url = url
 )

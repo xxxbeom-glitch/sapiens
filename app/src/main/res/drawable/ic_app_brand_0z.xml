@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 0z.svg — 마이 > 설정 앱 아이콘 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="28"
+    android:viewportHeight="28">
+    <path
+        android:fillColor="#00000000"
+        android:fillType="evenOdd"
+        android:pathData="M8.06646,13.1345C8.06646,9.85745 10.7227,7.20117 13.9998,7.20117C17.2768,7.20117 19.9331,9.85745 19.9331,13.1345L19.9341,14.3264C19.9341,15.0309 20.0888,15.7266 20.3894,16.3639L20.8107,17.259C21.4539,18.6271 20.4556,20.1994 18.9445,20.1994H9.05502C7.54299,20.1994 6.54567,18.6271 7.18882,17.259L7.61012,16.3639C7.90981,15.7266 8.06549,15.0309 8.06549,14.3264L8.06646,13.1345Z"
+        android:strokeWidth="1.5"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M11.1992,20.2002C11.1992,21.7463 12.4534,23.0005 13.9995,23.0005C15.5466,23.0005 16.7998,21.7463 16.7998,20.2002"
+        android:strokeWidth="1.5"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M15.6044,7.414V6.60447C15.6044,5.71807 14.8854,5 13.999,5C13.1126,5 12.3945,5.71807 12.3945,6.60447V7.414"
+        android:strokeWidth="1.5"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

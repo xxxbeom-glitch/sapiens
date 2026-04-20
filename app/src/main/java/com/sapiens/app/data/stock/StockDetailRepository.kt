@@ -2,13 +2,17 @@ package com.sapiens.app.data.stock
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.sapiens.app.data.stock.api.KrxDataSystemApi
 import com.sapiens.app.data.stock.dto.FinanceSummaryDto
+import com.sapiens.app.data.stock.dto.KrxMdcstat03501RowDto
 import com.sapiens.app.data.stock.dto.NaverStockBasicDto
 import com.sapiens.app.data.stock.dto.ResearchItemDto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 interface StockDetailRepository {
@@ -25,11 +29,9 @@ class StockDetailRepositoryImpl(
         val researchApi = StockRetrofitProvider.stockNaverResearch
         val newsApi = StockRetrofitProvider.stockNaverNews
         val publicApi = StockRetrofitProvider.publicData
+        val krxApi = StockRetrofitProvider.krxDataSystem
 
         val basic: NaverStockBasicDto = m.getBasic(normalized)
-        val integrationMetrics = runCatching {
-            parseIntegrationTotalInfos(m.getIntegration(normalized).string())
-        }.getOrNull()
 
         val finance: FinanceSummaryDto = runCatching { m.getFinanceSummary(normalized) }
             .getOrElse { FinanceSummaryDto(null) }
@@ -47,18 +49,43 @@ class StockDetailRepositoryImpl(
             )
         }.getOrNull()
 
+        val krxRow: KrxMdcstat03501RowDto? = runCatching {
+            fetchKrxInvestmentMetrics(
+                krxApi = krxApi,
+                code = normalized,
+                stockName = basic.stockName.orEmpty().ifBlank { normalized },
+            )
+        }.getOrNull()
+
         val marketCap = coalesceMetric(
             formatMarketSum(basic.marketSum),
             publicMetrics?.marketCap
         )
-        val per = coalesceMetric(formatPer(basic.per), publicMetrics?.per)
-        val pbr = coalesceMetric(formatPbr(basic.pbr), publicMetrics?.pbr)
-        val eps = coalesceMetric(formatEps(basic.eps), publicMetrics?.eps)
-        val dividendYield = coalesceMetric(
+        val per = coalesceMetricThree(
+            formatPer(krxRow?.per),
+            formatPer(basic.per),
+            publicMetrics?.per
+        )
+        val pbr = coalesceMetricThree(
+            formatPbr(krxRow?.pbr),
+            formatPbr(basic.pbr),
+            publicMetrics?.pbr
+        )
+        val eps = coalesceMetricThree(
+            formatEps(krxRow?.eps),
+            formatEps(basic.eps),
+            publicMetrics?.eps
+        )
+        val dividendYield = coalesceMetricThree(
+            formatDividendRate(krxRow?.dvr),
             formatDividendRate(basic.dividendRate),
             publicMetrics?.dividendYield
         )
-        val dps = coalesceMetric(formatDividendWon(basic.dividend), publicMetrics?.dps)
+        val dps = coalesceMetricThree(
+            formatDividendWon(krxRow?.dps),
+            formatDividendWon(basic.dividend),
+            publicMetrics?.dps
+        )
 
         val reports: List<StockReportItem> = runCatching {
             researchApi.getResearch(normalized, page = 0, size = 16)
@@ -94,6 +121,30 @@ class StockDetailRepositoryImpl(
             reports = reports,
             news = news,
         )
+    }
+
+    private suspend fun fetchKrxInvestmentMetrics(
+        krxApi: KrxDataSystemApi,
+        code: String,
+        stockName: String,
+    ): KrxMdcstat03501RowDto? {
+        val trdDd = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE)
+        val resp = krxApi.getMdcstat03501(
+            bld = "dbms/MDC/STAT/standard/MDCSTAT03501",
+            trdDd = trdDd,
+            tboxisuCdFinderStkisu0_0 = code,
+            isuCd = code,
+            isuCd2 = code,
+            codeNmIsuCdFinderStkisu0_0 = stockName.trim().ifBlank { code },
+            param1IsuCdFinderStkisu0_0 = "",
+            trdDdTp = "1",
+            strtDd = trdDd,
+            endDd = trdDd,
+            share = "1",
+            money = "1",
+            csvxlsIsNo = "false",
+        )
+        return resp.output?.firstOrNull()
     }
 
     private fun ResearchItemDto.toReportItem(code: String): StockReportItem? {
@@ -185,53 +236,6 @@ class StockDetailRepositoryImpl(
         val dividendYield: String,
         val dps: String,
     )
-
-    /**
-     * `m.stock.naver.com/api/stock/{code}/integration` 의 [totalInfos]에서 투자 지표 추출.
-     * (basic JSON 루트에는 per 등이 없는 경우가 많음)
-     */
-    private data class IntegrationTotalInfos(
-        val perValue: String?,
-        val pbrValue: String?,
-        val epsValue: String?,
-        val dividendYieldValue: String?,
-        val dividendValue: String?,
-        val marketCapDisplay: String?,
-    )
-
-    private fun parseIntegrationTotalInfos(json: String): IntegrationTotalInfos? {
-        val root = runCatching { JsonParser.parseString(json).asJsonObject }.getOrNull() ?: return null
-        val arr = root.getAsJsonArray("totalInfos") ?: return null
-        val byCode = mutableMapOf<String, String>()
-        for (el in arr) {
-            if (!el.isJsonObject) continue
-            val o = el.asJsonObject
-            val code = o.get("code")?.takeIf { !it.isJsonNull }?.asString?.trim().orEmpty()
-            val value = o.get("value")?.takeIf { !it.isJsonNull }?.asString?.trim().orEmpty()
-            if (code.isNotEmpty() && value.isNotEmpty()) {
-                byCode[code] = value
-            }
-        }
-        if (byCode.isEmpty()) return null
-        return IntegrationTotalInfos(
-            perValue = byCode["per"],
-            pbrValue = byCode["pbr"],
-            epsValue = byCode["eps"],
-            dividendYieldValue = byCode["dividendYieldRatio"] ?: byCode["dividendRate"],
-            dividendValue = byCode["dividend"],
-            marketCapDisplay = formatMarketCapFromIntegrationValue(byCode["marketValue"]),
-        )
-    }
-
-    /** 이미 "1,254조 268억" 형태면 끝에 ` 원`만 보강. */
-    private fun formatMarketCapFromIntegrationValue(raw: String?): String? {
-        val s = raw?.trim().orEmpty()
-        if (s.isBlank()) return null
-        return when {
-            s.endsWith("원") -> s
-            else -> "${s.trimEnd()} 원"
-        }
-    }
 
     private fun coalesceMetric(primary: String, secondary: String?): String {
         val p = primary.trim()

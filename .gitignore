@@ -36,3 +36,5 @@ google-services.json
 # Secrets
 .env
 serviceaccount.json
+# Firebase Admin SDK (서버/파이프라인만 로컬·CI 환경변수로 사용, 저장소에 커밋 금지)
+*-firebase-adminsdk-*.json

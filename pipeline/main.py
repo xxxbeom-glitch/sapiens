@@ -420,8 +420,9 @@ def run() -> None:
     import crawler
     import firebase_client
     import summarizer
+    from datetime import datetime
 
-    t0 = time.perf_counter()
+    import pytz
 
     section = (os.environ.get("PIPELINE_SECTION") or PIPELINE_SECTION_ALL).strip().lower()
     allowed = (
@@ -436,17 +437,13 @@ def run() -> None:
         logger.warning("알 수 없는 PIPELINE_SECTION=%r — all 로 실행", section)
         section = PIPELINE_SECTION_ALL
 
-    if section == PIPELINE_SECTION_FULL:
-        _run_pipeline_full(crawler, firebase_client, summarizer)
-        elapsed = time.perf_counter() - t0
-        logger.info("파이프라인 종료 section=%s, 소요 %.1f초", section, elapsed)
-        return
+    summarizer.reset_token_counters()
+    kst = pytz.timezone("Asia/Seoul")
+    started_at = datetime.now(kst)
 
-    if section != PIPELINE_SECTION_ALL:
-        skip, reason = is_skip_day(section)
-        if skip:
-            logger.info("파이프라인 스킵: section=%s reason=%s", section, reason)
-            return
+    t0 = time.perf_counter()
+    status = "success"
+    error_message: str | None = None
 
     def _maybe_briefing() -> None:
         sk, rs = is_skip_day(PIPELINE_SECTION_BRIEFING)
@@ -492,22 +489,61 @@ def run() -> None:
             return
         _run_market_only(crawler, firebase_client)
 
-    if section == PIPELINE_SECTION_ALL:
-        _maybe_briefing()
-        _maybe_domestic()
-        _maybe_overseas()
-        _maybe_market()
-    elif section == PIPELINE_SECTION_BRIEFING:
-        _run_briefing_only(crawler, firebase_client, summarizer)
-    elif section == PIPELINE_SECTION_DOMESTIC_NEWS:
-        _run_domestic_news_only(crawler, firebase_client, summarizer)
-    elif section == PIPELINE_SECTION_OVERSEAS_NEWS:
-        _run_overseas_news_only(crawler, firebase_client, summarizer)
-    elif section == PIPELINE_SECTION_MARKET:
-        _run_market_only(crawler, firebase_client)
+    try:
+        if section == PIPELINE_SECTION_FULL:
+            _run_pipeline_full(crawler, firebase_client, summarizer)
+            elapsed = time.perf_counter() - t0
+            logger.info("파이프라인 종료 section=%s, 소요 %.1f초", section, elapsed)
+            return
 
-    elapsed = time.perf_counter() - t0
-    logger.info("파이프라인 종료 section=%s, 소요 %.1f초", section, elapsed)
+        if section != PIPELINE_SECTION_ALL:
+            skip, reason = is_skip_day(section)
+            if skip:
+                logger.info("파이프라인 스킵: section=%s reason=%s", section, reason)
+                return
+
+        if section == PIPELINE_SECTION_ALL:
+            _maybe_briefing()
+            _maybe_domestic()
+            _maybe_overseas()
+            _maybe_market()
+        elif section == PIPELINE_SECTION_BRIEFING:
+            _run_briefing_only(crawler, firebase_client, summarizer)
+        elif section == PIPELINE_SECTION_DOMESTIC_NEWS:
+            _run_domestic_news_only(crawler, firebase_client, summarizer)
+        elif section == PIPELINE_SECTION_OVERSEAS_NEWS:
+            _run_overseas_news_only(crawler, firebase_client, summarizer)
+        elif section == PIPELINE_SECTION_MARKET:
+            _run_market_only(crawler, firebase_client)
+
+        elapsed = time.perf_counter() - t0
+        logger.info("파이프라인 종료 section=%s, 소요 %.1f초", section, elapsed)
+    except Exception as e:
+        status = "error"
+        error_message = str(e)
+        logger.exception("파이프라인 오류 section=%s: %s", section, e)
+        raise
+    finally:
+        finished_at = datetime.now(kst)
+        usage = summarizer.get_token_usage()
+        duration_seconds = int((finished_at - started_at).total_seconds())
+        doc_id = f"{section}_{started_at.strftime('%Y%m%d_%H%M')}"
+        try:
+            firebase_client.write_pipeline_log(
+                doc_id=doc_id,
+                section=section,
+                started_at_iso_kst=started_at.isoformat(),
+                finished_at_iso_kst=finished_at.isoformat(),
+                duration_seconds=duration_seconds,
+                input_tokens=int(usage["input"]),
+                output_tokens=int(usage["output"]),
+                total_tokens=int(usage["total"]),
+                model=str(usage.get("model") or ""),
+                status=status,
+                error_message=error_message,
+            )
+        except Exception:
+            logger.exception("pipeline_logs 저장 실패 doc_id=%s", doc_id)
 
 
 if __name__ == "__main__":
