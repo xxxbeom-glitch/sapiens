@@ -73,7 +73,10 @@ private val tabs = listOf(
 )
 
 @Composable
-fun MainScreen() {
+fun MainScreen(
+    navigateToSectionKey: String? = null,
+    onNavigateToSectionConsumed: () -> Unit = {},
+) {
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     var isOverseasNews by remember { mutableStateOf(false) }
     var stockDetailCode by remember { mutableStateOf<String?>(null) }
@@ -118,6 +121,19 @@ fun MainScreen() {
                 cloudBackupRepository.restoreFromCloudIfNeeded(uid)
             }
         }
+    }
+
+    LaunchedEffect(navigateToSectionKey) {
+        val key = navigateToSectionKey?.trim()?.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
+        when (key) {
+            "briefing" -> selectedTabIndex = 0
+            "domestic_news" -> {
+                selectedTabIndex = 1
+                isOverseasNews = false
+            }
+            "market" -> selectedTabIndex = 2
+        }
+        onNavigateToSectionConsumed()
     }
 
     Scaffold(

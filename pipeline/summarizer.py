@@ -99,18 +99,25 @@ def _looks_english_headline(text: str) -> bool:
     return bool(_LATIN_RE.search(s)) and not _contains_hangul(s)
 
 
-def _strip_json_code_fences(text: str | None) -> str:
-    """마크다운 코드블록 제거 후 strip. None·빈 문자열은 빈 문자열."""
+def _preprocess_llm_json_blob(text: str | None) -> str:
+    """
+    모든 json.loads 시도 전 공통 전처리.
+    strip → ```json / ``` 마크다운 펜스 제거 → 첫 `{`~마지막 `}` 슬라이스.
+    """
     if text is None:
         return ""
-    s = str(text).strip()
-    if not s:
+    t = str(text).strip()
+    if not t:
         return ""
-    s = s.replace("```json", "").replace("```", "").strip()
-    m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", s)
-    if m:
-        s = m.group(1).strip()
-    return s
+    t = re.sub(r"^```json\s*", "", t, flags=re.IGNORECASE)
+    t = re.sub(r"^```\s*", "", t)
+    t = re.sub(r"\s*```$", "", t)
+    t = t.strip()
+    start = t.find("{")
+    end = t.rfind("}")
+    if start != -1 and end != -1 and end >= start:
+        t = t[start : end + 1]
+    return t
 
 
 def _json_object_slice(s: str) -> str | None:
@@ -161,7 +168,7 @@ def _try_repair_truncated_json_dict(core: str) -> dict[str, Any] | None:
     잘린 JSON 객체 복구: 문자열 밖에서 (열린 [ − 닫힌 ])만큼 `]` 추가,
     (열린 { − 닫힌 })만큼 `}` 추가 후 json.loads. 순서: ] 먼저, } 나중.
     """
-    t = (core or "").strip()
+    t = _preprocess_llm_json_blob(core)
     if not t.startswith("{"):
         return None
     try:
@@ -189,12 +196,12 @@ def _try_repair_truncated_json_dict(core: str) -> dict[str, Any] | None:
 def _extract_json(text: str) -> dict[str, Any] | str:
     """
     JSON 객체 파싱 시도.
-    1) 전체 문자열 json.loads
+    1) 공통 전처리 후 전체 문자열 json.loads
     2) 첫 `{` 이후: `]`·`}` 균형 보완 후 json.loads
     3) 첫 `{`~마지막 `}` 슬라이스 후 동일 보완
     성공 시 dict. 실패 시 원문 처리 문자열 반환(호출부에서 dict 여부로 분기).
     """
-    s = _strip_json_code_fences(text)
+    s = _preprocess_llm_json_blob(text)
     if not s:
         return ""
     try:

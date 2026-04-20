@@ -1552,6 +1552,9 @@ def _naver_theme_stocks_from_api(payload: Any, limit: int) -> list[dict[str, str
         }
         if code_str:
             row["code"] = code_str
+        gb = str(item.get("upDownGb") or "").strip()
+        if gb:
+            row["upDownGb"] = gb
         rows.append(row)
         if len(rows) >= limit:
             break
@@ -1654,6 +1657,9 @@ def _naver_upjong_stocks_from_api(payload: Any, limit: int) -> list[dict[str, st
         }
         if code_str:
             row["code"] = code_str
+        gb = str(item.get("upDownGb") or "").strip()
+        if gb:
+            row["upDownGb"] = gb
         rows.append(row)
         if len(rows) >= limit:
             break

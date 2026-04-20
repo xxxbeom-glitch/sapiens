@@ -441,6 +441,41 @@ def get_ai_config() -> dict[str, str]:
         return dict(defaults)
 
 
+_PUSH_SCHEDULE = "push_schedule"
+
+
+def write_push_schedule_entry(
+    *,
+    doc_id: str,
+    section: str,
+    scheduled_at_utc_iso: str,
+    title: str,
+    body: str,
+    topic: str,
+) -> None:
+    """
+    FCM 푸시 예약 문서 (Cloud Functions 스케줄러가 발송).
+    scheduled_at: UTC ISO 문자열 (Z), Cloud Function에서 new Date() 비교용.
+    """
+    try:
+        db = _get_db()
+        db.collection(_PUSH_SCHEDULE).document(doc_id).set(
+            {
+                "section": section,
+                "scheduled_at": scheduled_at_utc_iso,
+                "title": title,
+                "body": body,
+                "topic": topic,
+                "status": "pending",
+                "created_at": SERVER_TIMESTAMP,
+            },
+            merge=False,
+        )
+        logger.info("push_schedule 저장: %s (%s)", doc_id, section)
+    except Exception as e:
+        logger.exception("push_schedule 저장 실패 doc_id=%s: %s", doc_id, e)
+
+
 def set_ai_config_selected_model(model: str) -> None:
     """Claude 실패 후 Gemini 폴백 등에서 원격 selected_model 갱신."""
     m = _normalize_ai_selected_model(model) or _AI_MODEL_GEMINI

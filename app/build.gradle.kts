@@ -76,6 +76,7 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore-ktx")
     // Auth (구글 로그인)
     implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.firebase:firebase-messaging-ktx")
     // Google Sign-In
     implementation("com.google.android.gms:play-services-auth:21.0.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
@@ -84,6 +85,8 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    // 동일 API(barteksc 기반). JitPack `com.github.barteksc:android-pdf-viewer`는 해석 실패가 많아 Maven Central 포크 사용.
+    implementation("com.github.mhiew:android-pdf-viewer:3.2.0-beta.1")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

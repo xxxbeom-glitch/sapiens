@@ -196,7 +196,14 @@ private fun Map<*, *>.toThemeStock(): ThemeStock? {
         ?: numberFieldAsString(this, "change", "fluctuationsRatio", "prdyCtrt")
         ?: "0%"
     val changeDisplay = change.trim().ifBlank { "0%" }
-    return ThemeStock(name = name, price = priceDisplay, change = changeDisplay, code = code)
+    val upDownGb = stringField(this, "upDownGb", "up_down_gb")?.trim()?.takeIf { it.isNotEmpty() }
+    return ThemeStock(
+        name = name,
+        price = priceDisplay,
+        change = changeDisplay,
+        code = code,
+        upDownGb = upDownGb,
+    )
 }
 
 private fun longField(m: Map<*, *>, vararg keys: String): Long? {
