@@ -1,5 +1,5 @@
 """
-기사 요약·시황·기업 분석: Firebase settings/ai_config 에 따른 Claude / Gemini 분기.
+기사 요약·시황·기업 분석: Firebase settings/ai_config 의 selected_model 에 따른 Claude / Gemini 분기.
 """
 from __future__ import annotations
 
@@ -18,9 +18,11 @@ logger = logging.getLogger(__name__)
 GEMINI_MODEL = "gemini-2.5-flash"
 CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 
-# 파이프라인 시작 시 [configure_ai]로 설정 (기본: 둘 다 켜짐).
-_RUNTIME_CLAUDE_ENABLED = True
-_RUNTIME_GEMINI_ENABLED = True
+SELECTED_MODEL_CLAUDE = "claude"
+SELECTED_MODEL_GEMINI = "gemini"
+
+# 파이프라인 시작 시 [configure_ai]로 설정 (기본: gemini).
+_RUNTIME_SELECTED_MODEL = SELECTED_MODEL_GEMINI
 
 _gemini_client: Any = None
 SYSTEM = (
@@ -192,36 +194,34 @@ def _require_json_dict(text: str) -> dict[str, Any]:
     raise ValueError("model response was not valid JSON object")
 
 
-def configure_ai(*, claude_enabled: bool, gemini_enabled: bool) -> None:
+def configure_ai(*, selected_model: str) -> None:
     """main.py에서 Firebase settings/ai_config 읽은 뒤 호출."""
-    global _RUNTIME_CLAUDE_ENABLED, _RUNTIME_GEMINI_ENABLED
-    _RUNTIME_CLAUDE_ENABLED = bool(claude_enabled)
-    _RUNTIME_GEMINI_ENABLED = bool(gemini_enabled)
-    logger.info(
-        "summarizer AI runtime: claude_enabled=%s gemini_enabled=%s",
-        _RUNTIME_CLAUDE_ENABLED,
-        _RUNTIME_GEMINI_ENABLED,
-    )
+    global _RUNTIME_SELECTED_MODEL
+    m = (selected_model or "").strip().lower()
+    if m not in (SELECTED_MODEL_CLAUDE, SELECTED_MODEL_GEMINI):
+        m = SELECTED_MODEL_GEMINI
+    _RUNTIME_SELECTED_MODEL = m
+    logger.info("summarizer AI runtime: selected_model=%s", _RUNTIME_SELECTED_MODEL)
 
 
 def _ai_any_news_enabled() -> bool:
-    return _RUNTIME_CLAUDE_ENABLED or _RUNTIME_GEMINI_ENABLED
+    return True
 
 
 def _ai_any_company_enabled() -> bool:
-    return _RUNTIME_CLAUDE_ENABLED or _RUNTIME_GEMINI_ENABLED
+    return True
 
 
-def _disable_claude_in_firebase() -> None:
-    """Claude 실패 후 Gemini 폴백 시 원격 설정 끄기 + 런타임 반영."""
-    global _RUNTIME_CLAUDE_ENABLED
-    _RUNTIME_CLAUDE_ENABLED = False
+def _persist_selected_model_gemini() -> None:
+    """Claude 실패 후 Gemini 폴백 시 원격·런타임을 gemini로 맞춤."""
+    global _RUNTIME_SELECTED_MODEL
+    _RUNTIME_SELECTED_MODEL = SELECTED_MODEL_GEMINI
     try:
         import firebase_client
 
-        firebase_client.set_ai_config_claude_enabled(False)
+        firebase_client.set_ai_config_selected_model(SELECTED_MODEL_GEMINI)
     except Exception as e:
-        logger.warning("Firebase claude_enabled=false 반영 실패: %s", e)
+        logger.warning("Firebase selected_model=gemini 반영 실패: %s", e)
 
 
 def _call_claude(user_content: str) -> str:
@@ -249,46 +249,29 @@ def _call_claude(user_content: str) -> str:
 def _call_news_llm(user_content: str) -> str:
     """
     뉴스/브리핑/시황/큐레이션.
-    - 둘 다 false → 빈 문자열(호출측에서 요약 스킵·원제목 폴백).
-    - Claude만 true → Claude만.
-    - Gemini만 true → Gemini만.
-    - 둘 다 true → Claude 우선, 실패·빈 응답 시 Gemini 폴백 + Firebase claude_enabled=false.
+    - selected_model == gemini → Gemini만.
+    - selected_model == claude → Claude 우선, 실패·빈 응답 시 Gemini 폴백 + Firebase selected_model=gemini.
     """
     if not _ai_any_news_enabled():
         return ""
-    if _RUNTIME_CLAUDE_ENABLED and not _RUNTIME_GEMINI_ENABLED:
-        try:
-            return _call_claude(user_content)
-        except Exception as e:
-            logger.warning("Claude 뉴스/요약 호출 실패: %s", e)
-            return ""
-    if _RUNTIME_GEMINI_ENABLED and not _RUNTIME_CLAUDE_ENABLED:
+    if _RUNTIME_SELECTED_MODEL == SELECTED_MODEL_GEMINI:
         return str(_call_gemini(user_content) or "").strip()
-    # 둘 다 true
     try:
         raw = _call_claude(user_content)
         if raw:
             return raw
     except Exception as e:
         logger.warning("Claude 뉴스/요약 호출 실패: %s", e)
-    logger.info("뉴스 요약: Claude 실패 또는 빈 응답 → Gemini 폴백, settings/ai_config claude 비활성화")
-    _disable_claude_in_firebase()
+    logger.info("뉴스 요약: Claude 실패 또는 빈 응답 → Gemini 폴백, settings/ai_config selected_model=gemini")
+    _persist_selected_model_gemini()
     return str(_call_gemini(user_content) or "").strip()
 
 
 def _call_company_llm(user_content: str) -> str:
-    """
-    종목 분석. 분기 규칙은 [_call_news_llm] 과 동일 (Claude 우선, 둘 다 켜짐 시 동일 폴백).
-    """
+    """종목 분석. 분기 규칙은 [_call_news_llm] 과 동일."""
     if not _ai_any_company_enabled():
         return ""
-    if _RUNTIME_CLAUDE_ENABLED and not _RUNTIME_GEMINI_ENABLED:
-        try:
-            return _call_claude(user_content)
-        except Exception as e:
-            logger.warning("Claude 기업 분석 호출 실패: %s", e)
-            return ""
-    if _RUNTIME_GEMINI_ENABLED and not _RUNTIME_CLAUDE_ENABLED:
+    if _RUNTIME_SELECTED_MODEL == SELECTED_MODEL_GEMINI:
         return str(_call_gemini(user_content) or "").strip()
     try:
         raw = _call_claude(user_content)
@@ -296,8 +279,8 @@ def _call_company_llm(user_content: str) -> str:
             return raw
     except Exception as e:
         logger.warning("Claude 기업 분석 호출 실패: %s", e)
-    logger.info("기업 분석: Claude 실패 또는 빈 응답 → Gemini 폴백, settings/ai_config claude 비활성화")
-    _disable_claude_in_firebase()
+    logger.info("기업 분석: Claude 실패 또는 빈 응답 → Gemini 폴백, settings/ai_config selected_model=gemini")
+    _persist_selected_model_gemini()
     return str(_call_gemini(user_content) or "").strip()
 
 

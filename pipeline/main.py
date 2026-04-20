@@ -114,10 +114,7 @@ def run() -> None:
     logger.info("크롤 완료: %s", counts)
 
     ai_cfg = firebase_client.get_ai_config()
-    summarizer.configure_ai(
-        claude_enabled=bool(ai_cfg.get("claude_enabled", True)),
-        gemini_enabled=bool(ai_cfg.get("gemini_enabled", True)),
-    )
+    summarizer.configure_ai(selected_model=str(ai_cfg.get("selected_model", "gemini")))
 
     # 4) AI 요약 (국내 탭별 — Firebase settings/ai_config 분기)
     fs_realtime: list[dict] = []

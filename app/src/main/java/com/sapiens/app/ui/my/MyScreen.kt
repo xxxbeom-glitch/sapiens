@@ -1,11 +1,14 @@
 package com.sapiens.app.ui.my
 
+import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -33,10 +36,9 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Tab
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -51,10 +53,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import com.sapiens.app.R
+import com.sapiens.app.data.model.AiSelectedModel
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.stableId
 import com.sapiens.app.data.repository.AiConfigFirestoreRepository
@@ -64,11 +69,14 @@ import com.sapiens.app.data.store.BookmarkEntry
 import com.sapiens.app.data.store.BookmarkToggleResult
 import com.sapiens.app.data.store.UserPreferencesRepository
 import com.sapiens.app.ui.common.ArticleBottomSheet
-import com.sapiens.app.ui.theme.Accent
+import com.sapiens.app.ui.common.ArticleBottomSheetKind
+import com.sapiens.app.ui.common.transformNaverFinanceNewsReadUrlForMobile
 import com.sapiens.app.ui.theme.AppShapes
 import com.sapiens.app.ui.theme.Background
 import com.sapiens.app.ui.theme.Card
 import com.sapiens.app.ui.theme.CardPaddingBottom
+import com.sapiens.app.ui.theme.ContentAlpha
+import com.sapiens.app.ui.theme.Hair
 import com.sapiens.app.ui.theme.CardPaddingHorizontal
 import com.sapiens.app.ui.theme.RowVertical
 import com.sapiens.app.ui.theme.Spacing
@@ -117,8 +125,9 @@ fun MyScreen(
 
     val selectedDomestic by preferencesRepository.selectedDomesticNewsCategoriesFlow.collectAsState(initial = emptySet())
     val selectedOverseas by preferencesRepository.selectedOverseasNewsCategoriesFlow.collectAsState(initial = emptySet())
-    val apiClaudeEnabled by preferencesRepository.apiClaudeEnabledFlow.collectAsState(initial = true)
-    val apiGeminiEnabled by preferencesRepository.apiGeminiEnabledFlow.collectAsState(initial = true)
+    val apiSelectedModel by preferencesRepository.apiSelectedModelFlow.collectAsState(
+        initial = AiSelectedModel.GEMINI
+    )
 
     val bookmarkEntries by bookmarksRepository.bookmarksFlow.collectAsState(initial = emptyList())
     val coroutineScope = rememberCoroutineScope()
@@ -204,19 +213,12 @@ fun MyScreen(
                     if (expandedSection == ExpandableSection.API_STATUS) null else ExpandableSection.API_STATUS
             }
         ) {
-            ApiConnectionPanel(
-                claudeEnabled = apiClaudeEnabled,
-                geminiEnabled = apiGeminiEnabled,
-                onClaudeChange = { v ->
+            AiModelSelectionPanel(
+                selectedModel = apiSelectedModel,
+                onSelectModel = { model ->
                     coroutineScope.launch {
-                        preferencesRepository.setApiClaudeEnabled(v)
-                        aiConfigRepository.save(claudeEnabled = v, geminiEnabled = apiGeminiEnabled)
-                    }
-                },
-                onGeminiChange = { v ->
-                    coroutineScope.launch {
-                        preferencesRepository.setApiGeminiEnabled(v)
-                        aiConfigRepository.save(claudeEnabled = apiClaudeEnabled, geminiEnabled = v)
+                        preferencesRepository.setApiSelectedModel(model)
+                        aiConfigRepository.save(selectedModel = model)
                     }
                 }
             )
@@ -250,6 +252,18 @@ fun MyScreen(
                         }
                     } catch (e: Exception) {
                         Log.w("MyScreen", "bookmark/feedback", e)
+                    }
+                }
+            },
+            kind = ArticleBottomSheetKind.News,
+            onOpenOriginalArticle = {
+                val url = article.url.trim()
+                if (url.isNotBlank()) {
+                    val toOpen = transformNaverFinanceNewsReadUrlForMobile(url)
+                    runCatching {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(toOpen))
+                        )
                     }
                 }
             }
@@ -325,6 +339,52 @@ private fun AccountMenuRow(
 }
 
 @Composable
+private fun NewsRegionToggleTabRow(
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val tabs = listOf("국내 뉴스", "해외 뉴스")
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(AppShapes.pill)
+            .border(width = Spacing.space1, color = Hair, shape = AppShapes.pill)
+            .background(Color.Transparent)
+            .padding(Spacing.space2),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.space2)
+    ) {
+        tabs.forEachIndexed { index, label ->
+            val selected = index == selectedIndex
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(AppShapes.pillInner)
+                    .background(
+                        if (selected) Primary.copy(alpha = ContentAlpha.onCardSurface)
+                        else Color.Transparent
+                    )
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { onSelect(index) }
+                    .padding(vertical = Spacing.space8, horizontal = Spacing.space4),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = label,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (selected) TextPrimary else TextSecondary,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun NewsReceiveCategoriesPanel(
     domesticSelected: Set<String>,
     overseasSelected: Set<String>,
@@ -333,18 +393,10 @@ private fun NewsReceiveCategoriesPanel(
 ) {
     var tabIndex by remember { mutableIntStateOf(0) }
     Column(modifier = Modifier.fillMaxWidth()) {
-        PrimaryTabRow(selectedTabIndex = tabIndex) {
-            Tab(
-                selected = tabIndex == 0,
-                onClick = { tabIndex = 0 },
-                text = { Text("국내 뉴스", maxLines = 1, overflow = TextOverflow.Ellipsis) }
-            )
-            Tab(
-                selected = tabIndex == 1,
-                onClick = { tabIndex = 1 },
-                text = { Text("해외 뉴스", maxLines = 1, overflow = TextOverflow.Ellipsis) }
-            )
-        }
+        NewsRegionToggleTabRow(
+            selectedIndex = tabIndex,
+            onSelect = { tabIndex = it }
+        )
         Spacer(modifier = Modifier.height(Spacing.space12))
         if (tabIndex == 0) {
             CheckboxCategoryList(
@@ -482,84 +534,67 @@ private fun BookmarkPagerPanel(
 }
 
 @Composable
-private fun ApiConnectionPanel(
-    claudeEnabled: Boolean,
-    geminiEnabled: Boolean,
-    onClaudeChange: (Boolean) -> Unit,
-    onGeminiChange: (Boolean) -> Unit
+private fun AiModelSelectionPanel(
+    selectedModel: String,
+    onSelectModel: (String) -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(Spacing.space12)
+        verticalArrangement = Arrangement.spacedBy(Spacing.space4)
     ) {
-        ApiProviderRow(
-            label = "Claude",
-            enabled = claudeEnabled,
-            onEnabledChange = onClaudeChange
+        AiModelRadioRow(
+            title = "Claude (Haiku)",
+            subtitle = null,
+            selected = selectedModel == AiSelectedModel.CLAUDE,
+            onSelect = { onSelectModel(AiSelectedModel.CLAUDE) }
         )
-        ApiProviderRow(
-            label = "Gemini",
-            enabled = geminiEnabled,
-            onEnabledChange = onGeminiChange
+        AiModelRadioRow(
+            title = "Gemini",
+            subtitle = "기본값",
+            selected = selectedModel == AiSelectedModel.GEMINI,
+            onSelect = { onSelectModel(AiSelectedModel.GEMINI) }
         )
     }
 }
 
 @Composable
-private fun ApiProviderRow(
-    label: String,
-    enabled: Boolean,
-    onEnabledChange: (Boolean) -> Unit
+private fun AiModelRadioRow(
+    title: String,
+    subtitle: String?,
+    selected: Boolean,
+    onSelect: () -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(AppShapes.card)
+            .clickable(onClick = onSelect)
+            .padding(vertical = Spacing.space8, horizontal = Spacing.space4),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.spacedBy(Spacing.space10)
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextPrimary,
-            modifier = Modifier.weight(1f)
-        )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Spacing.space10)
-        ) {
-            Switch(
-                checked = enabled,
-                onCheckedChange = onEnabledChange
+        RadioButton(
+            selected = selected,
+            onClick = onSelect,
+            colors = RadioButtonDefaults.colors(
+                selectedColor = Primary,
+                unselectedColor = TextSecondary
             )
-            ConnectionStatusChip(connected = enabled)
+        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextPrimary
+            )
+            if (!subtitle.isNullOrBlank()) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary
+                )
+            }
         }
-    }
-}
-
-@Composable
-private fun ConnectionStatusChip(connected: Boolean) {
-    val (text, bg, fg) = if (connected) {
-        Triple(
-            "연결",
-            Accent.copy(alpha = 0.14f),
-            Accent
-        )
-    } else {
-        Triple(
-            "오류",
-            MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
-            MaterialTheme.colorScheme.error
-        )
-    }
-    Surface(
-        color = bg,
-        shape = AppShapes.chipTight
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall,
-            color = fg,
-            modifier = Modifier.padding(horizontal = Spacing.space8, vertical = Spacing.space4)
-        )
     }
 }
 

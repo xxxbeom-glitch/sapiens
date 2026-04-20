@@ -399,37 +399,59 @@ _SETTINGS = "settings"
 _AI_CONFIG_DOC = "ai_config"
 
 
-def get_ai_config() -> dict[str, bool]:
+_AI_MODEL_CLAUDE = "claude"
+_AI_MODEL_GEMINI = "gemini"
+
+
+def _normalize_ai_selected_model(raw: object | None) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    s = raw.strip().lower()
+    if s in (_AI_MODEL_CLAUDE, _AI_MODEL_GEMINI):
+        return s
+    return None
+
+
+def get_ai_config() -> dict[str, str]:
     """
     settings/ai_config — 파이프라인 AI 분기용.
-    문서 없거나 필드 없으면 True, True 기본.
+    [selected_model]: \"claude\" | \"gemini\". 없으면 gemini 기본.
+    레거시 [claude_enabled]/[gemini_enabled]만 있으면 이전 의미로 유도.
     """
-    defaults: dict[str, bool] = {"claude_enabled": True, "gemini_enabled": True}
+    defaults: dict[str, str] = {"selected_model": _AI_MODEL_GEMINI}
     try:
         db = _get_db()
         snap = db.collection(_SETTINGS).document(_AI_CONFIG_DOC).get()
         if not snap.exists:
             return dict(defaults)
         d = snap.to_dict() or {}
-        return {
-            "claude_enabled": bool(d.get("claude_enabled", True)),
-            "gemini_enabled": bool(d.get("gemini_enabled", True)),
-        }
+        sm = _normalize_ai_selected_model(d.get("selected_model"))
+        if sm:
+            return {"selected_model": sm}
+        # 레거시 bool 필드
+        if "claude_enabled" in d or "gemini_enabled" in d:
+            c = bool(d.get("claude_enabled", True))
+            g = bool(d.get("gemini_enabled", True))
+            if c and not g:
+                return {"selected_model": _AI_MODEL_CLAUDE}
+            return {"selected_model": _AI_MODEL_GEMINI}
+        return dict(defaults)
     except Exception as e:
         logger.exception("get_ai_config 실패, 기본값 사용: %s", e)
         return dict(defaults)
 
 
-def set_ai_config_claude_enabled(enabled: bool) -> None:
-    """Claude 폴백 시 원격에서 claude 끄기 등."""
+def set_ai_config_selected_model(model: str) -> None:
+    """Claude 실패 후 Gemini 폴백 등에서 원격 selected_model 갱신."""
+    m = _normalize_ai_selected_model(model) or _AI_MODEL_GEMINI
     try:
         db = _get_db()
         db.collection(_SETTINGS).document(_AI_CONFIG_DOC).set(
             {
-                "claude_enabled": enabled,
+                "selected_model": m,
                 "updatedAt": SERVER_TIMESTAMP,
             },
             merge=True,
         )
     except Exception as e:
-        logger.exception("set_ai_config_claude_enabled(%s) 실패: %s", enabled, e)
+        logger.exception("set_ai_config_selected_model(%s) 실패: %s", m, e)

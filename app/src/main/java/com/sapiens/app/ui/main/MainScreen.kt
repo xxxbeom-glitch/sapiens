@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -18,15 +17,12 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -39,9 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sapiens.app.BuildConfig
 import com.sapiens.app.R
-import com.sapiens.app.data.mock.MockData
 import com.sapiens.app.data.stock.StockDetailRepositoryImpl
-import com.sapiens.app.data.model.Company
 import com.sapiens.app.data.repository.FeedbackRepositoryImpl
 import com.sapiens.app.data.repository.NewsRepositoryImpl
 import com.sapiens.app.data.repository.SavedArticlesFirestoreWriter
@@ -50,7 +44,6 @@ import com.sapiens.app.data.sync.UserCloudBackupScheduler
 import com.sapiens.app.data.store.ArticleBookmarksRepository
 import com.sapiens.app.ui.briefing.BriefingScreen
 import com.sapiens.app.ui.briefing.BriefingViewModel
-import com.sapiens.app.ui.market.MarketSearchBottomSheet
 import com.sapiens.app.ui.market.MarketScreen
 import com.sapiens.app.ui.market.MarketViewModel
 import com.sapiens.app.ui.market.StockDetailBottomSheet
@@ -82,9 +75,7 @@ private val tabs = listOf(
 @Composable
 fun MainScreen() {
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-    var showMarketSearchSheet by remember { mutableStateOf(false) }
     var isOverseasNews by remember { mutableStateOf(false) }
-    val addedCompanies = remember { mutableStateListOf<Company>() }
     var stockDetailCode by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
@@ -135,8 +126,6 @@ fun MainScreen() {
         topBar = {
             MainTopAppBar(
                 title = tabs[selectedTabIndex].label,
-                showSearchAction = selectedTabIndex == 2,
-                onClickSearch = { showMarketSearchSheet = true },
                 showNewsRegionToggle = selectedTabIndex == 1,
                 isOverseasNews = isOverseasNews,
                 onOverseasNewsChange = { isOverseasNews = it }
@@ -166,7 +155,6 @@ fun MainScreen() {
                 )
                 2 -> MarketScreen(
                     viewModel = marketViewModel,
-                    addedCompanies = addedCompanies,
                     onThemeStockNameClick = { code -> stockDetailCode = code }
                 )
                 else -> MyScreen(
@@ -189,26 +177,12 @@ fun MainScreen() {
         )
     }
 
-    if (showMarketSearchSheet) {
-        MarketSearchBottomSheet(
-            allCompanies = MockData.companyList,
-            addedTickers = addedCompanies.map { it.ticker }.toSet(),
-            onAddCompany = { company ->
-                if (addedCompanies.none { it.ticker == company.ticker }) {
-                    addedCompanies.add(company)
-                }
-            },
-            onDismissRequest = { showMarketSearchSheet = false }
-        )
-    }
 }
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun MainTopAppBar(
     title: String,
-    showSearchAction: Boolean,
-    onClickSearch: () -> Unit,
     showNewsRegionToggle: Boolean = false,
     isOverseasNews: Boolean = false,
     onOverseasNewsChange: (Boolean) -> Unit = {}
@@ -229,26 +203,12 @@ private fun MainTopAppBar(
             )
         },
         actions = {
-            when {
-                showNewsRegionToggle -> {
-                    Box(Modifier.padding(end = Spacing.space4)) {
-                        NewsRegionToggle(
-                            isOverseas = isOverseasNews,
-                            onIsOverseasChange = onOverseasNewsChange
-                        )
-                    }
-                }
-                showSearchAction -> {
-                    IconButton(
-                        onClick = onClickSearch,
-                        interactionSource = remember { MutableInteractionSource() }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "마켓 검색",
-                            tint = TextPrimary
-                        )
-                    }
+            if (showNewsRegionToggle) {
+                Box(Modifier.padding(end = Spacing.space4)) {
+                    NewsRegionToggle(
+                        isOverseas = isOverseasNews,
+                        onIsOverseasChange = onOverseasNewsChange
+                    )
                 }
             }
         },

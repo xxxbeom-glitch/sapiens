@@ -226,6 +226,7 @@ fun ArticleBottomSheet(
                         )
                     }
                     NewsSaveBookmarkButton(
+                        isBookmarked = isBookmarked,
                         onClick = onBookmarkToggle,
                         modifier = Modifier
                             .weight(1f)
@@ -239,6 +240,7 @@ fun ArticleBottomSheet(
 
 @Composable
 private fun NewsSaveBookmarkButton(
+    isBookmarked: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -260,7 +262,7 @@ private fun NewsSaveBookmarkButton(
         )
     ) {
         Text(
-            text = "저장",
+            text = if (isBookmarked) "저장 취소" else "저장",
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold
         )
