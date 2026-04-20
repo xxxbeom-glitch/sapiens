@@ -85,9 +85,7 @@ def run() -> None:
     domestic["main"] = crawler.dedupe_items(domestic["main"])
 
     # 2) 해외: Yahoo Finance(뉴스+테크 HTML) + NAVER 아침 신문(한경+매경)
-    overseas_stocks = crawler.crawl_yahoo_stocks()
-    overseas_tech = crawler.crawl_yahoo_tech()
-    yahoo_merged: list[dict] = list(overseas_stocks) + list(overseas_tech)
+    overseas_stocks, overseas_tech, yahoo_merged = crawler.crawl_yahoo_overseas_stocks_and_tech()
     newspaper_hankyung = crawler.crawl_hankyung_newspaper()
     newspaper_maeil = crawler.crawl_maeil_newspaper()
     pool_hankyung = _sorted_newspaper_top(newspaper_hankyung, BRIEFING_NEWSPAPER_N)

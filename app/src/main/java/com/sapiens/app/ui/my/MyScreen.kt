@@ -32,6 +32,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -76,6 +78,7 @@ import com.sapiens.app.ui.theme.Background
 import com.sapiens.app.ui.theme.Card
 import com.sapiens.app.ui.theme.CardPaddingBottom
 import com.sapiens.app.ui.theme.ContentAlpha
+import com.sapiens.app.ui.theme.OnPrimaryFixed
 import com.sapiens.app.ui.theme.Hair
 import com.sapiens.app.ui.theme.CardPaddingHorizontal
 import com.sapiens.app.ui.theme.RowVertical
@@ -83,14 +86,21 @@ import com.sapiens.app.ui.theme.Spacing
 import com.sapiens.app.ui.theme.Primary
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-private val domesticNewsOptions = listOf(
-    "경제", "정치", "국제", "IT·테크", "부동산", "증권", "산업", "사회"
-)
-
-private val overseasNewsOptions = listOf(
-    "증시", "테크·반도체", "매크로", "환율", "금리", "원자재", "채권", "암호화폐"
+/** 파이프라인·기사 칩과 동일한 통합 카테고리(국내/해외 공통). */
+private val newsCategoryOptions = listOf(
+    "경제",
+    "테크&반도체",
+    "증시",
+    "정치",
+    "국제",
+    "부동산",
+    "산업",
+    "사회",
+    "빅테크",
+    "암호화폐",
 )
 
 private enum class ExpandableSection {
@@ -135,6 +145,22 @@ fun MyScreen(
     var expandedSection by remember { mutableStateOf<ExpandableSection?>(null) }
     var selectedBookmarkedArticle by remember { mutableStateOf<Article?>(null) }
 
+    var draftDomestic by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var draftOverseas by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var draftAiModel by remember { mutableStateOf(AiSelectedModel.GEMINI) }
+
+    LaunchedEffect(expandedSection == ExpandableSection.NEWS_CATEGORY) {
+        if (expandedSection == ExpandableSection.NEWS_CATEGORY) {
+            draftDomestic = preferencesRepository.selectedDomesticNewsCategoriesFlow.first()
+            draftOverseas = preferencesRepository.selectedOverseasNewsCategoriesFlow.first()
+        }
+    }
+    LaunchedEffect(expandedSection == ExpandableSection.API_STATUS) {
+        if (expandedSection == ExpandableSection.API_STATUS) {
+            draftAiModel = preferencesRepository.apiSelectedModelFlow.first()
+        }
+    }
+
     val sortedBookmarks = remember(bookmarkEntries) {
         bookmarkEntries.sortedByDescending { it.savedAtMillis }
     }
@@ -176,15 +202,45 @@ fun MyScreen(
             }
         ) {
             NewsReceiveCategoriesPanel(
-                domesticSelected = selectedDomestic,
-                overseasSelected = selectedOverseas,
+                domesticSelected = draftDomestic,
+                overseasSelected = draftOverseas,
                 onToggleDomestic = { v ->
-                    coroutineScope.launch { preferencesRepository.toggleDomesticNewsCategory(v) }
+                    draftDomestic = draftDomestic.toMutableSet().apply {
+                        if (!add(v)) remove(v)
+                    }
                 },
                 onToggleOverseas = { v ->
-                    coroutineScope.launch { preferencesRepository.toggleOverseasNewsCategory(v) }
+                    draftOverseas = draftOverseas.toMutableSet().apply {
+                        if (!add(v)) remove(v)
+                    }
                 }
             )
+            Spacer(modifier = Modifier.height(Spacing.space12))
+            Button(
+                onClick = {
+                    coroutineScope.launch {
+                        preferencesRepository.setDomesticNewsCategories(draftDomestic)
+                        preferencesRepository.setOverseasNewsCategories(draftOverseas)
+                        Toast.makeText(context, "저장했습니다", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = AppShapes.button,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Primary,
+                    contentColor = OnPrimaryFixed
+                ),
+                elevation = ButtonDefaults.buttonElevation(
+                    defaultElevation = Spacing.space0,
+                    pressedElevation = Spacing.space0
+                )
+            ) {
+                Text(
+                    text = "저장",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
 
         ExpandableMenuCard(
@@ -214,14 +270,36 @@ fun MyScreen(
             }
         ) {
             AiModelSelectionPanel(
-                selectedModel = apiSelectedModel,
-                onSelectModel = { model ->
-                    coroutineScope.launch {
-                        preferencesRepository.setApiSelectedModel(model)
-                        aiConfigRepository.save(selectedModel = model)
-                    }
-                }
+                selectedModel = draftAiModel,
+                onSelectModel = { model -> draftAiModel = model }
             )
+            Spacer(modifier = Modifier.height(Spacing.space12))
+            Button(
+                onClick = {
+                    coroutineScope.launch {
+                        val normalized = AiSelectedModel.normalize(draftAiModel)
+                        preferencesRepository.setApiSelectedModel(normalized)
+                        aiConfigRepository.save(selectedModel = normalized)
+                        Toast.makeText(context, "저장했습니다", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = AppShapes.button,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Primary,
+                    contentColor = OnPrimaryFixed
+                ),
+                elevation = ButtonDefaults.buttonElevation(
+                    defaultElevation = Spacing.space0,
+                    pressedElevation = Spacing.space0
+                )
+            ) {
+                Text(
+                    text = "저장",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
     }
 
@@ -400,13 +478,13 @@ private fun NewsReceiveCategoriesPanel(
         Spacer(modifier = Modifier.height(Spacing.space12))
         if (tabIndex == 0) {
             CheckboxCategoryList(
-                labels = domesticNewsOptions,
+                labels = newsCategoryOptions,
                 selected = domesticSelected,
                 onToggle = onToggleDomestic
             )
         } else {
             CheckboxCategoryList(
-                labels = overseasNewsOptions,
+                labels = newsCategoryOptions,
                 selected = overseasSelected,
                 onToggle = onToggleOverseas
             )

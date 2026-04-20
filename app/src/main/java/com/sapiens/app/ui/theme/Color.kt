@@ -77,6 +77,9 @@ object CategoryChipPalette {
     val financeFg = Color(0xFF5BCEBC)
     val macroBg = Color(0xFF252015)
     val macroFg = Color(0xFFD4943A)
+    /** 암호화폐 카테고리 칩 */
+    val cryptoBg = Color(0xFF221A0F)
+    val cryptoFg = Color(0xFFFFB74D)
     val defaultBg = Color(0xFF222222)
     val defaultFg = Color(0xFF888888)
 }

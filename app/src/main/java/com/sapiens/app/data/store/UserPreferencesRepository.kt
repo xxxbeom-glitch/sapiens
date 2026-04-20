@@ -63,6 +63,18 @@ class UserPreferencesRepository(
         }
     }
 
+    suspend fun setDomesticNewsCategories(categories: Set<String>) {
+        context.dataStore.edit { preferences ->
+            preferences[domesticNewsCategoryKey] = categories.toSet()
+        }
+    }
+
+    suspend fun setOverseasNewsCategories(categories: Set<String>) {
+        context.dataStore.edit { preferences ->
+            preferences[overseasNewsCategoryKey] = categories.toSet()
+        }
+    }
+
     suspend fun setApiSelectedModel(model: String) {
         val normalized = AiSelectedModel.normalize(model)
         context.dataStore.edit { preferences ->

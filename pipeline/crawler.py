@@ -11,7 +11,7 @@ import os
 import re
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import parse_qs, urljoin, urlparse
 
@@ -822,6 +822,13 @@ def crawl_tossinvest_news() -> dict[str, list[dict[str, Any]]]:
 
 YAHOO_FINANCE = "https://finance.yahoo.com"
 YAHOO_MAX_LIST_ITEMS = 10
+# 해외(stocks+tech) 합산 시간 필터·목표량용: 목록에서 충분히 긁은 뒤 절대시간 파싱·창 확장(2h→3h→4h)
+YAHOO_OVERSEAS_FETCH_CAP = 100
+YAHOO_OVERSEAS_MERGE_TARGET = 30
+
+_yahoo_overseas_bundle_cache: (
+    tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]] | None
+) = None
 
 
 def _resolve_yahoo_href(href: str) -> str:
@@ -845,6 +852,189 @@ def _parse_yahoo_publishing_line(text: str) -> tuple[str, str]:
             a, b = s.split(sep, 1)
             return a.strip(), b.strip()
     return s, ""
+
+
+def _parse_yahoo_published_at_utc(raw: str, now: datetime) -> datetime | None:
+    """
+    Yahoo 목록의 published 문자열 → UTC naive-aware datetime.
+    '2 hours ago', '30 minutes ago', '1 day ago', 'Feb 6, 2025', '2025-02-06' 등.
+    파싱 실패 시 None.
+    """
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    s = re.sub(r"\s+", " ", (raw or "").strip())
+    if not s:
+        return None
+    sl = s.lower()
+    if sl == "just now":
+        return now
+    if sl in ("an hour ago", "a hour ago"):
+        return now - timedelta(hours=1)
+    if sl == "a minute ago":
+        return now - timedelta(minutes=1)
+    if sl == "a second ago":
+        return now - timedelta(seconds=1)
+    if sl == "a day ago":
+        return now - timedelta(days=1)
+    if sl == "a week ago":
+        return now - timedelta(weeks=1)
+    m = re.match(
+        r"(?is)^(\d+)\s*(second|seconds|minute|minutes|hour|hours|day|days|week|weeks)\s+ago\s*$",
+        s,
+    )
+    if m:
+        n = int(m.group(1))
+        u = m.group(2).lower()
+        if u.startswith("second"):
+            return now - timedelta(seconds=n)
+        if u.startswith("minute"):
+            return now - timedelta(minutes=n)
+        if u.startswith("hour"):
+            return now - timedelta(hours=n)
+        if u.startswith("day"):
+            return now - timedelta(days=n)
+        if u.startswith("week"):
+            return now - timedelta(weeks=n)
+        return None
+    if " at " in s:
+        for fmt in ("%b %d, %Y at %I:%M %p", "%b %d, %Y at %I:%M%p", "%B %d, %Y at %I:%M %p"):
+            try:
+                return datetime.strptime(s, fmt).replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+    for fmt in ("%b %d, %Y", "%B %d, %Y"):
+        try:
+            base = datetime.strptime(s, fmt).replace(tzinfo=timezone.utc)
+            return base.replace(hour=12, minute=0, second=0, microsecond=0)
+        except ValueError:
+            continue
+    m3 = re.match(r"(?is)^(\d{4})-(\d{2})-(\d{2})\s*$", s)
+    if m3:
+        y, mo, d = int(m3.group(1)), int(m3.group(2)), int(m3.group(3))
+        try:
+            return datetime(y, mo, d, 12, 0, 0, tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    return None
+
+
+def _merge_yahoo_stocks_tech_with_origin(
+    stocks: list[dict[str, Any]],
+    tech: list[dict[str, Any]],
+) -> list[tuple[dict[str, Any], str]]:
+    """stocks 우선, URL 기준 중복 제거 후 (row, 'stocks'|'tech')."""
+    seen: set[str] = set()
+    merged: list[tuple[dict[str, Any], str]] = []
+    for row in stocks:
+        u = (row.get("url") or "").strip()
+        if not u or u in seen:
+            continue
+        seen.add(u)
+        merged.append((row, "stocks"))
+    for row in tech:
+        u = (row.get("url") or "").strip()
+        if not u or u in seen:
+            continue
+        seen.add(u)
+        merged.append((row, "tech"))
+    return merged
+
+
+def _yahoo_rows_with_published_utc(
+    merged: list[tuple[dict[str, Any], str]],
+    now: datetime,
+) -> list[tuple[dict[str, Any], str, datetime]]:
+    """published_at 파싱 성공한 행만 (ISO 문자열로 갱신). 실패 행은 제외."""
+    out: list[tuple[dict[str, Any], str, datetime]] = []
+    for row, origin in merged:
+        hint = (row.get("published_at") or "").strip()
+        parsed = _parse_yahoo_published_at_utc(hint, now)
+        if parsed is None:
+            continue
+        r2 = dict(row)
+        r2["published_at"] = parsed.isoformat()
+        out.append((r2, origin, parsed))
+    return out
+
+
+def _yahoo_curate_by_time_windows(
+    pre: list[tuple[dict[str, Any], str, datetime]],
+    now: datetime,
+    target: int,
+) -> list[tuple[dict[str, Any], str]]:
+    """
+    2시간 → 3시간 → 4시간 윈도우 확장. target 이상이면 그 시점에서 상한 target.
+    4시간까지도 부족하면 그때까지 통과한 기사만.
+    """
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    last: list[tuple[dict[str, Any], str]] = []
+    for h in (2.0, 3.0, 4.0):
+        cutoff = now - timedelta(hours=h)
+        eligible = [(r, o) for (r, o, p) in pre if p >= cutoff]
+        last = eligible
+        if len(eligible) >= target:
+            return eligible[:target]
+    return last
+
+
+def _yahoo_split_stocks_tech(curated: list[tuple[dict[str, Any], str]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    stocks: list[dict[str, Any]] = []
+    tech: list[dict[str, Any]] = []
+    for row, origin in curated:
+        if origin == "stocks":
+            stocks.append(row)
+        else:
+            tech.append(row)
+    return stocks, tech
+
+
+def _compute_yahoo_overseas_curated() -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+]:
+    """뉴스+테크 HTML 수집 → URL 병합 → 절대시간 파싱 → 2h/3h/4h 목표 30건 → 본문 첨부."""
+    u_news = f"{YAHOO_FINANCE}/news/"
+    u_tech = f"{YAHOO_FINANCE}/topic/tech/"
+    try:
+        stocks_raw = _crawl_yahoo_finance_list_url(u_news, YAHOO_OVERSEAS_FETCH_CAP, attach_bodies=False)
+        tech_raw = _crawl_yahoo_finance_list_url(u_tech, YAHOO_OVERSEAS_FETCH_CAP, attach_bodies=False)
+    except Exception as e:
+        logger.exception("Yahoo overseas raw fetch 실패: %s", e)
+        return [], [], []
+    merged = _merge_yahoo_stocks_tech_with_origin(stocks_raw, tech_raw)
+    now = datetime.now(timezone.utc)
+    pre = _yahoo_rows_with_published_utc(merged, now)
+    curated = _yahoo_curate_by_time_windows(pre, now, YAHOO_OVERSEAS_MERGE_TARGET)
+    stocks_f, tech_f = _yahoo_split_stocks_tech(curated)
+    merged_ordered = [r for r, _ in curated]
+    _attach_yahoo_article_bodies(stocks_f)
+    _attach_yahoo_article_bodies(tech_f)
+    logger.info(
+        "Yahoo overseas: stocks_raw=%d tech_raw=%d merged_unique=%d parsed_ok=%d -> "
+        "after_time_filter merged=%d stocks=%d tech=%d (target=%d)",
+        len(stocks_raw),
+        len(tech_raw),
+        len(merged),
+        len(pre),
+        len(merged_ordered),
+        len(stocks_f),
+        len(tech_f),
+        YAHOO_OVERSEAS_MERGE_TARGET,
+    )
+    return stocks_f, tech_f, merged_ordered
+
+
+def _ensure_yahoo_overseas_bundle_cached() -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+]:
+    global _yahoo_overseas_bundle_cache
+    if _yahoo_overseas_bundle_cache is None:
+        _yahoo_overseas_bundle_cache = _compute_yahoo_overseas_curated()
+    return _yahoo_overseas_bundle_cache
 
 
 def _first_img_src_in(li) -> str:
@@ -917,7 +1107,12 @@ def _parse_yahoo_finance_story_item(li) -> dict[str, Any] | None:
     }
 
 
-def _crawl_yahoo_finance_list_url(page_url: str, max_n: int) -> list[dict[str, Any]]:
+def _crawl_yahoo_finance_list_url(
+    page_url: str,
+    max_n: int,
+    *,
+    attach_bodies: bool = True,
+) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     try:
         html = _fetch(page_url)
@@ -936,20 +1131,40 @@ def _crawl_yahoo_finance_list_url(page_url: str, max_n: int) -> list[dict[str, A
             out.append(row)
             if len(out) >= max_n:
                 break
-        _attach_yahoo_article_bodies(out)
+        if attach_bodies:
+            _attach_yahoo_article_bodies(out)
     except Exception as e:
         logger.warning("_crawl_yahoo_finance_list_url %s: %s", page_url, e)
     return out
+
+
+def crawl_yahoo_overseas_stocks_and_tech() -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+]:
+    """
+    Yahoo 뉴스(/news/) + 테크(/topic/tech/)를 한 번에 수집.
+    URL 중복 제거 후 published_at 파싱 성공분만 사용, 2h→3h→4h 시간 창으로 최대 30건.
+    반환: (overseas_stocks, overseas_tech, yahoo_merged_curated_order)
+    """
+    try:
+        s, t, m = _ensure_yahoo_overseas_bundle_cached()
+        return list(s), list(t), list(m)
+    except Exception as e:
+        logger.exception("crawl_yahoo_overseas_stocks_and_tech 실패: %s", e)
+        return [], [], []
 
 
 def crawl_yahoo_stocks() -> list[dict[str, Any]]:
     """
     Yahoo Finance 뉴스 메인 스트림 (요청이 차단될 수 있어 빈 리스트일 수 있음).
     https://finance.yahoo.com/news/
+    해외 파이프라인은 `crawl_yahoo_overseas_stocks_and_tech`와 동일 캐시를 사용한다.
     """
-    u = f"{YAHOO_FINANCE}/news/"
     try:
-        return _crawl_yahoo_finance_list_url(u, YAHOO_MAX_LIST_ITEMS)
+        s, _, _ = _ensure_yahoo_overseas_bundle_cached()
+        return list(s)
     except Exception as e:
         logger.exception("crawl_yahoo_stocks 실패: %s", e)
         return []
@@ -959,10 +1174,11 @@ def crawl_yahoo_tech() -> list[dict[str, Any]]:
     """
     Tech 토픽 뉴스 스트림.
     https://finance.yahoo.com/topic/tech/
+    해외 파이프라인은 `crawl_yahoo_overseas_stocks_and_tech`와 동일 캐시를 사용한다.
     """
-    u = f"{YAHOO_FINANCE}/topic/tech/"
     try:
-        return _crawl_yahoo_finance_list_url(u, YAHOO_MAX_LIST_ITEMS)
+        _, t, _ = _ensure_yahoo_overseas_bundle_cached()
+        return list(t)
     except Exception as e:
         logger.exception("crawl_yahoo_tech 실패: %s", e)
         return []

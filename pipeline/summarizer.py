@@ -35,13 +35,57 @@ SYSTEM = (
 _HANGUL_RE = re.compile(r"[가-힣]")
 _LATIN_RE = re.compile(r"[A-Za-z]")
 
-# summarize_article JSON category — 국내·해외 동일. 앱 칩 색상과 맞춤.
-_SUMMARIZE_ARTICLE_CATEGORY_BLOCK = (
-    "category는 반드시 다음 중 하나만 사용하세요: "
-    "경제, IT·테크, 정치, 사회, 국제, 부동산, 산업, 금융, 빅테크\n"
-    "금리, 환율, 통화정책, 중앙은행, 국채·회사채 금리, 유동성 등 **통화·외환·금리·거시 흐름**을 다루는 기사는 **경제**로 분류하세요.\n"
-    "경제 전반·시장 분위기·지표 둔화 등 예전 '매크로'에 해당하는 주제도 **경제**로 분류하세요.\n"
+# summarize_article JSON category — 국내·해외 동일. 앱 ChipColors·프롬프트와 동기화.
+_CANONICAL_ARTICLE_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "경제",
+        "테크&반도체",
+        "증시",
+        "정치",
+        "국제",
+        "부동산",
+        "산업",
+        "사회",
+        "빅테크",
+        "암호화폐",
+    }
 )
+
+# 모델이 구 라벨을 쓸 때 정규화(표기 통일).
+_ARTICLE_CATEGORY_ALIASES: dict[str, str] = {
+    "it": "테크&반도체",
+    "it·테크": "테크&반도체",
+    "it 테크": "테크&반도체",
+    "테크·반도체": "테크&반도체",
+    "금융": "증시",
+    "증권": "증시",
+    "원자재": "증시",
+    "채권": "증시",
+    "매크로": "경제",
+}
+
+_SUMMARIZE_ARTICLE_CATEGORY_BLOCK = (
+    "category는 반드시 다음 중 **정확히 표기된 문자열 하나**만 사용하세요: "
+    "경제, 테크&반도체, 증시, 정치, 국제, 부동산, 산업, 사회, 빅테크, 암호화폐\n"
+    "분류 가이드:\n"
+    "- 금리, 환율, 매크로, 통화정책, 중앙은행, 물가·고용, 거시지표 등 → **경제**\n"
+    "- IT, 소프트웨어, 반도체, AI, 데이터센터, 칩·파운드리 등(초대형 플랫폼 **기업 자체** 이슈가 아닐 때) → **테크&반도체**\n"
+    "- 원자재, 채권, 증권, 주식시장, 지수, 거래소·종목 일반 → **증시**\n"
+    "- 비트코인, 이더리움, 블록체인, 가상자산·코인 규제 등 → **암호화폐**\n"
+    "- 애플, 구글(알파벳), 메타, 아마존, 마이크로소프트 등 **빅테크 기업** 중심 뉴스 → **빅테크**\n"
+)
+
+
+def _normalize_article_category(raw: str) -> str:
+    s = (raw or "").strip()
+    if s in _CANONICAL_ARTICLE_CATEGORIES:
+        return s
+    mapped = _ARTICLE_CATEGORY_ALIASES.get(s) or _ARTICLE_CATEGORY_ALIASES.get(s.replace(" ", ""))
+    if mapped:
+        return mapped
+    if s:
+        logger.warning("summarize_article: 허용 목록 밖 category %r — 경제로 대체", s)
+    return "경제"
 
 
 def _contains_hangul(text: str) -> bool:
@@ -475,6 +519,7 @@ def summarize_article(
                     summary=summary,
                     body=body_stripped,
                 )
+            data["category"] = _normalize_article_category(str(data.get("category", "")))
             pts = data["summary_points"]
             if not isinstance(pts, list):
                 raise ValueError("summary_points must be a list")

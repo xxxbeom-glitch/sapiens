@@ -1,5 +1,7 @@
 package com.sapiens.app.ui.briefing
 
+import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -20,10 +22,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.stableId
 import com.sapiens.app.data.store.ArticleBookmarksRepository
 import com.sapiens.app.ui.common.ArticleBottomSheet
+import com.sapiens.app.ui.common.ArticleBottomSheetKind
+import com.sapiens.app.ui.common.transformNaverFinanceNewsReadUrlForMobile
 import kotlinx.coroutines.launch
 import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.Background
@@ -45,6 +50,7 @@ fun BriefingScreen(
     var selectedArticle by remember { mutableStateOf<Article?>(null) }
     val bookmarkEntries by bookmarksRepository.bookmarksFlow.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (isLoading) {
@@ -128,6 +134,18 @@ fun BriefingScreen(
                             )
                         } catch (e: Exception) {
                             Log.w("BriefingScreen", "bookmark", e)
+                        }
+                    }
+                },
+                kind = ArticleBottomSheetKind.News,
+                onOpenOriginalArticle = {
+                    val url = article.url.trim()
+                    if (url.isNotBlank()) {
+                        val toOpen = transformNaverFinanceNewsReadUrlForMobile(url)
+                        runCatching {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(toOpen))
+                            )
                         }
                     }
                 }
