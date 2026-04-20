@@ -869,10 +869,10 @@ def crawl_tossinvest_news() -> dict[str, list[dict[str, Any]]]:
 
 YAHOO_FINANCE = "https://finance.yahoo.com"
 YAHOO_MAX_LIST_ITEMS = 10
-# 해외(stocks+tech) 합산 시간 필터·목표량용: 목록에서 충분히 긁은 뒤 절대시간 파싱·창 확장(6h→12h→24h)
+# 해외(stocks+tech) 합산 시간 필터·목표량용: 목록에서 충분히 긁은 뒤 절대시간 파싱·창 확장(6h→12h→24h→48h)
 YAHOO_OVERSEAS_FETCH_CAP = 100
 YAHOO_OVERSEAS_MERGE_TARGET = 30
-YAHOO_OVERSEAS_TIME_WINDOWS_HOURS: tuple[float, ...] = (6.0, 12.0, 24.0)
+YAHOO_OVERSEAS_TIME_WINDOWS_HOURS: tuple[float, ...] = (6.0, 12.0, 24.0, 48.0)
 # js-stream-content 등 넓은 셀렉터가 과다 매칭될 때 상한(성능·로그 가독).
 YAHOO_LIST_MAX_ROOTS_SCAN = 500
 
@@ -909,8 +909,9 @@ def _parse_yahoo_publishing_line(text: str) -> tuple[str, str]:
 
 def _parse_yahoo_published_at_utc(raw: str, now: datetime) -> datetime | None:
     """
-    Yahoo 목록의 published 문자열 → UTC naive-aware datetime.
-    '2 hours ago', '30 minutes ago', '1 day ago', 'Feb 6, 2025', '2025-02-06' 등.
+    Yahoo 목록의 published 문자열 → UTC aware datetime (UTC).
+    약어: '5h ago', '1d ago', '4mo ago', '30m ago', '2y ago' (mo=30일, y=365일).
+    서술형: '2 hours ago', '1 day ago', … 절대일자 등.
     파싱 실패 시 None.
     """
     if now.tzinfo is None:
@@ -921,6 +922,28 @@ def _parse_yahoo_published_at_utc(raw: str, now: datetime) -> datetime | None:
     sl = s.lower()
     if sl == "just now":
         return now
+    # Yahoo 단축 상대시간 (예: 4mo ago, 13h ago) — 'mo'를 'm'보다 먼저 매칭
+    m_short = re.match(r"(?is)^(\d+)\s*(mo|h|d|y|m|s|w)\s+ago\s*$", s)
+    if m_short:
+        n = int(m_short.group(1))
+        if n < 0:
+            return None
+        u = m_short.group(2).lower()
+        if u == "mo":
+            return now - timedelta(days=30 * n)
+        if u == "h":
+            return now - timedelta(hours=n)
+        if u == "d":
+            return now - timedelta(days=n)
+        if u == "y":
+            return now - timedelta(days=365 * n)
+        if u == "m":
+            return now - timedelta(minutes=n)
+        if u == "s":
+            return now - timedelta(seconds=n)
+        if u == "w":
+            return now - timedelta(weeks=n)
+        return None
     if sl in ("an hour ago", "a hour ago"):
         return now - timedelta(hours=1)
     if sl == "a minute ago":
@@ -932,7 +955,7 @@ def _parse_yahoo_published_at_utc(raw: str, now: datetime) -> datetime | None:
     if sl == "a week ago":
         return now - timedelta(weeks=1)
     m = re.match(
-        r"(?is)^(\d+)\s*(second|seconds|minute|minutes|hour|hours|day|days|week|weeks)\s+ago\s*$",
+        r"(?is)^(\d+)\s*(second|seconds|minute|minutes|hour|hours|day|days|week|weeks|month|months|year|years)\s+ago\s*$",
         s,
     )
     if m:
@@ -948,6 +971,10 @@ def _parse_yahoo_published_at_utc(raw: str, now: datetime) -> datetime | None:
             return now - timedelta(days=n)
         if u.startswith("week"):
             return now - timedelta(weeks=n)
+        if u.startswith("month"):
+            return now - timedelta(days=30 * n)
+        if u.startswith("year"):
+            return now - timedelta(days=365 * n)
         return None
     if " at " in s:
         for fmt in ("%b %d, %Y at %I:%M %p", "%b %d, %Y at %I:%M%p", "%B %d, %Y at %I:%M %p"):
@@ -1018,7 +1045,7 @@ def _yahoo_curate_by_time_windows(
     target: int,
 ) -> tuple[list[tuple[dict[str, Any], str]], list[tuple[float, int]]]:
     """
-    6h→12h→24h 윈도우 확장. target 이상이면 그 시점에서 상한 target.
+    6h→12h→24h→48h 윈도우 확장. target 이상이면 그 시점에서 상한 target.
     마지막 창까지도 부족하면 그때까지 통과한 기사만.
     반환: (curated, [(hours, eligible_count), ...])
     """
@@ -1501,7 +1528,7 @@ def crawl_yahoo_overseas_stocks_and_tech() -> tuple[
 ]:
     """
     Yahoo 뉴스(/news/) + 테크(/topic/tech/)를 한 번에 수집.
-    URL 중복 제거 후 published_at 파싱 성공분만 사용, 6h→12h→24h 시간 창으로 최대 30건.
+    URL 중복 제거 후 published_at 파싱 성공분만 사용, 6h→12h→24h→48h 시간 창으로 최대 30건.
     반환: (overseas_stocks, overseas_tech, yahoo_merged_curated_order)
     """
     try:
