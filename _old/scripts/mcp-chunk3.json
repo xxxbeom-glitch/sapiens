@@ -1,1 +1,0 @@
-{"fileKey":"EaE3QXT7UV66RFZRXppOvi","description":"patch b64 part 3","code":"(async()=>{figma.root.setPluginData(\"_p3\",\"IChyMi5lcnIpIHJldHVybiByMjsKCiAgZmlnbWEudmlld3BvcnQuc2Nyb2xsQW5kWm9vbUludG9WaWV3KFtyb290XSk7CiAgcmV0dXJuIHsgb2s6IHRydWUsIGRvbWVzdGljOiByMS5yb3dzLCBvdmVyc2VhczogcjIucm93cyB9Owp9KSgpOwo=\");return {part:3,len:184};})();"}

