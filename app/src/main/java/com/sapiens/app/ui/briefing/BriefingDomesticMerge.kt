@@ -28,12 +28,14 @@ internal fun Article.briefingPublishedAtMillis(): Long {
 /**
  * `briefing/hankyung`·`briefing/maeil` 각 최대 5건을 합친 뒤 발행 시각 내림차순으로 상위 10건.
  * (파이프라인의 briefing_hankyung_pool / briefing_maeil_pool과 동일 출처.)
+ * 동일·유사 헤드라인(다른 URL)은 한 주제당 한 건만 남긴다.
  */
 internal fun mergeDomesticBriefingArticles(
     hankyung: List<Article>,
     maeil: List<Article>,
-): List<Article> =
-    (hankyung.take(5) + maeil.take(5))
+): List<Article> {
+    val sorted = (hankyung.take(5) + maeil.take(5))
         .distinctBy { a -> a.url.ifBlank { "${a.source}|${a.headline}" } }
         .sortedByDescending { it.briefingPublishedAtMillis() }
-        .take(10)
+    return selectTopBriefingArticlesDedupedByHeadline(sorted, maxCount = 10)
+}

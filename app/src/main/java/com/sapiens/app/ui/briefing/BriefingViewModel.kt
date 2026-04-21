@@ -42,7 +42,8 @@ class BriefingViewModel(
                 val h = hankyung.ifEmpty { MockData.briefingHankyungArticles }
                 val m = maeil.ifEmpty { MockData.briefingMaeilArticles }
                 _domesticBriefingArticles.value = mergeDomesticBriefingArticles(h, m)
-                _usArticles.value = us.ifEmpty { MockData.usArticles }
+                val usList = us.ifEmpty { MockData.usArticles }
+                _usArticles.value = dedupeBriefingArticlesBySimilarHeadline(usList)
                 _isLoading.value = false
             }
         }
