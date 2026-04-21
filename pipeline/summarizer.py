@@ -25,7 +25,14 @@ _ORIGINAL_EXCERPT_FOR_JUDGE_MAX = 14000
 _JUDGE_SYSTEM = (
     "당신은 금융 뉴스 사실 검증자입니다.\n"
     "주어진 원문(또는 발췌)과 후보 JSON을 비교해 환각·오역·핵심 누락만 판정합니다.\n"
-    "반드시 지정된 JSON 스키마로만 응답하세요. 설명 문장이나 마크다운을 붙이지 마세요."
+    "반드시 지정된 JSON 스키마로만 응답하세요. 설명 문장이나 마크다운을 붙이지 마세요.\n"
+    "issues 배열은 최대 5개까지. 각 detail은 **120자 이내 한 줄**만(출력 잘림 방지)."
+)
+
+# Judge 응답이 잘려 json.loads가 실패할 때 verdict만 복구.
+_VERDICT_SNIFF_RE = re.compile(
+    r'["\']verdict["\']\s*:\s*["\']?(PASS|FAIL)\b',
+    re.IGNORECASE,
 )
 
 
@@ -180,6 +187,16 @@ def _count_json_brackets_outside_strings(text: str) -> tuple[int, int, int, int]
         elif ch == "]":
             csq += 1
     return oc, cc, osq, csq
+
+
+def _sniff_judge_verdict_token(text: str) -> str | None:
+    """모델 출력이 잘려 dict 파싱이 안 될 때 'PASS'|'FAIL'만 추출. 없으면 None."""
+    if not (text or "").strip():
+        return None
+    m = _VERDICT_SNIFF_RE.search(text[:16000])
+    if not m:
+        return None
+    return m.group(1).upper()
 
 
 def _try_repair_truncated_json_dict(core: str) -> dict[str, Any] | None:
@@ -533,7 +550,7 @@ def _call_gemini_judge(user_content: str) -> str:
         response = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=prompt,
-            config={"max_output_tokens": 2048, "temperature": 0.15},
+            config={"max_output_tokens": 4096, "temperature": 0.15},
         )
         try:
             _accumulate_gemini_usage(response)
@@ -590,7 +607,7 @@ def _gemini_judge_verdict(
     title: str,
     source: str,
 ) -> tuple[bool, list[dict[str, Any]]]:
-    """(통과 여부, 이슈 목록). 판정 파싱 실패 시 통과로 간주(파이프라인 정지 방지)."""
+    """(통과 여부, 이슈 목록). 파싱 실패·모호 시 보수적으로 FAIL(재작성·폴백 유도)."""
     candidate = json.dumps(
         {
             "headline": draft.get("headline"),
@@ -610,18 +627,33 @@ def _gemini_judge_verdict(
         "- 고유명사·수치의 명백한 오역이 있으면 FAIL.\n"
         "- 경미한 문장 표현 차이만 있으면 PASS.\n\n"
         '반드시 JSON 한 개만 출력:\n'
-        '{"verdict":"PASS" 또는 "FAIL","issues":[{"type":"hallucination|omission|translation|format|other","detail":"한국어로 구체적 설명"}]}\n'
+        '{"verdict":"PASS" 또는 "FAIL","issues":[{"type":"hallucination|omission|translation|format|other","detail":"한국어, 120자 이내 한 줄"}]}\n'
         "PASS인 경우 issues는 빈 배열 []이어야 합니다."
     )
     raw = _call_gemini_judge(judge_user)
-    if not (raw or "").strip():
-        logger.warning("Gemini judge 빈 응답 — 통과 처리")
-        return True, []
-    try:
-        d = _require_json_dict(raw)
-    except ValueError:
-        logger.warning("Gemini judge JSON 파싱 실패 — 통과 처리")
-        return True, []
+    stripped = (raw or "").strip()
+    if not stripped:
+        logger.warning("Gemini judge 빈 응답 — FAIL 처리")
+        return False, [{"type": "other", "detail": "Gemini 판정 응답이 비어 있습니다."}]
+
+    parsed = _extract_json(stripped)
+    if not isinstance(parsed, dict):
+        sniff = _sniff_judge_verdict_token(stripped)
+        if sniff == "FAIL":
+            logger.warning("Gemini judge JSON 파싱 실패 — verdict=FAIL 스니핑으로 거부")
+            return False, [
+                {
+                    "type": "format",
+                    "detail": "판정 JSON이 불완전하지만 verdict=FAIL로 확인됨",
+                }
+            ]
+        if sniff == "PASS":
+            logger.warning("Gemini judge JSON 파싱 실패 — verdict=PASS 스니핑으로 통과")
+            return True, []
+        logger.warning("Gemini judge JSON 파싱 실패 — 보수적 FAIL")
+        return False, [{"type": "other", "detail": "판정 JSON 파싱 실패"}]
+
+    d = parsed
     verdict = str(d.get("verdict", "")).strip().upper()
     issues_raw = d.get("issues", [])
     if not isinstance(issues_raw, list):
@@ -767,8 +799,8 @@ def _summarize_article_llm_judge_path(
                 original_excerpt, data, title=title, source=source
             )
         except Exception as e:
-            logger.warning("LLM judge: 판정 예외, 통과 처리: %s", e)
-            passed, issues = True, []
+            logger.warning("LLM judge: 판정 예외 — FAIL 처리: %s", e)
+            passed, issues = False, [{"type": "other", "detail": f"판정 호출 예외: {e}"}]
 
         if passed:
             out = _postprocess_summarize_article_dict(
@@ -860,6 +892,8 @@ def summarize_article(
         user = (
             "다음 뉴스를 분석해 JSON만 출력하세요.\n"
             f'키: "headline", "category", "summary_points"\n'
+            "headline·summary_points 각 문자열 안에 **큰따옴표(\")를 넣지 마세요**. "
+            "인용이 필요하면 작은따옴표(')나 「」를 쓰세요.\n"
             "headline은 반드시 한국어로 작성하세요. 원문이 영어면 자연스러운 한국어 제목으로 번역하세요.\n"
             f"{_SUMMARIZE_ARTICLE_CATEGORY_BLOCK}"
             f"{pts_count_rule}"
@@ -880,6 +914,8 @@ def summarize_article(
         user = (
             f"다음 뉴스를 분석해 JSON만 출력하세요.\n"
             f'키: "headline", "category", "summary_points"\n'
+            f"headline·summary_points 각 문자열 안에 **큰따옴표(\")를 넣지 마세요**. "
+            f"인용이 필요하면 작은따옴표(')나 「」를 쓰세요.\n"
             f"headline은 반드시 한국어로 작성하세요. 원문이 영어면 자연스러운 한국어 제목으로 번역하세요.\n"
             f"{_SUMMARIZE_ARTICLE_CATEGORY_BLOCK}"
             f"summary_points는 기사 핵심을 빠짐없이 담은 문자열 배열로 작성하세요.\n"
