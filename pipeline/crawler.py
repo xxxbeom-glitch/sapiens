@@ -47,6 +47,11 @@ NAVER_ARTICLE_BODY_SELECTORS = (
     "#articeBody",
     "#articleBody",
 )
+# 매일경제(mk.co.kr) 기사 본문 — RSS 브리핑 국내 슬롯용
+MK_ARTICLE_BODY_SELECTORS = (
+    "div.news_cnt_detail_wrap[itemprop='articleBody']",
+    "div.news_cnt_detail_wrap",
+)
 STOCK_NAVER_BASE = "https://stock.naver.com"
 NAVER_STOCK_THEME_MAX = 20
 NAVER_STOCK_THEME_LIST_API = (
@@ -201,6 +206,45 @@ def _attach_naver_article_bodies(rows: list[dict[str, Any]], pause_sec: float = 
     for row in rows:
         u = str(row.get("url") or "").strip()
         row["body"] = _fetch_naver_article_body(row) if u else ""
+        if pause_sec > 0:
+            time.sleep(pause_sec)
+
+
+def _fetch_mk_article_body(article: dict[str, Any]) -> str:
+    """mk.co.kr 뉴스 기사 본문. 실패 시 빈 문자열."""
+    url = str(article.get("url") or "").strip()
+    if not url or "mk.co.kr" not in url.lower():
+        return ""
+    headers = dict(HEADERS)
+    headers.setdefault("Referer", "https://www.mk.co.kr/")
+    try:
+        r = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        enc = r.encoding or r.apparent_encoding or "utf-8"
+        html = r.content.decode(enc, errors="replace")
+    except Exception as e:
+        logger.warning("mk 기사 HTML 미수신 url=%s err=%s", url, e)
+        return ""
+    try:
+        soup = BeautifulSoup(html, "lxml")
+        for sel in MK_ARTICLE_BODY_SELECTORS:
+            el = soup.select_one(sel)
+            if el:
+                t = _element_to_plain_article_text(el)
+                if t:
+                    return t[:ARTICLE_BODY_MAX_CHARS]
+        logger.warning("mk 기사 본문 노드 없음 url=%s 셀렉터=%s", url, ", ".join(MK_ARTICLE_BODY_SELECTORS))
+        return ""
+    except Exception as e:
+        logger.warning("mk 기사 본문 파싱 실패 url=%s err=%s", url, e)
+        return ""
+
+
+def _attach_mk_article_bodies(rows: list[dict[str, Any]], pause_sec: float = 0.08) -> None:
+    """각 row에 `body` 채움 — 매일경제 웹 기사."""
+    for row in rows:
+        u = str(row.get("url") or "").strip()
+        row["body"] = _fetch_mk_article_body(row) if u else ""
         if pause_sec > 0:
             time.sleep(pause_sec)
 
@@ -841,6 +885,13 @@ RSS_FEEDS_BRIEFING_OVERSEAS: list[str] = [
     "https://www.cnbc.com/id/20409666/device/rss/rss.html",
     "https://www.theguardian.com/business/rss",
 ]
+# 브리핑 국내 주요 — 매일경제 MK RSS (헤드라인 / 경제). Firestore는 기존 hankyung·maeil 문서에 각각 저장.
+RSS_FEEDS_BRIEFING_DOMESTIC_HEADLINE: list[str] = [
+    "https://www.mk.co.kr/rss/30000001/",
+]
+RSS_FEEDS_BRIEFING_DOMESTIC_ECONOMY: list[str] = [
+    "https://www.mk.co.kr/rss/30100041/",
+]
 RSS_FEEDS_OVERSEAS_STOCKS: list[str] = [
     "https://www.cnbc.com/id/10000664/device/rss/rss.html",
     "https://www.theguardian.com/business/rss",
@@ -875,7 +926,30 @@ def _rss_entry_published_utc(entry: Any) -> datetime | None:
         return None
 
 
-def _rss_row_from_entry(entry: Any, source_label: str, now: datetime) -> dict[str, Any] | None:
+def _rss_thumbnail_from_entry(entry: Any) -> str:
+    """feedparser media:content 등에서 이미지 URL 추출."""
+    for attr in ("media_content", "media_thumbnail"):
+        mc = getattr(entry, attr, None) or []
+        if isinstance(mc, dict):
+            mc = [mc]
+        if not isinstance(mc, list):
+            continue
+        for block in mc:
+            if not isinstance(block, dict):
+                continue
+            u = (block.get("url") or block.get("href") or "").strip()
+            if u and u.startswith("http"):
+                return u.split("#")[0]
+    return ""
+
+
+def _rss_row_from_entry(
+    entry: Any,
+    source_label: str,
+    now: datetime,
+    *,
+    include_thumbnail: bool = False,
+) -> dict[str, Any] | None:
     title = (getattr(entry, "title", None) or "").strip()
     link = (getattr(entry, "link", None) or "").strip()
     if not title or not link:
@@ -895,6 +969,7 @@ def _rss_row_from_entry(entry: Any, source_label: str, now: datetime) -> dict[st
         summ = ""
     else:
         summ = (summ_plain[:SUMMARY_CHARS] + ("…" if len(summ_plain) > SUMMARY_CHARS else "")).strip()
+    thumb = _rss_thumbnail_from_entry(entry) if include_thumbnail else ""
     return {
         "title": title,
         "summary": summ,
@@ -902,12 +977,17 @@ def _rss_row_from_entry(entry: Any, source_label: str, now: datetime) -> dict[st
         "url": _normalize_url(link.split("#")[0]),
         "published_at": pub_dt.isoformat(),
         "category": "",
-        "thumbnail_url": "",
+        "thumbnail_url": thumb,
         "body": "",
     }
 
 
-def _crawl_rss_feed_urls(urls: list[str], *, max_items: int) -> list[dict[str, Any]]:
+def _crawl_rss_feed_urls(
+    urls: list[str],
+    *,
+    max_items: int,
+    include_thumbnail: bool = False,
+) -> list[dict[str, Any]]:
     """여러 RSS URL 순회 → 48h 이내 항목만, URL 기준 중복 제거 후 최대 max_items."""
     rows: list[dict[str, Any]] = []
     seen_url: set[str] = set()
@@ -925,7 +1005,7 @@ def _crawl_rss_feed_urls(urls: list[str], *, max_items: int) -> list[dict[str, A
                 feed_title = str(fd.title).strip()
             source_label = feed_title or urlparse(feed_url).netloc or "RSS"
             for entry in getattr(parsed, "entries", None) or []:
-                row = _rss_row_from_entry(entry, source_label, now)
+                row = _rss_row_from_entry(entry, source_label, now, include_thumbnail=include_thumbnail)
                 if not row:
                     continue
                 u = (row.get("url") or "").strip()
@@ -966,6 +1046,26 @@ def crawl_rss_overseas_tech() -> list[dict[str, Any]]:
 def crawl_rss_briefing_overseas() -> list[dict[str, Any]]:
     """브리핑 해외 주요: CNBC Markets + CNBC Markets Insider + Guardian business."""
     return _crawl_rss_feed_urls(RSS_FEEDS_BRIEFING_OVERSEAS, max_items=RSS_OVERSEAS_TARGET_ITEMS)
+
+
+def _crawl_mk_briefing_rss_pool(
+    feed_urls: list[str],
+    *,
+    press_code: str,
+    max_items: int = 36,
+    body_prefetch_cap: int = 24,
+) -> list[dict[str, Any]]:
+    """
+    매일경제 MK RSS → 기사 페이지에서 본문 추출 → 브리핑 신문과 동일 본문 길이 필터.
+    반환: 발행 시각 내림차순(최신 우선), 길이는 호출측에서 상위 N건으로 자름.
+    """
+    rows = _crawl_rss_feed_urls(feed_urls, max_items=max_items, include_thumbnail=True)
+    rows.sort(key=lambda r: (r.get("published_at") or ""), reverse=True)
+    prefetch = rows[:body_prefetch_cap] if rows else []
+    _attach_mk_article_bodies(prefetch)
+    filtered = _filter_briefing_newspaper_rows_by_body(prefetch, press_code=press_code)
+    filtered.sort(key=lambda r: (r.get("published_at") or ""), reverse=True)
+    return filtered
 
 
 NAVER_MEDIA = "https://media.naver.com"
@@ -1210,12 +1310,14 @@ def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> li
 
 
 def crawl_hankyung_newspaper() -> list[dict[str, Any]]:
-    """NAVER 뉴스 — 한국경제 신문 스탠드 (최대 30). 본문 200자 미만·빈 본문은 제외. 파이프라인은 면·면 내 순 정렬 후 상위 5건만 briefing/hankyung에 저장."""
+    """
+    브리핑 국내 슬롯 `briefing/hankyung` — 매일경제 MK RSS 헤드라인.
+    (레거시 문서 ID 유지.) 본문 200자 미만은 제외; 파이프라인에서 최신순 상위 N건 요약.
+    """
     try:
-        return _crawl_naver_newspaper(
-            "015",
-            "한국경제",
-            MAX_NEWSPAPER_ITEMS,
+        return _crawl_mk_briefing_rss_pool(
+            RSS_FEEDS_BRIEFING_DOMESTIC_HEADLINE,
+            press_code="mk_rss_headline",
         )
     except Exception as e:
         logger.exception("crawl_hankyung_newspaper 실패: %s", e)
@@ -1223,12 +1325,14 @@ def crawl_hankyung_newspaper() -> list[dict[str, Any]]:
 
 
 def crawl_maeil_newspaper() -> list[dict[str, Any]]:
-    """NAVER 뉴스 — 매일경제 신문 스탠드 (최대 30). 본문 200자 미만·빈 본문은 제외. 파이프라인은 면·면 내 순 정렬 후 상위 5건만 briefing/maeil에 저장."""
+    """
+    브리핑 국내 슬롯 `briefing/maeil` — 매일경제 MK RSS 경제.
+    (레거시 문서 ID 유지.)
+    """
     try:
-        return _crawl_naver_newspaper(
-            "009",
-            "매일경제",
-            MAX_NEWSPAPER_ITEMS,
+        return _crawl_mk_briefing_rss_pool(
+            RSS_FEEDS_BRIEFING_DOMESTIC_ECONOMY,
+            press_code="mk_rss_economy",
         )
     except Exception as e:
         logger.exception("crawl_maeil_newspaper 실패: %s", e)

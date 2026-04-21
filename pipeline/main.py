@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Tuple
 
@@ -71,6 +72,19 @@ def is_skip_day(section: str) -> Tuple[bool, str]:
 def _sorted_newspaper_top(rows: list[dict[str, Any]], n: int) -> list[dict[str, Any]]:
     if not rows:
         return []
+
+    def _published_ts(row: dict[str, Any]) -> float:
+        raw = str(row.get("published_at") or "").strip()
+        if not raw:
+            return 0.0
+        try:
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            return dt.timestamp()
+        except (TypeError, ValueError, OSError, OverflowError):
+            return 0.0
+
+    if any(str(r.get("published_at") or "").strip() for r in rows):
+        return sorted(rows, key=_published_ts, reverse=True)[:n]
     return sorted(
         rows,
         key=lambda r: (int(r.get("paper_number", 999)), int(r.get("detail_position", 99))),
