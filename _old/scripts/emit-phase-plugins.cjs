@@ -1,0 +1,10 @@
+const fs = require('fs');
+const c1 = fs.readFileSync('scripts/b64-chunk1.txt', 'utf8');
+const c2 = fs.readFileSync('scripts/b64-chunk2.txt', 'utf8');
+const p1 = `(async()=>{ figma.root.setPluginData('j1', ${JSON.stringify(c1)}); return {ok:1,len:${c1.length}}; })();`;
+const p2 = `(async()=>{ figma.root.setPluginData('j2', ${JSON.stringify(c2)}); return {ok:2,len:${c2.length}}; })();`;
+const p3 = `(async()=>{ const c1=figma.root.getPluginData('j1'); const c2=figma.root.getPluginData('j2'); const b=c1+c2; const t=decodeURIComponent(escape(atob(b))); await (0,eval)(t); figma.root.setPluginData('j1',''); figma.root.setPluginData('j2',''); return {ok:3}; })();`;
+fs.writeFileSync('scripts/figma-phase1.js', p1);
+fs.writeFileSync('scripts/figma-phase2.js', p2);
+fs.writeFileSync('scripts/figma-phase3.js', p3);
+console.log('p1', p1.length, 'p2', p2.length, 'p3', p3.length);

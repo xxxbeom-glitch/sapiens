@@ -1,0 +1,127 @@
+{
+  "global": {
+    "color": {
+      "accent": {
+        "value": "#F56E0F",
+        "type": "color",
+        "description": "브랜드 주황 — 탭 선택, 토글, 강조 아이콘, 로딩"
+      },
+      "onPrimaryFixed": {
+        "value": "#FFFFFF",
+        "type": "color",
+        "description": "Accent 배경 위 텍스트·아이콘"
+      },
+      "marketUp": {
+        "value": "#E24B4A",
+        "type": "color",
+        "description": "주가 상승"
+      },
+      "marketDown": {
+        "value": "#378ADD",
+        "type": "color",
+        "description": "주가 하락"
+      },
+      "marketFlat": {
+        "value": "#878787",
+        "type": "color",
+        "description": "보합"
+      },
+      "surfaceMuted": {
+        "value": "#28282A",
+        "type": "color",
+        "description": "어두운 중첩 카드·지표 박스 배경 (고정)"
+      }
+    },
+    "category": {
+      "economy_bg": { "value": "#1a3a5c", "type": "color" },
+      "economy_text": { "value": "#5ba3e0", "type": "color" },
+      "tech_bg": { "value": "#1a3a2a", "type": "color" },
+      "tech_text": { "value": "#4caf7d", "type": "color" },
+      "market_bg": { "value": "#3a1a1a", "type": "color" },
+      "market_text": { "value": "#e05b5b", "type": "color" },
+      "politics_bg": { "value": "#2a1a3a", "type": "color" },
+      "politics_text": { "value": "#9b6be0", "type": "color" },
+      "global_bg": { "value": "#1a2a3a", "type": "color" },
+      "global_text": { "value": "#5b8fe0", "type": "color" },
+      "realestate_bg": { "value": "#2a2a1a", "type": "color" },
+      "realestate_text": { "value": "#c0a840", "type": "color" },
+      "industry_bg": { "value": "#1a2a2a", "type": "color" },
+      "industry_text": { "value": "#40b0b0", "type": "color" },
+      "bigtech_bg": { "value": "#2a1a2a", "type": "color" },
+      "bigtech_text": { "value": "#c060c0", "type": "color" },
+      "crypto_bg": { "value": "#2a2010", "type": "color" },
+      "crypto_text": { "value": "#e0a020", "type": "color" }
+    }
+  },
+  "dark": {
+    "color": {
+      "background": {
+        "value": "#151419",
+        "type": "color",
+        "description": "화면 전체 배경"
+      },
+      "card": {
+        "value": "#1B1B1E",
+        "type": "color",
+        "description": "카드·리스트 서피스, 뉴스 리스트 배경"
+      },
+      "elevated": {
+        "value": "#262626",
+        "type": "color",
+        "description": "시트·모달 보조 서피스"
+      },
+      "textPrimary": {
+        "value": "#FBFBFB",
+        "type": "color",
+        "description": "제목·본문 1차"
+      },
+      "textSecondary": {
+        "value": "#878787",
+        "type": "color",
+        "description": "날짜·부가설명·비선택 탭·구분선"
+      },
+      "hair": {
+        "value": "#FFFFFF1A",
+        "type": "color",
+        "description": "아웃라인·경계선 (흰 알파)"
+      }
+    }
+  },
+  "light": {
+    "color": {
+      "background": {
+        "value": "#FAFAF8",
+        "type": "color",
+        "description": "화면 전체 배경"
+      },
+      "card": {
+        "value": "#FFFFFF",
+        "type": "color",
+        "description": "카드·리스트 서피스"
+      },
+      "elevated": {
+        "value": "#F2F1EE",
+        "type": "color",
+        "description": "시트·모달 보조 서피스"
+      },
+      "textPrimary": {
+        "value": "#1A1A1A",
+        "type": "color",
+        "description": "제목·본문 1차"
+      },
+      "textSecondary": {
+        "value": "#6B6B6B",
+        "type": "color",
+        "description": "날짜·부가설명·비선택 탭·구분선"
+      },
+      "hair": {
+        "value": "#0000001A",
+        "type": "color",
+        "description": "아웃라인·경계선 (검정 알파)"
+      }
+    }
+  },
+  "$metadata": {
+    "tokenSetOrder": ["global", "dark", "light"]
+  }
+}
