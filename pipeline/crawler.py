@@ -1,5 +1,5 @@
 ﻿"""
-네이버 금융 / 해외 RSS(CNBC·The Guardian·The Verge·Ars Technica 등) 뉴스 + 종목 재무(Yahoo API)·증권가 크롤링.
+네이버 금융 / RSS(해외 뉴스 탭·브리핑 등) 뉴스 + 종목 재무(Yahoo API)·증권가 크롤링.
 (토스증권 Playwright `crawl_tossinvest_news` 는 보존. `crawl_domestic` 에서는 미사용.)
 """
 from __future__ import annotations
@@ -51,6 +51,11 @@ NAVER_ARTICLE_BODY_SELECTORS = (
 MK_ARTICLE_BODY_SELECTORS = (
     "div.news_cnt_detail_wrap[itemprop='articleBody']",
     "div.news_cnt_detail_wrap",
+)
+# 연합인포맥스(news.einfomax.co.kr) 기사 본문 — 브리핑 해외 RSS 슬롯용
+EINFOMAX_ARTICLE_BODY_SELECTORS = (
+    "#article-view-content-div[itemprop='articleBody']",
+    "#article-view-content-div",
 )
 STOCK_NAVER_BASE = "https://stock.naver.com"
 NAVER_STOCK_THEME_MAX = 20
@@ -249,6 +254,48 @@ def _attach_mk_article_bodies(rows: list[dict[str, Any]], pause_sec: float = 0.0
             time.sleep(pause_sec)
 
 
+def _fetch_einfomax_article_body(article: dict[str, Any]) -> str:
+    """news.einfomax.co.kr 기사 본문. 실패 시 빈 문자열."""
+    url = str(article.get("url") or "").strip()
+    if not url or "einfomax.co.kr" not in url.lower():
+        return ""
+    headers = dict(HEADERS)
+    headers.setdefault("Referer", "https://news.einfomax.co.kr/")
+    try:
+        r = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        enc = r.encoding or r.apparent_encoding or "utf-8"
+        html = r.content.decode(enc, errors="replace")
+    except Exception as e:
+        logger.warning("einfomax 기사 HTML 미수신 url=%s err=%s", url, e)
+        return ""
+    try:
+        soup = BeautifulSoup(html, "lxml")
+        for sel in EINFOMAX_ARTICLE_BODY_SELECTORS:
+            el = soup.select_one(sel)
+            if el:
+                t = _element_to_plain_article_text(el)
+                if t:
+                    return t[:ARTICLE_BODY_MAX_CHARS]
+        logger.warning(
+            "einfomax 기사 본문 노드 없음 url=%s 셀렉터=%s",
+            url,
+            ", ".join(EINFOMAX_ARTICLE_BODY_SELECTORS),
+        )
+        return ""
+    except Exception as e:
+        logger.warning("einfomax 기사 본문 파싱 실패 url=%s err=%s", url, e)
+        return ""
+
+
+def _attach_einfomax_article_bodies(rows: list[dict[str, Any]], pause_sec: float = 0.08) -> None:
+    for row in rows:
+        u = str(row.get("url") or "").strip()
+        row["body"] = _fetch_einfomax_article_body(row) if u else ""
+        if pause_sec > 0:
+            time.sleep(pause_sec)
+
+
 def _filter_briefing_newspaper_rows_by_body(
     rows: list[dict[str, Any]],
     *,
@@ -283,9 +330,12 @@ def _filter_briefing_newspaper_rows_by_body(
 def _normalize_url(url: str) -> str:
     if not url:
         return ""
-    parsed = urlparse(url.strip())
-    # 쿼리 중 불필요 파라미터 제거는 생략, scheme+netloc+path 기준
-    return f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/")
+    parsed = urlparse(url.strip().split("#")[0])
+    base = f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/")
+    # articleView.html?idxno=… 등 식별 쿼리 보존 (경로만 두면 404)
+    if parsed.query:
+        return f"{base}?{parsed.query}"
+    return base
 
 
 def _fetch(url: str) -> str | None:
@@ -881,16 +931,11 @@ RSS_OVERSEAS_MAX_AGE_HOURS = 48.0
 RSS_OVERSEAS_TARGET_ITEMS = 15
 
 RSS_FEEDS_BRIEFING_OVERSEAS: list[str] = [
-    "https://www.cnbc.com/id/10000664/device/rss/rss.html",
-    "https://www.cnbc.com/id/20409666/device/rss/rss.html",
-    "https://www.theguardian.com/business/rss",
+    "https://news.einfomax.co.kr/rss/S1N21.xml",
 ]
-# 브리핑 국내 주요 — 매일경제 MK RSS (헤드라인 / 경제). Firestore는 기존 hankyung·maeil 문서에 각각 저장.
-RSS_FEEDS_BRIEFING_DOMESTIC_HEADLINE: list[str] = [
+# 브리핑 국내 주요 — 매일경제 MK RSS(헤드라인만). maeil 문서는 레거시 호환용으로 비움.
+RSS_FEEDS_BRIEFING_DOMESTIC_MK: list[str] = [
     "https://www.mk.co.kr/rss/30000001/",
-]
-RSS_FEEDS_BRIEFING_DOMESTIC_ECONOMY: list[str] = [
-    "https://www.mk.co.kr/rss/30100041/",
 ]
 RSS_FEEDS_OVERSEAS_STOCKS: list[str] = [
     "https://www.cnbc.com/id/10000664/device/rss/rss.html",
@@ -1044,8 +1089,13 @@ def crawl_rss_overseas_tech() -> list[dict[str, Any]]:
 
 
 def crawl_rss_briefing_overseas() -> list[dict[str, Any]]:
-    """브리핑 해외 주요: CNBC Markets + CNBC Markets Insider + Guardian business."""
-    return _crawl_rss_feed_urls(RSS_FEEDS_BRIEFING_OVERSEAS, max_items=RSS_OVERSEAS_TARGET_ITEMS)
+    """브리핑 해외 주요: 연합인포맥스 해외주식 RSS — 기사 본문 수집 후 길이 필터."""
+    return _crawl_einfomax_briefing_rss_pool(
+        RSS_FEEDS_BRIEFING_OVERSEAS,
+        press_code="einfomax_overseas",
+        max_items=48,
+        body_prefetch_cap=28,
+    )
 
 
 def _crawl_mk_briefing_rss_pool(
@@ -1056,13 +1106,30 @@ def _crawl_mk_briefing_rss_pool(
     body_prefetch_cap: int = 24,
 ) -> list[dict[str, Any]]:
     """
-    매일경제 MK RSS → 기사 페이지에서 본문 추출 → 브리핑 신문과 동일 본문 길이 필터.
-    반환: 발행 시각 내림차순(최신 우선), 길이는 호출측에서 상위 N건으로 자름.
+    매일경제 MK RSS → mk.co.kr 기사 본문 → 브리핑 본문 길이 필터.
+    반환: 발행 시각 내림차순(최신 우선).
     """
     rows = _crawl_rss_feed_urls(feed_urls, max_items=max_items, include_thumbnail=True)
     rows.sort(key=lambda r: (r.get("published_at") or ""), reverse=True)
     prefetch = rows[:body_prefetch_cap] if rows else []
     _attach_mk_article_bodies(prefetch)
+    filtered = _filter_briefing_newspaper_rows_by_body(prefetch, press_code=press_code)
+    filtered.sort(key=lambda r: (r.get("published_at") or ""), reverse=True)
+    return filtered
+
+
+def _crawl_einfomax_briefing_rss_pool(
+    feed_urls: list[str],
+    *,
+    press_code: str,
+    max_items: int = 48,
+    body_prefetch_cap: int = 28,
+) -> list[dict[str, Any]]:
+    """연합인포맥스 RSS → einfomax 기사 본문 → 동일 본문 길이 필터."""
+    rows = _crawl_rss_feed_urls(feed_urls, max_items=max_items, include_thumbnail=True)
+    rows.sort(key=lambda r: (r.get("published_at") or ""), reverse=True)
+    prefetch = rows[:body_prefetch_cap] if rows else []
+    _attach_einfomax_article_bodies(prefetch)
     filtered = _filter_briefing_newspaper_rows_by_body(prefetch, press_code=press_code)
     filtered.sort(key=lambda r: (r.get("published_at") or ""), reverse=True)
     return filtered
@@ -1311,13 +1378,13 @@ def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> li
 
 def crawl_hankyung_newspaper() -> list[dict[str, Any]]:
     """
-    브리핑 국내 슬롯 `briefing/hankyung` — 매일경제 MK RSS 헤드라인.
+    브리핑 국내 슬롯 `briefing/hankyung` — 매일경제 MK RSS(헤드라인).
     (레거시 문서 ID 유지.) 본문 200자 미만은 제외; 파이프라인에서 최신순 상위 N건 요약.
     """
     try:
         return _crawl_mk_briefing_rss_pool(
-            RSS_FEEDS_BRIEFING_DOMESTIC_HEADLINE,
-            press_code="mk_rss_headline",
+            RSS_FEEDS_BRIEFING_DOMESTIC_MK,
+            press_code="mk_rss",
         )
     except Exception as e:
         logger.exception("crawl_hankyung_newspaper 실패: %s", e)
@@ -1326,17 +1393,9 @@ def crawl_hankyung_newspaper() -> list[dict[str, Any]]:
 
 def crawl_maeil_newspaper() -> list[dict[str, Any]]:
     """
-    브리핑 국내 슬롯 `briefing/maeil` — 매일경제 MK RSS 경제.
-    (레거시 문서 ID 유지.)
+    브리핑 국내 보조 슬롯 `briefing/maeil` — 매경 RSS만 쓰므로 비움(레거시 문서 ID 유지).
     """
-    try:
-        return _crawl_mk_briefing_rss_pool(
-            RSS_FEEDS_BRIEFING_DOMESTIC_ECONOMY,
-            press_code="mk_rss_economy",
-        )
-    except Exception as e:
-        logger.exception("crawl_maeil_newspaper 실패: %s", e)
-        return []
+    return []
 
 
 def _fetch_stock_naver_json(url: str) -> Any | None:

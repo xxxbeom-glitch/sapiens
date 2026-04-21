@@ -22,6 +22,7 @@ from typing import Any, Tuple
 logger = logging.getLogger("pipeline")
 
 BRIEFING_NEWSPAPER_N = 5
+BRIEFING_OVERSEAS_N = 8
 
 PIPELINE_SECTION_ALL = "all"
 PIPELINE_SECTION_FULL = "full"
@@ -247,13 +248,7 @@ def _run_briefing_only(crawler: Any, firebase_client: Any, summarizer: Any) -> N
     fs_hankyung = _summarize_newspaper_pool_for_briefing(summarizer, pool_hankyung)
     fs_maeil = _summarize_newspaper_pool_for_briefing(summarizer, pool_maeil)
 
-    us_pool: list[dict] = []
-    if briefing_overseas_raw:
-        try:
-            us_pool = summarizer.curate_us_market_articles(briefing_overseas_raw)
-        except Exception as e:
-            logger.warning("curate_us_market_articles 실패, 전체로 요약 시도: %s", e)
-            us_pool = briefing_overseas_raw[:8]
+    us_pool = _sorted_newspaper_top(briefing_overseas_raw, BRIEFING_OVERSEAS_N)
     fs_us_market: list[dict] = []
     for row in summarizer.summarize_batch(us_pool):
         ai = row.pop("_ai", None)
@@ -341,13 +336,7 @@ def _run_pipeline_full(crawler: Any, firebase_client: Any, summarizer: Any) -> N
         if ai:
             fs_overseas_tech.append(summarizer.merge_to_firestore_article(row, ai))
 
-    us_pool: list[dict] = []
-    if briefing_overseas_raw:
-        try:
-            us_pool = summarizer.curate_us_market_articles(briefing_overseas_raw)
-        except Exception as e:
-            logger.warning("curate_us_market_articles 실패, 전체로 요약 시도: %s", e)
-            us_pool = briefing_overseas_raw[:8]
+    us_pool = _sorted_newspaper_top(briefing_overseas_raw, BRIEFING_OVERSEAS_N)
     fs_us_market: list[dict] = []
     for row in summarizer.summarize_batch(us_pool):
         ai = row.pop("_ai", None)
