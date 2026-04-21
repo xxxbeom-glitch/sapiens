@@ -57,6 +57,13 @@ EINFOMAX_ARTICLE_BODY_SELECTORS = (
     "#article-view-content-div[itemprop='articleBody']",
     "#article-view-content-div",
 )
+# 한국경제(hankyung.com) 기사 본문 — 브리핑 국내 RSS 슬롯용
+HANKYUNG_ARTICLE_BODY_SELECTORS = (
+    "[itemprop='articleBody']",
+    "#article-wrap .article-body",
+    "div.article-body",
+    "#article-wrap",
+)
 STOCK_NAVER_BASE = "https://stock.naver.com"
 NAVER_STOCK_THEME_MAX = 20
 NAVER_STOCK_THEME_LIST_API = (
@@ -250,6 +257,51 @@ def _attach_mk_article_bodies(rows: list[dict[str, Any]], pause_sec: float = 0.0
     for row in rows:
         u = str(row.get("url") or "").strip()
         row["body"] = _fetch_mk_article_body(row) if u else ""
+        if pause_sec > 0:
+            time.sleep(pause_sec)
+
+
+def _fetch_hankyung_article_body(article: dict[str, Any]) -> str:
+    """hankyung.com 뉴스 기사 본문. 실패 시 빈 문자열."""
+    url = str(article.get("url") or "").strip()
+    if not url or "hankyung.com" not in url.lower():
+        return ""
+    headers = dict(HEADERS)
+    headers.setdefault("Referer", "https://www.hankyung.com/")
+    try:
+        r = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        enc = r.encoding or r.apparent_encoding or "utf-8"
+        html = r.content.decode(enc, errors="replace")
+    except Exception as e:
+        logger.warning("hankyung 기사 HTML 미수신 url=%s err=%s", url, e)
+        return ""
+    if "cloudflare" in html.lower() and "challenge" in html.lower():
+        logger.warning("hankyung 기사 HTML Cloudflare 차단 의심 url=%s", url)
+        return ""
+    try:
+        soup = BeautifulSoup(html, "lxml")
+        for sel in HANKYUNG_ARTICLE_BODY_SELECTORS:
+            el = soup.select_one(sel)
+            if el:
+                t = _element_to_plain_article_text(el)
+                if t:
+                    return t[:ARTICLE_BODY_MAX_CHARS]
+        logger.warning(
+            "hankyung 기사 본문 노드 없음 url=%s 셀렉터=%s",
+            url,
+            ", ".join(HANKYUNG_ARTICLE_BODY_SELECTORS),
+        )
+        return ""
+    except Exception as e:
+        logger.warning("hankyung 기사 본문 파싱 실패 url=%s err=%s", url, e)
+        return ""
+
+
+def _attach_hankyung_article_bodies(rows: list[dict[str, Any]], pause_sec: float = 0.08) -> None:
+    for row in rows:
+        u = str(row.get("url") or "").strip()
+        row["body"] = _fetch_hankyung_article_body(row) if u else ""
         if pause_sec > 0:
             time.sleep(pause_sec)
 
@@ -933,7 +985,12 @@ RSS_OVERSEAS_TARGET_ITEMS = 15
 RSS_FEEDS_BRIEFING_OVERSEAS: list[str] = [
     "https://news.einfomax.co.kr/rss/S1N21.xml",
 ]
-# 브리핑 국내 주요 — 매일경제 MK RSS(헤드라인만). maeil 문서는 레거시 호환용으로 비움.
+# 브리핑 국내 — 한국경제 RSS(hankyung) + 매일경제 MK 헤드라인
+RSS_FEEDS_BRIEFING_DOMESTIC_HANKYUNG: list[str] = [
+    "https://www.hankyung.com/feed/all-news",
+    "https://www.hankyung.com/feed/finance",
+    "https://www.hankyung.com/feed/it",
+]
 RSS_FEEDS_BRIEFING_DOMESTIC_MK: list[str] = [
     "https://www.mk.co.kr/rss/30000001/",
 ]
@@ -971,6 +1028,30 @@ def _rss_entry_published_utc(entry: Any) -> datetime | None:
         return None
 
 
+def _rss_entry_plain_full_text(entry: Any) -> str:
+    """RSS 항목의 본문 후보( content / summary / description )를 순서대로 합쳐 평문."""
+    chunks: list[str] = []
+    content = getattr(entry, "content", None) or []
+    if isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict):
+                v = block.get("value") or block.get("body") or ""
+                if v:
+                    chunks.append(str(v))
+            elif block:
+                chunks.append(str(block))
+    for key in ("summary", "description"):
+        v = getattr(entry, key, None)
+        if v:
+            chunks.append(str(v))
+    raw = " ".join(chunks)
+    try:
+        plain = BeautifulSoup(raw, "lxml").get_text(" ", strip=True)
+    except Exception:
+        plain = raw
+    return re.sub(r"\s+", " ", plain).strip()
+
+
 def _rss_thumbnail_from_entry(entry: Any) -> str:
     """feedparser media:content 등에서 이미지 URL 추출."""
     for attr in ("media_content", "media_thumbnail"):
@@ -994,6 +1075,7 @@ def _rss_row_from_entry(
     now: datetime,
     *,
     include_thumbnail: bool = False,
+    store_rss_plain_body: bool = False,
 ) -> dict[str, Any] | None:
     title = (getattr(entry, "title", None) or "").strip()
     link = (getattr(entry, "link", None) or "").strip()
@@ -1015,6 +1097,9 @@ def _rss_row_from_entry(
     else:
         summ = (summ_plain[:SUMMARY_CHARS] + ("…" if len(summ_plain) > SUMMARY_CHARS else "")).strip()
     thumb = _rss_thumbnail_from_entry(entry) if include_thumbnail else ""
+    rss_plain = ""
+    if store_rss_plain_body:
+        rss_plain = _rss_entry_plain_full_text(entry)[:ARTICLE_BODY_MAX_CHARS]
     return {
         "title": title,
         "summary": summ,
@@ -1024,6 +1109,7 @@ def _rss_row_from_entry(
         "category": "",
         "thumbnail_url": thumb,
         "body": "",
+        "rss_plain_body": rss_plain,
     }
 
 
@@ -1032,6 +1118,8 @@ def _crawl_rss_feed_urls(
     *,
     max_items: int,
     include_thumbnail: bool = False,
+    store_rss_plain_body: bool = False,
+    skip_if_not_xml: bool = False,
 ) -> list[dict[str, Any]]:
     """여러 RSS URL 순회 → 48h 이내 항목만, URL 기준 중복 제거 후 최대 max_items."""
     rows: list[dict[str, Any]] = []
@@ -1043,6 +1131,16 @@ def _crawl_rss_feed_urls(
             if not text:
                 logger.warning("RSS 본문 없음 url=%s http=%s err=%s", feed_url, status, err)
                 continue
+            if skip_if_not_xml:
+                head = (text or "").lstrip()[:200].lower()
+                if "<rss" not in head and "<feed" not in head:
+                    logger.warning(
+                        "RSS 응답이 XML이 아님(스킵) url=%s http=%s head=%s",
+                        feed_url,
+                        status,
+                        (text or "")[:120].replace("\n", " "),
+                    )
+                    continue
             parsed = feedparser.parse(text)
             feed_title = ""
             fd = getattr(parsed, "feed", None)
@@ -1050,7 +1148,13 @@ def _crawl_rss_feed_urls(
                 feed_title = str(fd.title).strip()
             source_label = feed_title or urlparse(feed_url).netloc or "RSS"
             for entry in getattr(parsed, "entries", None) or []:
-                row = _rss_row_from_entry(entry, source_label, now, include_thumbnail=include_thumbnail)
+                row = _rss_row_from_entry(
+                    entry,
+                    source_label,
+                    now,
+                    include_thumbnail=include_thumbnail,
+                    store_rss_plain_body=store_rss_plain_body,
+                )
                 if not row:
                     continue
                 u = (row.get("url") or "").strip()
@@ -1109,10 +1213,59 @@ def _crawl_mk_briefing_rss_pool(
     매일경제 MK RSS → mk.co.kr 기사 본문 → 브리핑 본문 길이 필터.
     반환: 발행 시각 내림차순(최신 우선).
     """
-    rows = _crawl_rss_feed_urls(feed_urls, max_items=max_items, include_thumbnail=True)
+    rows = _crawl_rss_feed_urls(
+        feed_urls,
+        max_items=max_items,
+        include_thumbnail=True,
+        skip_if_not_xml=True,
+    )
     rows.sort(key=lambda r: (r.get("published_at") or ""), reverse=True)
     prefetch = rows[:body_prefetch_cap] if rows else []
     _attach_mk_article_bodies(prefetch)
+    filtered = _filter_briefing_newspaper_rows_by_body(prefetch, press_code=press_code)
+    filtered.sort(key=lambda r: (r.get("published_at") or ""), reverse=True)
+    return filtered
+
+
+def _crawl_hankyung_briefing_rss_pool(
+    *,
+    press_code: str,
+    per_feed_max: int = 30,
+    merge_cap: int = 72,
+    body_prefetch_cap: int = 32,
+) -> list[dict[str, Any]]:
+    """
+    한국경제 RSS 여러 피드 병합(URL 중복 제거) → 기사 HTML 본문, 실패 시 RSS 평문 폴백.
+    """
+    merged: list[dict[str, Any]] = []
+    seen_url: set[str] = set()
+    for feed_url in RSS_FEEDS_BRIEFING_DOMESTIC_HANKYUNG:
+        part = _crawl_rss_feed_urls(
+            [feed_url],
+            max_items=per_feed_max,
+            include_thumbnail=True,
+            store_rss_plain_body=True,
+            skip_if_not_xml=True,
+        )
+        for row in part:
+            u = (row.get("url") or "").strip()
+            if not u or u in seen_url:
+                continue
+            seen_url.add(u)
+            merged.append(row)
+    merged.sort(key=lambda r: (r.get("published_at") or ""), reverse=True)
+    merged = merged[:merge_cap]
+    prefetch = merged[:body_prefetch_cap] if merged else []
+    _attach_hankyung_article_bodies(prefetch)
+    min_len = BRIEFING_NEWSPAPER_MIN_BODY_CHARS
+    for row in prefetch:
+        body = str(row.get("body") or "").strip()
+        if len(body) < min_len:
+            fb = str(row.pop("rss_plain_body", "") or "").strip()
+            if len(fb) >= min_len:
+                row["body"] = fb[:ARTICLE_BODY_MAX_CHARS]
+            else:
+                row["body"] = body
     filtered = _filter_briefing_newspaper_rows_by_body(prefetch, press_code=press_code)
     filtered.sort(key=lambda r: (r.get("published_at") or ""), reverse=True)
     return filtered
@@ -1378,14 +1531,11 @@ def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> li
 
 def crawl_hankyung_newspaper() -> list[dict[str, Any]]:
     """
-    브리핑 국내 슬롯 `briefing/hankyung` — 매일경제 MK RSS(헤드라인).
-    (레거시 문서 ID 유지.) 본문 200자 미만은 제외; 파이프라인에서 최신순 상위 N건 요약.
+    브리핑 국내 슬롯 `briefing/hankyung` — 한국경제 RSS(all-news·finance·it).
+    (레거시 문서 ID 유지.)
     """
     try:
-        return _crawl_mk_briefing_rss_pool(
-            RSS_FEEDS_BRIEFING_DOMESTIC_MK,
-            press_code="mk_rss",
-        )
+        return _crawl_hankyung_briefing_rss_pool(press_code="hankyung_rss")
     except Exception as e:
         logger.exception("crawl_hankyung_newspaper 실패: %s", e)
         return []
@@ -1393,9 +1543,16 @@ def crawl_hankyung_newspaper() -> list[dict[str, Any]]:
 
 def crawl_maeil_newspaper() -> list[dict[str, Any]]:
     """
-    브리핑 국내 보조 슬롯 `briefing/maeil` — 매경 RSS만 쓰므로 비움(레거시 문서 ID 유지).
+    브리핑 국내 슬롯 `briefing/maeil` — 매일경제 MK 헤드라인 RSS.
     """
-    return []
+    try:
+        return _crawl_mk_briefing_rss_pool(
+            RSS_FEEDS_BRIEFING_DOMESTIC_MK,
+            press_code="mk_rss",
+        )
+    except Exception as e:
+        logger.exception("crawl_maeil_newspaper 실패: %s", e)
+        return []
 
 
 def _fetch_stock_naver_json(url: str) -> Any | None:
