@@ -52,6 +52,8 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # 기사 요약: Haiku 초안 → Gemini 검증 파이프라인 (끄려면 "0" 또는 env 줄 삭제)
+          SAPIENS_ARTICLE_LLM_JUDGE: "1"
         run: python main.py
 
   domestic_news:
@@ -76,6 +78,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SAPIENS_ARTICLE_LLM_JUDGE: "1"
         run: python main.py
 
   overseas_news:
@@ -100,6 +103,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SAPIENS_ARTICLE_LLM_JUDGE: "1"
         run: python main.py
 
   market:
@@ -124,4 +128,5 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SAPIENS_ARTICLE_LLM_JUDGE: "1"
         run: python main.py

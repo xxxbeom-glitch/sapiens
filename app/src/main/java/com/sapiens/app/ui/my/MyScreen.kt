@@ -35,16 +35,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -63,10 +59,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import com.sapiens.app.R
-import com.sapiens.app.data.model.AiSelectedModel
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.stableId
-import com.sapiens.app.data.repository.AiConfigFirestoreRepository
 import com.sapiens.app.data.repository.FeedbackRepository
 import com.sapiens.app.data.store.ArticleBookmarksRepository
 import com.sapiens.app.data.store.BookmarkEntry
@@ -87,12 +81,10 @@ import com.sapiens.app.ui.theme.Spacing
 import com.sapiens.app.ui.theme.Primary
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 private enum class ExpandableSection {
     BOOKMARK,
-    API_STATUS,
 }
 
 @Composable
@@ -103,7 +95,6 @@ fun MyScreen(
 ) {
     val context = LocalContext.current
     val preferencesRepository = remember { UserPreferencesRepository(context) }
-    val aiConfigRepository = remember { AiConfigFirestoreRepository() }
     val authUser by authViewModel.authUser.collectAsState()
     val signInError by authViewModel.signInError.collectAsState()
 
@@ -119,9 +110,6 @@ fun MyScreen(
         authViewModel.clearSignInError()
     }
 
-    val apiSelectedModel by preferencesRepository.apiSelectedModelFlow.collectAsState(
-        initial = AiSelectedModel.GEMINI
-    )
     val pushNotificationsEnabled by preferencesRepository.pushNotificationsEnabledFlow.collectAsState(
         initial = true
     )
@@ -148,14 +136,6 @@ fun MyScreen(
 
     var expandedSection by remember { mutableStateOf<ExpandableSection?>(null) }
     var selectedBookmarkedArticle by remember { mutableStateOf<Article?>(null) }
-
-    var draftAiModel by remember { mutableStateOf(AiSelectedModel.GEMINI) }
-
-    LaunchedEffect(expandedSection == ExpandableSection.API_STATUS) {
-        if (expandedSection == ExpandableSection.API_STATUS) {
-            draftAiModel = preferencesRepository.apiSelectedModelFlow.first()
-        }
-    }
 
     val sortedBookmarks = remember(bookmarkEntries) {
         bookmarkEntries.sortedByDescending { it.savedAtMillis }
@@ -249,48 +229,7 @@ fun MyScreen(
             )
         }
 
-        ExpandableMenuCard(
-            title = "API 연결 상태",
-            subtitle = null,
-            iconRes = R.drawable.ico_my_ai_status,
-            expanded = expandedSection == ExpandableSection.API_STATUS,
-            onToggleExpand = {
-                expandedSection =
-                    if (expandedSection == ExpandableSection.API_STATUS) null else ExpandableSection.API_STATUS
-            }
-        ) {
-            AiModelSelectionPanel(
-                selectedModel = draftAiModel,
-                onSelectModel = { model -> draftAiModel = model }
-            )
-            Spacer(modifier = Modifier.height(Spacing.space12))
-            Button(
-                onClick = {
-                    coroutineScope.launch {
-                        val normalized = AiSelectedModel.normalize(draftAiModel)
-                        preferencesRepository.setApiSelectedModel(normalized)
-                        aiConfigRepository.save(selectedModel = normalized)
-                        Toast.makeText(context, "저장했습니다", Toast.LENGTH_SHORT).show()
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = AppShapes.button,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Primary,
-                    contentColor = OnPrimaryFixed
-                ),
-                elevation = ButtonDefaults.buttonElevation(
-                    defaultElevation = Spacing.space0,
-                    pressedElevation = Spacing.space0
-                )
-            ) {
-                Text(
-                    text = "저장",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
+        ApiAiInfoMenuRow()
     }
 
     selectedBookmarkedArticle?.let { article ->
@@ -367,6 +306,46 @@ private fun SettingsAppInfoPanel(versionName: String) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary,
             )
+        }
+    }
+}
+
+@Composable
+private fun ApiAiInfoMenuRow(modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.space16, vertical = Spacing.space6),
+        shape = AppShapes.card,
+        color = Card
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = CardPaddingHorizontal, vertical = RowVertical),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.space12)
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ico_my_ai_status),
+                contentDescription = null,
+                modifier = Modifier.size(Spacing.space28),
+                tint = Primary
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.space2)) {
+                Text(
+                    text = "뉴스 요약 (서버)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Claude Haiku 초안과 Gemini 검증을 함께 사용합니다. 앱에서 엔진을 바꿀 수 없습니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -569,71 +548,6 @@ private fun BookmarkPagerPanel(
                             )
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AiModelSelectionPanel(
-    selectedModel: String,
-    onSelectModel: (String) -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(Spacing.space4)
-    ) {
-        AiModelRadioRow(
-            title = "Claude (Haiku)",
-            subtitle = null,
-            selected = selectedModel == AiSelectedModel.CLAUDE,
-            onSelect = { onSelectModel(AiSelectedModel.CLAUDE) }
-        )
-        AiModelRadioRow(
-            title = "Gemini",
-            subtitle = "기본값",
-            selected = selectedModel == AiSelectedModel.GEMINI,
-            onSelect = { onSelectModel(AiSelectedModel.GEMINI) }
-        )
-    }
-}
-
-@Composable
-private fun AiModelRadioRow(
-    title: String,
-    subtitle: String?,
-    selected: Boolean,
-    onSelect: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(AppShapes.card)
-            .clickable(onClick = onSelect)
-            .padding(vertical = Spacing.space8, horizontal = Spacing.space4),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Spacing.space10)
-    ) {
-        RadioButton(
-            selected = selected,
-            onClick = onSelect,
-            colors = RadioButtonDefaults.colors(
-                selectedColor = Primary,
-                unselectedColor = TextSecondary
-            )
-        )
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextPrimary
-            )
-            if (!subtitle.isNullOrBlank()) {
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextSecondary
-                )
             }
         }
     }

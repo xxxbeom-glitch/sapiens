@@ -18,6 +18,21 @@ logger = logging.getLogger(__name__)
 GEMINI_MODEL = "gemini-2.5-flash"
 CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 
+# 기사 요약: Claude(Haiku) 초안 → Gemini 검증 → 최대 3회 재작성 → 실패 시 Gemini 전체 요약.
+# 켜기: 환경변수 SAPIENS_ARTICLE_LLM_JUDGE=1 (또는 true/yes). 미설정·0이면 기존 동작.
+_ORIGINAL_EXCERPT_FOR_JUDGE_MAX = 14000
+
+_JUDGE_SYSTEM = (
+    "당신은 금융 뉴스 사실 검증자입니다.\n"
+    "주어진 원문(또는 발췌)과 후보 JSON을 비교해 환각·오역·핵심 누락만 판정합니다.\n"
+    "반드시 지정된 JSON 스키마로만 응답하세요. 설명 문장이나 마크다운을 붙이지 마세요."
+)
+
+
+def _article_llm_judge_enabled() -> bool:
+    v = (os.environ.get("SAPIENS_ARTICLE_LLM_JUDGE") or "").strip().lower()
+    return v in ("1", "true", "yes", "on")
+
 SELECTED_MODEL_CLAUDE = "claude"
 SELECTED_MODEL_GEMINI = "gemini"
 
@@ -510,6 +525,287 @@ def _call_gemini(user_content: str) -> str:
         return ""
 
 
+def _call_gemini_judge(user_content: str) -> str:
+    """Gemini 판정 전용. temperature 낮춤."""
+    try:
+        client = _get_gemini_client()
+        prompt = f"{_JUDGE_SYSTEM}\n\n{user_content}"
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config={"max_output_tokens": 2048, "temperature": 0.15},
+        )
+        try:
+            _accumulate_gemini_usage(response)
+        except Exception as e:
+            logger.warning("Gemini judge usage 집계 실패(무시): %s", e)
+        raw = getattr(response, "text", None)
+        if raw is None:
+            return ""
+        return str(raw).strip()
+    except Exception as e:
+        logger.exception("_call_gemini_judge 실패: %s", e)
+        return ""
+
+
+def _validate_summarize_article_shape(data: dict[str, Any]) -> None:
+    if "headline" not in data or "category" not in data or "summary_points" not in data:
+        raise ValueError(f"Invalid JSON keys: {list(data.keys())}")
+    pts = data["summary_points"]
+    if not isinstance(pts, list):
+        raise ValueError("summary_points must be a list")
+
+
+def _postprocess_summarize_article_dict(
+    data: dict[str, Any],
+    max_points_keep: int,
+    title: str,
+    source: str,
+    summary: str,
+    body_stripped: str,
+) -> dict[str, Any]:
+    out = dict(data)
+    out["headline"] = str(out.get("headline", "")).strip()
+    if _looks_english_headline(out["headline"]):
+        out["headline"] = translate_headline_to_korean(
+            headline=out["headline"],
+            source=source,
+            summary=summary,
+            body=body_stripped,
+        )
+    out["category"] = _normalize_article_category(str(out.get("category", "")))
+    pts = out["summary_points"]
+    if not isinstance(pts, list):
+        raise ValueError("summary_points must be a list")
+    out["summary_points"] = [
+        str(p).strip() for p in pts if str(p).strip()
+    ][:max_points_keep]
+    return out
+
+
+def _gemini_judge_verdict(
+    original_excerpt: str,
+    draft: dict[str, Any],
+    *,
+    title: str,
+    source: str,
+) -> tuple[bool, list[dict[str, Any]]]:
+    """(통과 여부, 이슈 목록). 판정 파싱 실패 시 통과로 간주(파이프라인 정지 방지)."""
+    candidate = json.dumps(
+        {
+            "headline": draft.get("headline"),
+            "category": draft.get("category"),
+            "summary_points": draft.get("summary_points"),
+        },
+        ensure_ascii=False,
+    )
+    judge_user = (
+        "원문(또는 발췌)과 후보 요약 JSON을 비교해 사실성을 판정하세요.\n\n"
+        f"[출처] {source}\n[제목] {title}\n\n"
+        f"[원문·블록 발췌]\n{original_excerpt}\n\n"
+        f"[후보 JSON]\n{candidate}\n\n"
+        "판정 규칙:\n"
+        "- 후보 headline·summary_points에 원문에 없는 사실·수치·인과가 있으면 FAIL(환각).\n"
+        "- 원문의 핵심 부정·조건·예외가 빠져 의미가 바뀌면 FAIL(누락).\n"
+        "- 고유명사·수치의 명백한 오역이 있으면 FAIL.\n"
+        "- 경미한 문장 표현 차이만 있으면 PASS.\n\n"
+        '반드시 JSON 한 개만 출력:\n'
+        '{"verdict":"PASS" 또는 "FAIL","issues":[{"type":"hallucination|omission|translation|format|other","detail":"한국어로 구체적 설명"}]}\n'
+        "PASS인 경우 issues는 빈 배열 []이어야 합니다."
+    )
+    raw = _call_gemini_judge(judge_user)
+    if not (raw or "").strip():
+        logger.warning("Gemini judge 빈 응답 — 통과 처리")
+        return True, []
+    try:
+        d = _require_json_dict(raw)
+    except ValueError:
+        logger.warning("Gemini judge JSON 파싱 실패 — 통과 처리")
+        return True, []
+    verdict = str(d.get("verdict", "")).strip().upper()
+    issues_raw = d.get("issues", [])
+    if not isinstance(issues_raw, list):
+        issues_raw = []
+    issues: list[dict[str, Any]] = []
+    for x in issues_raw:
+        if isinstance(x, dict):
+            issues.append(x)
+    if verdict == "PASS":
+        return True, []
+    return False, issues
+
+
+def _gemini_fallback_full_summarize(
+    user: str,
+    max_points_keep: int,
+    title: str,
+    source: str,
+    summary: str,
+    body_stripped: str,
+    *,
+    quality_meta: dict[str, Any],
+) -> dict[str, Any]:
+    """Judge 실패·Claude 실패 시 동일 user 프롬프트로 Gemini 전체 요약."""
+    last_err: Exception | None = None
+    for attempt in range(2):
+        try:
+            raw = _call_gemini(user)
+            data = _require_json_dict(raw)
+            _validate_summarize_article_shape(data)
+            out = _postprocess_summarize_article_dict(
+                data, max_points_keep, title, source, summary, body_stripped
+            )
+            meta = dict(quality_meta)
+            meta["fallback_model"] = GEMINI_MODEL
+            out["_quality"] = meta
+            return out
+        except Exception as e:
+            last_err = e
+            logger.warning("Gemini fallback summarize 재시도 (%s): %s", attempt + 1, e)
+            if attempt == 0:
+                time.sleep(1.0)
+    raise last_err or RuntimeError("gemini fallback summarize failed")
+
+
+def _summarize_article_llm_judge_path(
+    user: str,
+    *,
+    article_block: str,
+    title: str,
+    source: str,
+    summary: str,
+    body_stripped: str,
+    max_points_keep: int,
+) -> dict[str, Any]:
+    """
+    Claude Haiku 최대 3회(피드백 반영) → 매회 Gemini 검증.
+    3회 끝까지 미통과·Claude 실패 시 Gemini로 동일 프롬프트 전체 요약.
+    """
+    excerpt = (article_block or "").strip()
+    if len(excerpt) > _ORIGINAL_EXCERPT_FOR_JUDGE_MAX:
+        original_excerpt = excerpt[:_ORIGINAL_EXCERPT_FOR_JUDGE_MAX] + "\n\n...(원문 일부만 표시)"
+    else:
+        original_excerpt = excerpt
+
+    feedback_extra = ""
+    notes: list[dict[str, Any]] = []
+    haiku_round = 0
+
+    for round_ix in range(3):
+        user_haiku = user + feedback_extra
+        haiku_round += 1
+        try:
+            raw_haiku = _call_claude(user_haiku)
+        except Exception as e:
+            logger.warning(
+                "LLM judge: Haiku 호출 실패(라운드 %d) → Gemini 전체 요약: %s",
+                haiku_round,
+                e,
+            )
+            return _gemini_fallback_full_summarize(
+                user,
+                max_points_keep,
+                title,
+                source,
+                summary,
+                body_stripped,
+                quality_meta={
+                    "path": "gemini_fallback",
+                    "reason": "claude_error",
+                    "haiku_rounds": haiku_round - 1,
+                    "notes": notes,
+                },
+            )
+
+        if not (raw_haiku or "").strip():
+            logger.warning("LLM judge: Haiku 빈 응답 → Gemini 전체 요약")
+            return _gemini_fallback_full_summarize(
+                user,
+                max_points_keep,
+                title,
+                source,
+                summary,
+                body_stripped,
+                quality_meta={
+                    "path": "gemini_fallback",
+                    "reason": "empty_claude",
+                    "haiku_rounds": haiku_round - 1,
+                    "notes": notes,
+                },
+            )
+
+        try:
+            data = _require_json_dict(raw_haiku)
+            _validate_summarize_article_shape(data)
+        except Exception as e:
+            notes.append({"round": round_ix + 1, "parse_error": str(e)})
+            feedback_extra = (
+                "\n\n## 이전 출력 오류\n"
+                "유효한 JSON 객체 **한 개만** 출력해야 합니다. "
+                '키는 반드시 "headline", "category", "summary_points" 세 가지입니다.\n'
+                f"오류: {e}\n"
+            )
+            if round_ix == 2:
+                return _gemini_fallback_full_summarize(
+                    user,
+                    max_points_keep,
+                    title,
+                    source,
+                    summary,
+                    body_stripped,
+                    quality_meta={
+                        "path": "gemini_fallback",
+                        "reason": "haiku_json_fail_3x",
+                        "haiku_rounds": haiku_round,
+                        "notes": notes,
+                    },
+                )
+            continue
+
+        try:
+            passed, issues = _gemini_judge_verdict(
+                original_excerpt, data, title=title, source=source
+            )
+        except Exception as e:
+            logger.warning("LLM judge: 판정 예외, 통과 처리: %s", e)
+            passed, issues = True, []
+
+        if passed:
+            out = _postprocess_summarize_article_dict(
+                data, max_points_keep, title, source, summary, body_stripped
+            )
+            out["_quality"] = {
+                "path": "haiku_judge_pass",
+                "haiku_rounds": haiku_round,
+                "notes": notes,
+            }
+            return out
+
+        notes.append({"round": round_ix + 1, "issues": issues})
+        feedback_extra = (
+            "\n\n## 품질 검증 피드백(반드시 반영)\n"
+            "아래 지적을 모두 반영한 뒤, 동일 스키마의 JSON **한 개만** 다시 출력하세요.\n"
+            f"{json.dumps(issues, ensure_ascii=False)}\n"
+        )
+        if round_ix == 2:
+            return _gemini_fallback_full_summarize(
+                user,
+                max_points_keep,
+                title,
+                source,
+                summary,
+                body_stripped,
+                quality_meta={
+                    "path": "gemini_fallback",
+                    "reason": "judge_fail_after_3_haiku",
+                    "haiku_rounds": haiku_round,
+                    "notes": notes,
+                },
+            )
+
+    raise RuntimeError("LLM judge path: internal logic error (should not reach)")
+
+
 def summarize_article(
     title: str,
     summary: str,
@@ -600,29 +896,33 @@ def summarize_article(
             f"{article_block}"
             f"출처: {source}\n"
         )
+
+    if _article_llm_judge_enabled():
+        try:
+            return _summarize_article_llm_judge_path(
+                user,
+                article_block=article_block,
+                title=title,
+                source=source,
+                summary=summary,
+                body_stripped=body_stripped,
+                max_points_keep=max_points_keep,
+            )
+        except Exception as e:
+            logger.exception(
+                "SAPIENS_ARTICLE_LLM_JUDGE 파이프라인 실패, 기존 _call_news_llm 경로로 폴백: %s",
+                e,
+            )
+
     last_err: Exception | None = None
     for attempt in range(2):
         try:
             raw = _call_news_llm(user)
             data = _require_json_dict(raw)
-            if "headline" not in data or "category" not in data or "summary_points" not in data:
-                raise ValueError(f"Invalid JSON keys: {data.keys()}")
-            data["headline"] = str(data.get("headline", "")).strip()
-            if _looks_english_headline(data["headline"]):
-                data["headline"] = translate_headline_to_korean(
-                    headline=data["headline"],
-                    source=source,
-                    summary=summary,
-                    body=body_stripped,
-                )
-            data["category"] = _normalize_article_category(str(data.get("category", "")))
-            pts = data["summary_points"]
-            if not isinstance(pts, list):
-                raise ValueError("summary_points must be a list")
-            data["summary_points"] = [
-                str(p).strip() for p in pts if str(p).strip()
-            ][:max_points_keep]
-            return data
+            _validate_summarize_article_shape(data)
+            return _postprocess_summarize_article_dict(
+                data, max_points_keep, title, source, summary, body_stripped
+            )
         except Exception as e:
             last_err = e
             logger.warning("summarize_article 재시도 (%s): %s", attempt + 1, e)
