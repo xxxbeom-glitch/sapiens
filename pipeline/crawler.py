@@ -1,4 +1,4 @@
-"""
+﻿"""
 국내 뉴스 탭(3요약): 3개 RSS 풀 합친 뒤 LLM이 뉴스탭 3분류(국내증시/해외증시/AI 이슈)로 배정(`news_tab_classification`) 후 요약. 해외 뉴스는 별도 RSS.
 (토스증권 Playwright `crawl_tossinvest_news` 는 보존. `crawl_domestic` 은 `crawl_naver_*` 를 쓰지 않는다.)
 """
@@ -1693,15 +1693,21 @@ def _llm_classify_kr_overseas_pool_to_domestic_tabs(
     }
     n_label_ok = 0
     n_fallback = 0
+    n_excluded = 0
     for row in pool:
         fb = str(row.get("feed_fallback") or "domestic_market").strip()
         if fb not in out:
             fb = "domestic_market"
         clean = {k: v for k, v in row.items() if k != "feed_fallback"}
+        # 미국 탭 CNBC 전용 처리 시, 국내증시 RSS에서 온 '해외증시'만 국내로 되돌리기 위해 출처 보존
+        clean["_tab_rss_origin"] = fb
         t = str(row.get("title") or "")
         s = str(row.get("summary") or "")
         label = ntc.classify_article_domestic_tab(t, s)
         label_ko = ntc.finalize_kr_overseas_tab_label(label, t, s, fb)
+        if label_ko == "제외":
+            n_excluded += 1
+            continue
         doc = ntc.tab_to_firestore_document_id(label_ko) or fb
         if not doc or doc not in out:
             doc = fb
@@ -1715,10 +1721,11 @@ def _llm_classify_kr_overseas_pool_to_domestic_tabs(
     for k in out:
         out[k] = _sort_domestic_rows_by_published_desc(out[k])[:nmax]
     logger.info(
-        "국내 3탭 LLM(한국·조선 풀만): %d건 → JSON성공 %d 폴백 %d → D%d G%d A%d",
+        "국내 3탭 LLM(한국·조선 풀만): %d건 → JSON성공 %d 폴백 %d 제외스킵 %d → D%d G%d A%d",
         len(pool),
         n_label_ok,
         n_fallback,
+        n_excluded,
         len(out["domestic_market"]),
         len(out["global_market"]),
         len(out["ai_issue"]),
@@ -1747,7 +1754,8 @@ def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
       CNBC만** 넣는다. KR/해외 풀에서 「AI 이슈」로 나온 기사는 `feed_fallback` 기준으로
       국내증시·해외증시 탭으로만 넣는다.
     - CNBC Tech RSS: `ai_issue`로 전량 반영(LLM 2차 선별 없음 — 피드가 테크 전용).
-    - CNBC Markets RSS: `global_market`에 직접 추가(LLM 분류 없음 — 피드가 금융 전용).
+    - 미국증시(`global_market`): **CNBC Markets RSS만** Firestore에 반영. 매경·한경·조선 풀에서 LLM이
+      `해외증시`로 준 건은 미국 탭에 넣지 않음(한경 국제가 상단을 차지하는 문제 방지).
     `summarizer.configure_ai` 먼저 호출할 것.
     """
     merged_kr_os: list[dict[str, Any]] = []
@@ -1757,7 +1765,9 @@ def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
         merged_kr_os.append(x)
     for r in crawl_rss_domestic_overseas():
         x = dict(r)
-        x["feed_fallback"] = "domestic_market"
+        # 해외(국제) RSS — `finalize_kr_overseas_tab_label`의 해외 풀 분기용. domestic으로 두면
+        # 국제면 기사가 국내증시 규칙으로 떨어져 국내 탭이 오염됨.
+        x["feed_fallback"] = "global_market"
         merged_kr_os.append(x)
     pool_kr_os = _dedupe_domestic_pooled_preserve_order(merged_kr_os)
 
@@ -1766,25 +1776,48 @@ def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
 
     out = _llm_classify_kr_overseas_pool_to_domestic_tabs(pool_kr_os)
     nmax = RSS_DOMESTIC_NEWS_MAX_ITEMS
-    # 앱 `ai_issue` 탭은 CNBC 전용 — KR·해외 RSS에서 LLM이 'AI 이슈'로 준 건은 국내/해외 탭으로만
+    # 앱 `ai_issue` 탭은 CNBC 전용 — KR·해외 RSS에서 LLM이 'AI 이슈'로 준 건은 국내 탭으로만
+    # (미국 탭은 CNBC Markets RSS 전용이라 해외 RSS 출신은 global에 보내지 않음)
     for row in out["ai_issue"]:
-        fb = str(row.get("feed_fallback") or "domestic_market").strip()
-        if fb not in ("domestic_market", "global_market"):
-            fb = "domestic_market"
-        out[fb].append(row)
+        origin = str(row.get("_tab_rss_origin") or "domestic_market").strip()
+        if origin not in ("domestic_market", "global_market"):
+            origin = "domestic_market"
+        # 미국 탭 CNBC 전용: 해외 RSS 출신 AI이슈는 국내 탭으로만
+        target = "domestic_market" if origin == "global_market" else origin
+        out[target].append(row)
     out["ai_issue"] = []
-    for k in ("domestic_market", "global_market"):
-        out[k] = _sort_domestic_rows_by_published_desc(out[k])[:nmax]
+
+    spill_global = out["global_market"]
+    out["global_market"] = []
+    n_spill_kr = 0
+    n_spill_intl = 0
+    for row in spill_global:
+        origin = str(row.get("_tab_rss_origin") or "domestic_market").strip()
+        if origin == "domestic_market":
+            out["domestic_market"].append(row)
+            n_spill_kr += 1
+        else:
+            n_spill_intl += 1
+    if n_spill_kr:
+        logger.info(
+            "global_market: 국내증시 RSS·LLM 해외증시 %d건 → 국내 탭 유지",
+            n_spill_kr,
+        )
+    if n_spill_intl:
+        logger.info(
+            "global_market: 해외 RSS·LLM 해외증시 %d건 스킵(미국 탭 CNBC Markets 전용)",
+            n_spill_intl,
+        )
+
+    for lst in (out["domestic_market"], out["ai_issue"]):
+        for row in lst:
+            row.pop("_tab_rss_origin", None)
+
+    out["domestic_market"] = _sort_domestic_rows_by_published_desc(out["domestic_market"])[:nmax]
     cnbc_ai = _llm_select_cnbc_pool_for_ai_issue_tab(pool_cnbc)
     out["ai_issue"] = _sort_domestic_rows_by_published_desc(cnbc_ai)[:nmax]
-
-    # CNBC Markets → global_market 직접 합산 (LLM 분류 없이 금융 전용 피드 전량 반영)
-    existing_urls = {str(r.get("url") or "") for r in out["global_market"]}
-    for row in pool_cnbc_markets:
-        if str(row.get("url") or "") not in existing_urls:
-            out["global_market"].append(row)
-    out["global_market"] = _sort_domestic_rows_by_published_desc(out["global_market"])[:nmax]
-    logger.info("CNBC Markets→global_market 합산 후: %d건", len(out["global_market"]))
+    out["global_market"] = _sort_domestic_rows_by_published_desc(pool_cnbc_markets)[:nmax]
+    logger.info("global_market: CNBC Markets RSS만 %d건", len(out["global_market"]))
 
     return out
 

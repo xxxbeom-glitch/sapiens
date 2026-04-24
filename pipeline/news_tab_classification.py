@@ -2,7 +2,7 @@
 뉴스 **국내 탭** 3분류용 LLM 지시문 및 도우미.
 
 - 앱 / Firestore: `domestic_market` · `global_market` · `ai_issue` ( `NewsRepository.kt` 의 `NewsFeedType` 과 동일 )
-- 매경·한경·조선 풀: `classify_article_domestic_tab` → `finalize_kr_overseas_tab_label`. **해외 RSS(`feed_fallback=global`)** 는 LLM이 `해외증시`로 준 건 키워드 없어도 유지(짧은 RSS 요약에 나스닥 등이 없어 미국 탭이 비는 문제 방지). **국내 RSS** 에서만 `해외증시`+미시장 키워드 없으면 `국내증시`로 내림.
+- 매경·한경·조선 풀: `classify_article_domestic_tab` → `finalize_kr_overseas_tab_label`. **해외 RSS(`feed_fallback=global_market`)** 는 LLM이 `해외증시`로 준 건 키워드 없어도 유지(짧은 RSS 요약에 나스닥 등이 없어 분류가 흔들릴 때 완충). **국내 RSS** 에서만 `해외증시`+미시장 키워드 없으면 `국내증시`로 내림.
 - CNBC 풀: **`ai_issue` Firestore 문서에만** 적재; 동일 규칙으로 **「AI 이슈」만** 남기고 국내증시·해외증시 판정은 제외(실패 시 해당 건은 유지). 매경·한경·조선 풀에서 「AI 이슈」로 나온 건은 `crawl_domestic`에서 국내/해외 탭으로만 보냄.
 """
 
