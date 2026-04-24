@@ -25,6 +25,9 @@ import kotlinx.coroutines.Dispatchers
 import org.json.JSONArray
 import org.json.JSONObject
 
+/** Firestore `news/*` 구독 시 탭당(국내·미국·AI) UI에 올릴 엄선 기사 최대 개수. */
+private const val NEWS_FEED_MAX_ARTICLES = 12
+
 class NewsRepositoryImpl(
     private val firestore: FirebaseFirestore,
     private val appContext: Context
@@ -53,7 +56,9 @@ class NewsRepositoryImpl(
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
-                trySend(snapshot.parseArticles("articles"))
+                trySend(
+                    snapshot.parseArticles("articles").take(NEWS_FEED_MAX_ARTICLES)
+                )
             }
         awaitClose { reg.remove() }
     }

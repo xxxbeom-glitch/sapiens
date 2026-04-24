@@ -2,7 +2,8 @@
 뉴스 크롤링 → LLM 요약 → Firestore 저장.
 
 PIPELINE_SECTION 환경변수:
-  all (기본) | domestic_news | market | full
+  all (기본) | news | market | full
+  (구) domestic_news 는 news 와 동일하게 처리
 
   - all: 아래 두 블록을 순서대로 실행(각 블록은 해당 섹션의 휴장 규칙으로 개별 스킵).
   - full: 레거시 전체 파이프라인(피드 초기화 + 종목 루프 포함).
@@ -22,14 +23,18 @@ logger = logging.getLogger("pipeline")
 
 PIPELINE_SECTION_ALL = "all"
 PIPELINE_SECTION_FULL = "full"
-PIPELINE_SECTION_DOMESTIC_NEWS = "domestic_news"
+PIPELINE_SECTION_NEWS = "news"
 PIPELINE_SECTION_MARKET = "market"
+# 하위 호환: 예전 Run/CI의 PIPELINE_SECTION=domestic_news
+_LEGACY_PIPELINE_SECTION_NEWS = "domestic_news"
 
 
 def is_skip_day(section: str) -> Tuple[bool, str]:
     """
     (스킵 여부, 사유).
-    section: domestic_news | market | full | all
+    - news: 휴일/주말 없이 매일 수행.
+    - market: 월~금(한국주말)만, 한국 공휴일 제외.
+    - full, all: 여기서는 스킵 없음(개별 단계는 news/market 규칙).
     """
     from datetime import datetime
 
@@ -40,29 +45,30 @@ def is_skip_day(section: str) -> Tuple[bool, str]:
     if s in ("all", "full"):
         return False, ""
 
-    kst = pytz.timezone("Asia/Seoul")
-    now = datetime.now(kst)
-
-    if now.weekday() == 6:
-        return True, "일요일"
+    if s == "news":
+        return False, ""
 
     if s == "market":
+        kst = pytz.timezone("Asia/Seoul")
+        now = datetime.now(kst)
+        if now.weekday() >= 5:  # 토(5) · 일(6)
+            return True, "주말"
         kr_holidays = holidays.KR(years=now.year)
         if now.date() in kr_holidays:
             return True, f"한국 공휴일: {kr_holidays[now.date()]}"
+        return False, ""
 
     return False, ""
 
 
-def _schedule_domestic_news_push(firebase_client: Any) -> None:
+def _schedule_news_push(firebase_client: Any) -> None:
     import push_schedule_util as psu
 
-    now_k = psu.now_kst()
-    when_k = psu.next_kst_top_of_hour(now_k)
-    title, body = psu.domestic_news_title_body(when_k)
+    when_k = psu.resolve_push_target_kst()
+    title, body = psu.news_title_body(when_k)
     firebase_client.write_push_schedule_entry(
-        doc_id=psu.push_doc_id("domestic_news", when_k),
-        section="domestic_news",
+        doc_id=psu.push_doc_id("news", when_k),
+        section="news",
         scheduled_at_utc_iso=psu.kst_to_utc_iso_z(when_k),
         title=title,
         body=body,
@@ -73,8 +79,7 @@ def _schedule_domestic_news_push(firebase_client: Any) -> None:
 def _schedule_market_push(firebase_client: Any) -> None:
     import push_schedule_util as psu
 
-    now_k = psu.now_kst()
-    when_k = psu.next_kst_top_of_hour(now_k)
+    when_k = psu.resolve_push_target_kst()
     title, body = psu.market_title_body(when_k)
     firebase_client.write_push_schedule_entry(
         doc_id=psu.push_doc_id("market", when_k),
@@ -86,7 +91,7 @@ def _schedule_market_push(firebase_client: Any) -> None:
     )
 
 
-def _run_domestic_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
+def _run_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
     ai_cfg = firebase_client.get_ai_config()
     summarizer.configure_ai(selected_model=str(ai_cfg.get("selected_model", "gemini")))
 
@@ -114,7 +119,7 @@ def _run_domestic_news_only(crawler: Any, firebase_client: Any, summarizer: Any)
     firebase_client.save_news_feed(fs_domestic_market, "domestic_market")
     firebase_client.save_news_feed(fs_global_market, "global_market")
     firebase_client.save_news_feed(fs_ai_issue, "ai_issue")
-    _schedule_domestic_news_push(firebase_client)
+    _schedule_news_push(firebase_client)
 
 
 def _run_market_only(crawler: Any, firebase_client: Any) -> None:
@@ -185,7 +190,7 @@ def _run_pipeline_full(crawler: Any, firebase_client: Any, summarizer: Any) -> N
     firebase_client.save_news_feed(fs_global_market, "global_market")
     firebase_client.save_news_feed(fs_ai_issue, "ai_issue")
 
-    _schedule_domestic_news_push(firebase_client)
+    _schedule_news_push(firebase_client)
     _schedule_market_push(firebase_client)
 
     company_saved = 0
@@ -245,10 +250,12 @@ def run() -> None:
     import pytz
 
     section = (os.environ.get("PIPELINE_SECTION") or PIPELINE_SECTION_ALL).strip().lower()
+    if section == _LEGACY_PIPELINE_SECTION_NEWS:
+        section = PIPELINE_SECTION_NEWS
     allowed = (
         PIPELINE_SECTION_ALL,
         PIPELINE_SECTION_FULL,
-        PIPELINE_SECTION_DOMESTIC_NEWS,
+        PIPELINE_SECTION_NEWS,
         PIPELINE_SECTION_MARKET,
     )
     if section not in allowed:
@@ -263,16 +270,16 @@ def run() -> None:
     status = "success"
     error_message: str | None = None
 
-    def _maybe_domestic() -> None:
-        sk, rs = is_skip_day(PIPELINE_SECTION_DOMESTIC_NEWS)
+    def _maybe_news() -> None:
+        sk, rs = is_skip_day(PIPELINE_SECTION_NEWS)
         if sk:
             logger.info(
                 "파이프라인 스킵: section=%s reason=%s",
-                PIPELINE_SECTION_DOMESTIC_NEWS,
+                PIPELINE_SECTION_NEWS,
                 rs,
             )
             return
-        _run_domestic_news_only(crawler, firebase_client, summarizer)
+        _run_news_only(crawler, firebase_client, summarizer)
 
     def _maybe_market() -> None:
         sk, rs = is_skip_day(PIPELINE_SECTION_MARKET)
@@ -299,10 +306,10 @@ def run() -> None:
                 return
 
         if section == PIPELINE_SECTION_ALL:
-            _maybe_domestic()
+            _maybe_news()
             _maybe_market()
-        elif section == PIPELINE_SECTION_DOMESTIC_NEWS:
-            _run_domestic_news_only(crawler, firebase_client, summarizer)
+        elif section == PIPELINE_SECTION_NEWS:
+            _run_news_only(crawler, firebase_client, summarizer)
         elif section == PIPELINE_SECTION_MARKET:
             _run_market_only(crawler, firebase_client)
 

@@ -120,7 +120,7 @@ fun MainScreen(
     LaunchedEffect(navigateToSectionKey) {
         val key = navigateToSectionKey?.trim()?.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
         when (key) {
-            "briefing", "domestic_news" -> selectedTabIndex = 0
+            "briefing", "domestic_news", "news" -> selectedTabIndex = 0
             "market" -> selectedTabIndex = 1
         }
         onNavigateToSectionConsumed()

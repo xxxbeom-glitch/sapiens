@@ -814,19 +814,18 @@ def crawl_tossinvest_news() -> dict[str, list[dict[str, Any]]]:
 
 # --- 해외 뉴스: CNBC / Guardian / Verge / Ars RSS (48h, URL 중복 제거, 카테고리당 합산 15건) ---
 RSS_OVERSEAS_MAX_AGE_HOURS = 48.0
-# 뉴스 탭 국내: MK·한경·조선 RSS는 **주소(피드)당** 최대 N건, CNBC 단일 피드는 M건까지 수집
+# 뉴스 탭: 국내(KR) RSS 풀은 **피드당** 최대 N건, 해외(국제) 풀은 M건, CNBC 단일 피드는 별도 상한
+RSS_DOMESTIC_KR_MARKET_ITEMS_PER_FEED = 15
 RSS_DOMESTIC_ITEMS_PER_FEED = 10
 RSS_DOMESTIC_CNBC_MAX_ITEMS = 30
-# LLM 분류 후 Firestore `articles` 배열당 상한(탭별)
-RSS_DOMESTIC_NEWS_MAX_ITEMS = 20
+# LLM 분류 후 Firestore `articles` 배열당 상한(탭별) — 앱은 동일 수로 표시
+RSS_DOMESTIC_NEWS_MAX_ITEMS = 12
 
 # --- 뉴스 탭 국내: RSS 3풀(아래) → `crawl_domestic`에서 LLM 3분류(NEWS_TAB_CLASSIFICATION_INSTRUCTION_KO) → Firestore documents ---
-# 매경 30100041=경제, 50200011=증권 / 한경 finance·economy
+# 매경 50200011=증권 / 한경 finance
 RSS_FEEDS_NEWS_KR_MARKET: list[str] = [
-    "https://www.mk.co.kr/rss/30100041/",
     "https://www.mk.co.kr/rss/50200011/",
     "https://www.hankyung.com/feed/finance",
-    "https://www.hankyung.com/feed/economy",
 ]
 # 매경 30300018=국제 / 한경 international / 조선 international
 RSS_FEEDS_NEWS_OVERSEAS: list[str] = [
@@ -1051,7 +1050,7 @@ def crawl_rss_domestic_kr_market() -> list[dict[str, Any]]:
     """뉴스 탭 국내 — 국내 증시(실시간 RSS 풀)."""
     rows = _crawl_rss_feed_urls(
         RSS_FEEDS_NEWS_KR_MARKET,
-        max_items_per_feed=RSS_DOMESTIC_ITEMS_PER_FEED,
+        max_items_per_feed=RSS_DOMESTIC_KR_MARKET_ITEMS_PER_FEED,
         allow_missing_published=True,
     )
     _attach_mk_hankyung_bodies(rows)
