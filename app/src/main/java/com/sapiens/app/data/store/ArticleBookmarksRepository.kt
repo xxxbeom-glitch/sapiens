@@ -1,13 +1,11 @@
 package com.sapiens.app.data.store
 
-import android.util.Log
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.stableId
-import com.sapiens.app.data.repository.BookmarkSavedArticlesSync
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -34,7 +32,6 @@ sealed class BookmarkToggleResult {
 
 class ArticleBookmarksRepository(
     private val context: Context,
-    private val savedArticlesSync: BookmarkSavedArticlesSync? = null,
 ) {
 
     val bookmarksFlow: Flow<List<BookmarkEntry>> = context.bookmarksDataStore.data.map { prefs ->
@@ -58,11 +55,6 @@ class ArticleBookmarksRepository(
             val had = list[idx].withFeedbackSync
             list.removeAt(idx)
             persist(list)
-            try {
-                savedArticlesSync?.syncAfterRemoved(id)
-            } catch (e: Exception) {
-                Log.w(TAG, "saved_articles sync remove", e)
-            }
             BookmarkToggleResult.Removed(hadFeedbackSync = had)
         } else {
             list.add(
@@ -74,11 +66,6 @@ class ArticleBookmarksRepository(
                 )
             )
             persist(list)
-            try {
-                savedArticlesSync?.syncAfterAdded(article)
-            } catch (e: Exception) {
-                Log.w(TAG, "saved_articles sync add", e)
-            }
             BookmarkToggleResult.Added(withFeedbackSync = withFeedbackWhenAdding)
         }
     }

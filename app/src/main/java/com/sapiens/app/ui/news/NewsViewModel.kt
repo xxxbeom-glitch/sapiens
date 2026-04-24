@@ -5,27 +5,18 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.sapiens.app.data.mock.MockData
 import com.sapiens.app.data.model.Article
-import com.sapiens.app.data.model.stableId
-import com.sapiens.app.data.repository.FeedbackRepository
 import com.sapiens.app.data.repository.NewsFeedType
 import com.sapiens.app.data.repository.NewsRepository
-import com.sapiens.app.data.store.ArticleBookmarksRepository
-import com.sapiens.app.data.store.BookmarkToggleResult
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class NewsViewModel(
-    private val repository: NewsRepository,
-    private val bookmarksRepository: ArticleBookmarksRepository,
-    private val feedbackRepository: FeedbackRepository
+    private val repository: NewsRepository
 ) : ViewModel() {
 
     private val _isLoading = MutableStateFlow(true)
@@ -39,10 +30,6 @@ class NewsViewModel(
 
     private val _aiIssueNews = MutableStateFlow(emptyList<Article>())
     val aiIssueNews: StateFlow<List<Article>> = _aiIssueNews.asStateFlow()
-
-    val bookmarkedArticleIds: StateFlow<Set<String>> = bookmarksRepository.bookmarksFlow
-        .map { entries -> entries.map { it.article.stableId() }.toSet() }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
     init {
         viewModelScope.launch {
@@ -58,8 +45,6 @@ class NewsViewModel(
                     emit(Triple(emptyList(), emptyList(), emptyList()))
                 }
                 .collect { (domesticMarket, globalMarket, aiIssue) ->
-                    // Firestore 리스너가 오류·캐시 전환 등으로 잠깐 빈 리스트를 줄 때가 있어,
-                    // 빈 값은 직전 화면 상태를 유지하고(파이프라인 직후 갱신 체감), 최초만 목업.
                     _domesticMarketNews.value = domesticMarket.takeIf { it.isNotEmpty() }
                         ?: _domesticMarketNews.value.takeIf { it.isNotEmpty() }
                         ?: MockData.NEWS_DOMESTIC_MARKET
@@ -73,38 +58,11 @@ class NewsViewModel(
         }
     }
 
-    fun toggleNewsBookmark(article: Article) {
-        viewModelScope.launch {
-            val id = article.stableId()
-            try {
-                when (
-                    val r = bookmarksRepository.toggleBookmark(
-                        article,
-                        withFeedbackWhenAdding = true
-                    )
-                ) {
-                    is BookmarkToggleResult.Added ->
-                        if (r.withFeedbackSync) {
-                            feedbackRepository.saveArticleLike(id, article.category)
-                        }
-                    is BookmarkToggleResult.Removed ->
-                        if (r.hadFeedbackSync) {
-                            feedbackRepository.deleteFeedback(id)
-                        }
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "bookmark/feedback", e)
-            }
-        }
-    }
-
     companion object {
         private const val TAG = "NewsViewModel"
 
         fun factory(
-            repository: NewsRepository,
-            bookmarksRepository: ArticleBookmarksRepository,
-            feedbackRepository: FeedbackRepository
+            repository: NewsRepository
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -113,9 +71,7 @@ class NewsViewModel(
                         "Unknown ViewModel class $modelClass"
                     }
                     return NewsViewModel(
-                        repository,
-                        bookmarksRepository,
-                        feedbackRepository
+                        repository
                     ) as T
                 }
             }

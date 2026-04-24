@@ -36,12 +36,9 @@ import androidx.compose.ui.unit.sp
 import com.sapiens.app.BuildConfig
 import com.sapiens.app.R
 import com.sapiens.app.data.stock.StockDetailRepositoryImpl
-import com.sapiens.app.data.repository.FeedbackRepositoryImpl
 import com.sapiens.app.data.repository.NewsRepositoryImpl
-import com.sapiens.app.data.repository.SavedArticlesFirestoreWriter
 import com.sapiens.app.data.sync.UserCloudBackupRepository
 import com.sapiens.app.data.sync.UserCloudBackupScheduler
-import com.sapiens.app.data.store.ArticleBookmarksRepository
 import com.sapiens.app.ui.market.MarketScreen
 import com.sapiens.app.ui.market.MarketViewModel
 import com.sapiens.app.ui.market.StockDetailBottomSheet
@@ -81,19 +78,8 @@ fun MainScreen(
     val stockDetailRepository = remember {
         StockDetailRepositoryImpl(BuildConfig.PUBLIC_DATA_API_KEY)
     }
-    val bookmarksRepository = remember {
-        ArticleBookmarksRepository(
-            context.applicationContext,
-            SavedArticlesFirestoreWriter()
-        )
-    }
-    val feedbackRepository = remember { FeedbackRepositoryImpl() }
     val newsViewModel: NewsViewModel = viewModel(
-        factory = NewsViewModel.factory(
-            newsRepository,
-            bookmarksRepository,
-            feedbackRepository
-        )
+        factory = NewsViewModel.factory(newsRepository)
     )
     val marketViewModel: MarketViewModel = viewModel(factory = MarketViewModel.factory(newsRepository))
     val stockDetailViewModel: StockDetailViewModel =
@@ -153,11 +139,7 @@ fun MainScreen(
                     viewModel = marketViewModel,
                     onThemeStockNameClick = { code -> stockDetailCode = code }
                 )
-                else -> MyScreen(
-                    authViewModel = authViewModel,
-                    bookmarksRepository = bookmarksRepository,
-                    feedbackRepository = feedbackRepository
-                )
+                else -> MyScreen(authViewModel = authViewModel)
             }
         }
     }

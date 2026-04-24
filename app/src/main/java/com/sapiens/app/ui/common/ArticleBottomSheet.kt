@@ -2,27 +2,16 @@ package com.sapiens.app.ui.common
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -30,8 +19,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,8 +31,6 @@ import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.AppShapes
 import com.sapiens.app.ui.theme.BottomSheet
 import com.sapiens.app.ui.theme.BottomSheetBottomPadding
-import com.sapiens.app.ui.theme.Card
-import com.sapiens.app.ui.theme.OnPrimaryFixed
 import com.sapiens.app.ui.theme.SheetDragHandleHeight
 import com.sapiens.app.ui.theme.SheetHorizontal
 import com.sapiens.app.ui.theme.SheetTop
@@ -54,25 +39,11 @@ import com.sapiens.app.ui.theme.SummaryPointSpacing
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
 
-/** 포인트 컬러 대비 눌림 시 약 6% 어둡게 */
-private fun Color.darkenTowardsBlack(fraction: Float): Color {
-    val f = fraction.coerceIn(0f, 1f)
-    return Color(
-        red = red * (1f - f),
-        green = green * (1f - f),
-        blue = blue * (1f - f),
-        alpha = alpha
-    )
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ArticleBottomSheet(
     article: Article,
     onDismissRequest: () -> Unit,
-    isBookmarked: Boolean,
-    onBookmarkToggle: () -> Unit,
-    kind: ArticleBottomSheetKind = ArticleBottomSheetKind.Standard,
     onOpenOriginalArticle: (() -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -117,72 +88,30 @@ fun ArticleBottomSheet(
                 )
             }
 
-            when (kind) {
-                ArticleBottomSheetKind.Standard -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = Spacing.space14)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = article.headline,
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = TextPrimary,
-                                maxLines = 3,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Spacer(modifier = Modifier.width(Spacing.space12))
-                            Icon(
-                                imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                                contentDescription = if (isBookmarked) "저장됨" else "저장",
-                                tint = if (isBookmarked) Accent else TextSecondary,
-                                modifier = Modifier
-                                    .size(Spacing.space24)
-                                    .clickable(
-                                        indication = null,
-                                        interactionSource = remember { MutableInteractionSource() }
-                                    ) { onBookmarkToggle() }
-                            )
-                        }
-                        Text(
-                            text = articleTimeForDisplay(article.time),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary,
-                            modifier = Modifier.padding(top = Spacing.space6)
-                        )
-                    }
-                }
-                ArticleBottomSheetKind.News -> {
-                    val headlineStyle = MaterialTheme.typography.headlineMedium.run {
-                        copy(
-                            fontSize = (fontSize.value - 1f).sp,
-                            lineHeight = (lineHeight.value - 1f).sp
-                        )
-                    }
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = Spacing.space14)
-                    ) {
-                        Text(
-                            text = article.headline,
-                            style = headlineStyle,
-                            color = TextPrimary,
-                            maxLines = 3,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Text(
-                            text = articleTimeForDisplay(article.time),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary,
-                            modifier = Modifier.padding(top = Spacing.space6)
-                        )
-                    }
-                }
+            val headlineStyle = MaterialTheme.typography.headlineMedium.run {
+                copy(
+                    fontSize = (fontSize.value - 1f).sp,
+                    lineHeight = (lineHeight.value - 1f).sp
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = Spacing.space14)
+            ) {
+                Text(
+                    text = article.headline,
+                    style = headlineStyle,
+                    color = TextPrimary,
+                    maxLines = 3,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = articleTimeForDisplay(article.time),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(top = Spacing.space6)
+                )
             }
 
             Column(
@@ -211,75 +140,28 @@ fun ArticleBottomSheet(
                 }
             }
 
-            if (kind == ArticleBottomSheetKind.News) {
-                val canOpenOriginal = article.url.isNotBlank()
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = Spacing.space20),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.space6),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedButton(
-                        onClick = { if (canOpenOriginal) onOpenOriginalArticle?.invoke() },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(Spacing.space64),
-                        enabled = canOpenOriginal,
-                        shape = AppShapes.button,
-                        border = BorderStroke(Spacing.space1, TextSecondary.copy(alpha = 0.45f)),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = Color.Transparent,
-                            contentColor = TextPrimary,
-                            disabledContentColor = TextSecondary.copy(alpha = 0.45f)
-                        )
-                    ) {
-                        Text(
-                            text = "기사 원문 보기",
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                    }
-                    NewsSaveBookmarkButton(
-                        isBookmarked = isBookmarked,
-                        onClick = onBookmarkToggle,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(Spacing.space64)
-                    )
-                }
+            val canOpenOriginal = article.url.isNotBlank()
+            OutlinedButton(
+                onClick = { if (canOpenOriginal) onOpenOriginalArticle?.invoke() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = Spacing.space20)
+                    .height(Spacing.space64),
+                enabled = canOpenOriginal,
+                shape = AppShapes.button,
+                border = BorderStroke(Spacing.space1, TextSecondary.copy(alpha = 0.45f)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = Color.Transparent,
+                    contentColor = TextPrimary,
+                    disabledContentColor = TextSecondary.copy(alpha = 0.45f)
+                )
+            ) {
+                Text(
+                    text = "기사 원문 보기",
+                    style = MaterialTheme.typography.labelLarge
+                )
             }
         }
-    }
-}
-
-@Composable
-private fun NewsSaveBookmarkButton(
-    isBookmarked: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val containerColor = if (pressed) Accent.darkenTowardsBlack(0.06f) else Accent
-    Button(
-        onClick = onClick,
-        modifier = modifier,
-        interactionSource = interactionSource,
-        shape = AppShapes.button,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = containerColor,
-            contentColor = OnPrimaryFixed
-        ),
-        elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = Spacing.space0,
-            pressedElevation = Spacing.space0
-        )
-    ) {
-        Text(
-            text = if (isBookmarked) "저장 취소" else "저장",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold
-        )
     }
 }
 

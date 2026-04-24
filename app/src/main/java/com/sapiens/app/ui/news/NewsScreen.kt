@@ -28,9 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.sapiens.app.data.model.Article
-import com.sapiens.app.data.model.stableId
 import com.sapiens.app.ui.common.ArticleBottomSheet
-import com.sapiens.app.ui.common.ArticleBottomSheetKind
 import com.sapiens.app.ui.common.ArticleMixedFeedCard
 import com.sapiens.app.ui.common.transformNaverFinanceNewsReadUrlForMobile
 import com.sapiens.app.ui.theme.Accent
@@ -52,7 +50,6 @@ fun NewsScreen(
     val aiIssueNews by viewModel.aiIssueNews.collectAsState()
 
     var selectedArticle by remember { mutableStateOf<Article?>(null) }
-    val bookmarkedIds by viewModel.bookmarkedArticleIds.collectAsState()
     val context = LocalContext.current
     val pagerState = rememberPagerState(pageCount = { tabLabels.size })
     val scope = rememberCoroutineScope()
@@ -134,13 +131,9 @@ fun NewsScreen(
         }
 
         selectedArticle?.let { article ->
-            val bookmarked = article.stableId() in bookmarkedIds
             ArticleBottomSheet(
                 article = article,
                 onDismissRequest = { selectedArticle = null },
-                isBookmarked = bookmarked,
-                onBookmarkToggle = { viewModel.toggleNewsBookmark(article) },
-                kind = ArticleBottomSheetKind.News,
                 onOpenOriginalArticle = {
                     val url = article.url.trim()
                     if (url.isNotBlank()) {
