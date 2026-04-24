@@ -1703,37 +1703,14 @@ def _llm_select_cnbc_pool_for_ai_issue_tab(
     pool_cnbc: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """
-    CNBC RSS 풀은 **항상 `ai_issue` 탭 전용**. 동일 분류 규칙으로 LLM에 물어
-    `AI 이슈`로 판정된 기사만 남긴다(국내증시·해외증시로 나오면 제외).
-    분류 실패(None)·AI off 시 해당 건은 보수적으로 **유지**(빈 탭 방지).
-    """
-    import news_tab_classification as ntc
+    CNBC RSS 풀은 **항상 `ai_issue` 탭 전용** 피드(테크 combinedcms)이므로 **전량 유지**한다.
 
-    kept: list[dict[str, Any]] = []
-    n_keep = n_drop = n_fallback_keep = 0
-    for row in pool_cnbc:
-        clean = {k: v for k, v in row.items() if k != "feed_fallback"}
-        t = str(row.get("title") or "")
-        s = str(row.get("summary") or "")
-        label = ntc.classify_article_domestic_tab(t, s)
-        doc = ntc.tab_to_firestore_document_id(label) if label else None
-        if doc == "ai_issue":
-            kept.append(clean)
-            n_keep += 1
-        elif not label or doc is None:
-            kept.append(clean)
-            n_fallback_keep += 1
-        else:
-            n_drop += 1
-        time.sleep(0.1)
-    logger.info(
-        "CNBC→ai_issue 선별: 입력 %d건 → 유지 %d(AI이슈판정 %d, 분류실패보존 %d), 제외 %d",
-        len(pool_cnbc),
-        len(kept),
-        n_keep,
-        n_fallback_keep,
-        n_drop,
-    )
+    예전에는 3탭 LLM으로 `AI 이슈`만 남기면, 헤드라인이 증시 톤으로 잡혀 `해외증시`로 나온
+    기사가 AI 탭에서 빠져 건수가 줄었다. 앱 상한([RSS_DOMESTIC_NEWS_MAX_ITEMS])까지 채우려면
+    CNBC 풀은 여기서 거르지 않는다.
+    """
+    kept = [{k: v for k, v in row.items() if k != "feed_fallback"} for row in pool_cnbc]
+    logger.info("CNBC→ai_issue: 입력 %d건 → 전량 유지 %d건", len(pool_cnbc), len(kept))
     return kept
 
 
@@ -1742,7 +1719,7 @@ def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
     - 매경·한경·조선(국내/해외 RSS): 합쳐 dedupe → LLM 3탭 배정. 단, **Firestore `ai_issue` 문서에는
       CNBC만** 넣는다. KR/해외 풀에서 「AI 이슈」로 나온 기사는 `feed_fallback` 기준으로
       국내증시·해외증시 탭으로만 넣는다.
-    - CNBC RSS: LLM으로 「AI 이슈」만 유지(국내·해외 판정이면 제외; 분류 실패 시 보존).
+    - CNBC RSS: `ai_issue`로 전량 반영(LLM 2차 선별 없음 — 피드가 테크 전용).
     `summarizer.configure_ai` 먼저 호출할 것.
     """
     merged_kr_os: list[dict[str, Any]] = []

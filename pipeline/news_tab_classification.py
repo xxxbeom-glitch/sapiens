@@ -2,7 +2,7 @@
 뉴스 **국내 탭** 3분류용 LLM 지시문 및 도우미.
 
 - 앱 / Firestore: `domestic_market` · `global_market` · `ai_issue` ( `NewsRepository.kt` 의 `NewsFeedType` 과 동일 )
-- 매경·한경·조선 풀: `classify_article_domestic_tab` → `finalize_kr_overseas_tab_label`(제목/요약에 미시장 키워드 없으면 해외증시→국내증시) (`crawler.crawl_domestic`). LLM 실패·AI off 시 키워드·국내로 폴백.
+- 매경·한경·조선 풀: `classify_article_domestic_tab` → `finalize_kr_overseas_tab_label`. **해외 RSS(`feed_fallback=global`)** 는 LLM이 `해외증시`로 준 건 키워드 없어도 유지(짧은 RSS 요약에 나스닥 등이 없어 미국 탭이 비는 문제 방지). **국내 RSS** 에서만 `해외증시`+미시장 키워드 없으면 `국내증시`로 내림.
 - CNBC 풀: **`ai_issue` Firestore 문서에만** 적재; 동일 규칙으로 **「AI 이슈」만** 남기고 국내증시·해외증시 판정은 제외(실패 시 해당 건은 유지). 매경·한경·조선 풀에서 「AI 이슈」로 나온 건은 `crawl_domestic`에서 국내/해외 탭으로만 보냄.
 """
 
@@ -106,9 +106,13 @@ def finalize_kr_overseas_tab_label(
     feed_fallback: str,
 ) -> str:
     """
-    매경·한경·조선 KR/해외 풀: LLM 결과 + 제목/요약으로 탭을 확정.
-    - '해외증시'이나 제목·요약에 **미국 자본시장** 신호가 없으면 '국내증시'로 내림(미국탭 오염 방지).
-    - LLM None·AI off: 미국 시장 힌트가 있을 때만 '해외증시', 그 외(특히 해외 RSS)는 '국내증시'.
+    매경·한경·조선 KR/해외 풀: LLM 결과 + 출처 RSS로 탭을 확정.
+
+    - **해외 RSS (`global_market`)**: LLM이 `해외증시`이면 그대로 둠. 분류 실패(None)도 `해외증시`
+      (짧은 영문 스니펫에 나스닥·S&P 키워드가 없어 전량이 국내로 가며 미국 탭이 비는 것을 막음).
+    - **국내 RSS (`domestic_market`)**: `해외증시`인데 제목·요약에 미시장 신호가 없으면 `국내증시`로 내림
+      (사회면 등이 미국 탭으로 가는 완충).
+    - 국내 RSS + LLM 실패(None): 미시장 힌트 있을 때만 `해외증시`, 아니면 `국내증시`.
     """
     fb = (feed_fallback or "domestic_market").strip()
     if fb not in ("domestic_market", "global_market"):
@@ -117,12 +121,18 @@ def finalize_kr_overseas_tab_label(
     s_raw = (summary or "").strip()
     us = looks_us_capital_markets_centric(t_raw, s_raw)
     t_norm = _normalize_tab_label((label or "").strip()) if (label and str(label).strip()) else None
+    if fb == "global_market":
+        if t_norm is None:
+            return "해외증시"
+        if t_norm == "해외증시":
+            return "해외증시"
+        return t_norm
+    # --- 아래는 국내 RSS 출신만 ---
     if t_norm is None:
         return "해외증시" if us else "국내증시"
     if t_norm == "해외증시" and not us:
         logger.info(
-            "뉴스탭: 해외증시→국내증시(미시장 키워드 없음) feed_fallback=%s title=%.100s",
-            fb,
+            "뉴스탭: 해외증시→국내증시(미시장 키워드 없음·국내RSS) title=%.100s",
             t_raw,
         )
         return "국내증시"
