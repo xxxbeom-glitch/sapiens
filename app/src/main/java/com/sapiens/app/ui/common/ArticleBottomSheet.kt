@@ -44,7 +44,9 @@ import com.sapiens.app.ui.theme.TextSecondary
 fun ArticleBottomSheet(
     article: Article,
     onDismissRequest: () -> Unit,
-    onOpenOriginalArticle: (() -> Unit)? = null
+    onOpenOriginalArticle: (() -> Unit)? = null,
+    /** null이면 [newsPublisherChipText]·출처 문자열로 칩(색·문구). AI 이슈 탭 등에서 `"CNBC"` 고정 시 전달. */
+    publisherChipDisplayOverride: String? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val resolvedPoints = article.summaryPoints
@@ -83,8 +85,9 @@ fun ArticleBottomSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 PublisherChip(
-                    text = newsPublisherChipText(article.source).ifBlank { article.source.trim() }
-                        .ifBlank { "출처" }
+                    text = publisherChipDisplayOverride?.trim()?.takeIf { it.isNotEmpty() }
+                        ?: newsPublisherChipText(article.source).ifBlank { article.source.trim() }
+                            .ifBlank { "출처" }
                 )
             }
 
@@ -115,7 +118,7 @@ fun ArticleBottomSheet(
             }
 
             Column(
-                modifier = Modifier.padding(top = Spacing.space14),
+                modifier = Modifier.padding(top = Spacing.space22),
                 verticalArrangement = Arrangement.spacedBy(SummaryPointSpacing)
             ) {
                 resolvedPoints.take(4).forEachIndexed { index, point ->
@@ -167,7 +170,7 @@ fun ArticleBottomSheet(
 
 @Composable
 private fun PublisherChip(text: String) {
-    val (backgroundColor, textColor) = categoryChipColors(text)
+    val (backgroundColor, textColor) = publisherChipColors(text)
     Surface(
         color = backgroundColor,
         shape = AppShapes.chip

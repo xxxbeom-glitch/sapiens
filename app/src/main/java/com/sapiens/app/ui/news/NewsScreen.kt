@@ -49,7 +49,8 @@ fun NewsScreen(
     val globalMarketNews by viewModel.globalMarketNews.collectAsState()
     val aiIssueNews by viewModel.aiIssueNews.collectAsState()
 
-    var selectedArticle by remember { mutableStateOf<Article?>(null) }
+    /** (기사, 뉴스 탭 페이지 0·1·2) — 바텀시트 칩(예: AI 탭=CNBC)에 사용 */
+    var sheetArticleAndPage by remember { mutableStateOf<Pair<Article, Int>?>(null) }
     val context = LocalContext.current
     val pagerState = rememberPagerState(pageCount = { tabLabels.size })
     val scope = rememberCoroutineScope()
@@ -113,13 +114,18 @@ fun NewsScreen(
                         ) {
                             ArticleMixedFeedCard(
                                 articles = pageItems,
-                                onClickArticle = { selectedArticle = it },
+                                onClickArticle = { sheetArticleAndPage = it to page },
                                 topChipForArticle = { article ->
-                                    val chip = newsPublisherChipText(article.source)
                                     when {
-                                        chip.isNotBlank() -> chip
-                                        page == 1 -> "해외"
-                                        else -> "국내"
+                                        page == 2 -> "CNBC"
+                                        else -> {
+                                            val chip = newsPublisherChipText(article.source)
+                                            when {
+                                                chip.isNotBlank() -> chip
+                                                page == 1 -> "해외"
+                                                else -> "국내"
+                                            }
+                                        }
                                     }
                                 },
                                 emptyStateText = "불러온 기사가 없습니다."
@@ -130,10 +136,11 @@ fun NewsScreen(
             }
         }
 
-        selectedArticle?.let { article ->
+        sheetArticleAndPage?.let { (article, fromPage) ->
             ArticleBottomSheet(
                 article = article,
-                onDismissRequest = { selectedArticle = null },
+                onDismissRequest = { sheetArticleAndPage = null },
+                publisherChipDisplayOverride = if (fromPage == 2) "CNBC" else null,
                 onOpenOriginalArticle = {
                     val url = article.url.trim()
                     if (url.isNotBlank()) {

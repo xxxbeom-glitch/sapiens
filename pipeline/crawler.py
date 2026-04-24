@@ -814,10 +814,12 @@ def crawl_tossinvest_news() -> dict[str, list[dict[str, Any]]]:
 
 # --- 해외 뉴스: CNBC / Guardian / Verge / Ars RSS (48h, URL 중복 제거, 카테고리당 합산 15건) ---
 RSS_OVERSEAS_MAX_AGE_HOURS = 48.0
+# `ai_issue`(CNBC): 앱에 **3일치**까지 쓰고 싶다는 요구 — RSS는 이 시간 창 + 피드당 상한(기타 탭은 48h)
+RSS_AI_ISSUE_MAX_AGE_HOURS = 72.0
 # 뉴스 탭: 국내(KR) RSS 풀은 **피드당** 최대 N건, 해외(국제) 풀은 M건, CNBC 단일 피드는 별도 상한
 RSS_DOMESTIC_KR_MARKET_ITEMS_PER_FEED = 15
 RSS_DOMESTIC_ITEMS_PER_FEED = 10
-RSS_DOMESTIC_CNBC_MAX_ITEMS = 30
+RSS_DOMESTIC_CNBC_MAX_ITEMS = 45
 # LLM 분류 후 Firestore `articles` 배열당 상한(탭별) — 앱은 동일 수로 표시
 RSS_DOMESTIC_NEWS_MAX_ITEMS = 12
 
@@ -1074,6 +1076,7 @@ def crawl_rss_domestic_ai_issue() -> list[dict[str, Any]]:
         RSS_FEEDS_NEWS_AI,
         max_items_per_feed=RSS_DOMESTIC_CNBC_MAX_ITEMS,
         allow_missing_published=True,
+        max_age_hours=RSS_AI_ISSUE_MAX_AGE_HOURS,
     )
 
 
@@ -1671,11 +1674,13 @@ def _llm_classify_kr_overseas_pool_to_domestic_tabs(
         t = str(row.get("title") or "")
         s = str(row.get("summary") or "")
         label = ntc.classify_article_domestic_tab(t, s)
-        doc = ntc.tab_to_firestore_document_id(label) if label else None
-        if doc and doc in out:
+        label_ko = ntc.finalize_kr_overseas_tab_label(label, t, s, fb)
+        doc = ntc.tab_to_firestore_document_id(label_ko) or fb
+        if not doc or doc not in out:
+            doc = fb
+        if label:
             n_label_ok += 1
         else:
-            doc = fb
             n_fallback += 1
         out[doc].append(clean)
         time.sleep(0.1)

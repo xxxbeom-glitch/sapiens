@@ -2,6 +2,7 @@ package com.sapiens.app.ui.common
 
 import androidx.compose.ui.graphics.Color
 import com.sapiens.app.ui.theme.CategoryChipPalette
+import com.sapiens.app.ui.theme.PublisherChipPalette
 
 fun categoryChipColors(category: String): Pair<Color, Color> {
     val normalized = category.trim()
@@ -21,5 +22,26 @@ fun categoryChipColors(category: String): Pair<Color, Color> {
         "금융", "증권", "원자재", "채권" -> CategoryChipPalette.financeBg to CategoryChipPalette.financeFg
         "매크로", "금리", "환율" -> CategoryChipPalette.economyBg to CategoryChipPalette.economyFg
         else -> CategoryChipPalette.defaultBg to CategoryChipPalette.defaultFg
+    }
+}
+
+/** 뉴스 출처 칩(매경·한경·조선·CNBC 등). [newsPublisherChipText] 결과 문자열에 맞춘다. */
+fun publisherChipColors(displayLabel: String): Pair<Color, Color> {
+    val t = displayLabel.trim()
+    if (t.isEmpty()) {
+        return PublisherChipPalette.defaultBg to PublisherChipPalette.defaultFg
+    }
+    val lower = t.lowercase()
+    return when {
+        lower.contains("cnbc") ->
+            PublisherChipPalette.cnbcBg to PublisherChipPalette.cnbcFg
+        t.contains("매일경제") ->
+            PublisherChipPalette.mkBg to PublisherChipPalette.mkFg
+        t.contains("한국경제") ->
+            PublisherChipPalette.hankyungBg to PublisherChipPalette.hankyungFg
+        t.contains("조선") ->
+            PublisherChipPalette.chosunBg to PublisherChipPalette.chosunFg
+        else ->
+            PublisherChipPalette.defaultBg to PublisherChipPalette.defaultFg
     }
 }

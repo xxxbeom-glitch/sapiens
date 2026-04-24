@@ -1,7 +1,7 @@
 name: Sapiens Pipeline
 
 # ━ 스케줄(UTC): KST 20분 전 작업 → 정각 푸시(PUSH_KST_HOUR는 워크플로에서 고정).
-# ━ 수동 실행: section(all|news|market)만 선택. 푸시 예약 시각은 파이썬이「다음 KST 정각」으로 둠(입력칸 없음).
+# ━ 수동 실행: job 1개(manual), `section` → PIPELINE_SECTION. 푸시 시각은 PUSH_KST 없을 때 다음 KST 정각.
 'on':
   schedule:
     - cron: "40 22 * * *"  # 07:40 KST 뉴스
@@ -140,11 +140,9 @@ jobs:
           SAPIENS_ARTICLE_LLM_JUDGE: "1"
         run: python main.py
 
-  manual_all:
+  manual:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.section == 'all'
-    env:
-      PIPELINE_SECTION: all
+    if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -155,49 +153,7 @@ jobs:
       - name: Run pipeline
         working-directory: pipeline
         env:
-          PIPELINE_SECTION: ${{ env.PIPELINE_SECTION }}
-          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          SAPIENS_ARTICLE_LLM_JUDGE: "1"
-        run: python main.py
-
-  manual_news:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.section == 'news'
-    env:
-      PIPELINE_SECTION: news
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install dependencies
-        run: pip install -r pipeline/requirements.txt
-      - name: Run pipeline
-        working-directory: pipeline
-        env:
-          PIPELINE_SECTION: ${{ env.PIPELINE_SECTION }}
-          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          SAPIENS_ARTICLE_LLM_JUDGE: "1"
-        run: python main.py
-
-  manual_market:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.section == 'market'
-    env:
-      PIPELINE_SECTION: market
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install dependencies
-        run: pip install -r pipeline/requirements.txt
-      - name: Run pipeline
-        working-directory: pipeline
-        env:
-          PIPELINE_SECTION: ${{ env.PIPELINE_SECTION }}
+          PIPELINE_SECTION: ${{ github.event.inputs.section }}
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SAPIENS_ARTICLE_LLM_JUDGE: "1"

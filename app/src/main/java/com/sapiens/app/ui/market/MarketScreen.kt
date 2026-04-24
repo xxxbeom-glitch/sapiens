@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,9 +29,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,6 +70,7 @@ import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
 import com.sapiens.app.ui.theme.TextTertiary
 import com.sapiens.app.R
+import kotlinx.coroutines.launch
 
 /** 피그마(테마 카드) 타이틀 예외 규격 — 나머지 타이포는 SapiensTypography 유지 */
 private val ThemeCardHashtagFontSize = 25.sp
@@ -84,12 +87,12 @@ fun MarketScreen(
 ) {
     val marketThemes by viewModel.marketThemes.collectAsState()
     val marketIndustries by viewModel.marketIndustries.collectAsState()
-    var selectedTabIndex by remember { mutableIntStateOf(0) }
-
     val sectionTabs = listOf(
         stringResource(R.string.market_tab_theme),
         stringResource(R.string.market_tab_industry),
     )
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { sectionTabs.size })
+    val coroutineScope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
@@ -97,15 +100,19 @@ fun MarketScreen(
             .background(Background)
     ) {
         PrimaryTabRow(
-            selectedTabIndex = selectedTabIndex,
+            selectedTabIndex = pagerState.currentPage,
             containerColor = Background,
             contentColor = Accent
         ) {
             sectionTabs.forEachIndexed { index, tab ->
-                val selected = selectedTabIndex == index
+                val selected = pagerState.currentPage == index
                 Tab(
                     selected = selected,
-                    onClick = { selectedTabIndex = index },
+                    onClick = {
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(index)
+                        }
+                    },
                     text = {
                         Text(
                             text = tab,
@@ -116,40 +123,69 @@ fun MarketScreen(
             }
         }
 
-        if (selectedTabIndex == 0) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = RowVertical),
-                verticalArrangement = Arrangement.spacedBy(Spacing.space16)
-            ) {
-                items(
-                    items = marketThemes,
-                    key = { "${it.themeNo}_${it.themeName}" }
-                ) { theme ->
-                    MarketThemeCard(
-                        theme = theme,
-                        modifier = Modifier.padding(horizontal = Spacing.space16),
-                        onStockNameClick = onThemeStockNameClick
-                    )
-                }
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            beyondViewportPageCount = 1,
+        ) { page ->
+            when (page) {
+                0 -> MarketThemesTabBody(
+                    themes = marketThemes,
+                    onThemeStockNameClick = onThemeStockNameClick,
+                )
+                1 -> MarketIndustriesTabBody(
+                    industries = marketIndustries,
+                    onThemeStockNameClick = onThemeStockNameClick,
+                )
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = RowVertical),
-                verticalArrangement = Arrangement.spacedBy(Spacing.space16)
-            ) {
-                items(
-                    items = marketIndustries,
-                    key = { "${it.themeNo}_${it.themeName}" }
-                ) { industry ->
-                    MarketThemeCard(
-                        theme = industry,
-                        modifier = Modifier.padding(horizontal = Spacing.space16),
-                        onStockNameClick = onThemeStockNameClick
-                    )
-                }
-            }
+        }
+    }
+}
+
+@Composable
+private fun MarketThemesTabBody(
+    themes: List<MarketTheme>,
+    onThemeStockNameClick: (stockCode: String) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(vertical = RowVertical),
+        verticalArrangement = Arrangement.spacedBy(Spacing.space16)
+    ) {
+        items(
+            items = themes,
+            key = { "${it.themeNo}_${it.themeName}" }
+        ) { theme ->
+            MarketThemeCard(
+                theme = theme,
+                modifier = Modifier.padding(horizontal = Spacing.space16),
+                onStockNameClick = onThemeStockNameClick
+            )
+        }
+    }
+}
+
+@Composable
+private fun MarketIndustriesTabBody(
+    industries: List<MarketTheme>,
+    onThemeStockNameClick: (stockCode: String) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(vertical = RowVertical),
+        verticalArrangement = Arrangement.spacedBy(Spacing.space16)
+    ) {
+        items(
+            items = industries,
+            key = { "${it.themeNo}_${it.themeName}" }
+        ) { industry ->
+            MarketThemeCard(
+                theme = industry,
+                modifier = Modifier.padding(horizontal = Spacing.space16),
+                onStockNameClick = onThemeStockNameClick
+            )
         }
     }
 }

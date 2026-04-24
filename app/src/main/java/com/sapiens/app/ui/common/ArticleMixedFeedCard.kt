@@ -20,7 +20,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import com.sapiens.app.data.model.Article
-import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.AppShapes
 import com.sapiens.app.ui.theme.Card
 import com.sapiens.app.ui.theme.RowVertical
@@ -155,14 +154,15 @@ fun ArticleMixedFeedCard(
 
 @Composable
 private fun FeedPublisherChip(label: String) {
+    val (backgroundColor, textColor) = publisherChipColors(label)
     Surface(
-        color = Accent.copy(alpha = 0.14f),
+        color = backgroundColor,
         shape = AppShapes.chipTight
     ) {
         Text(
             text = label,
             style = SapiensTextStyles.briefingPublisherChip,
-            color = Accent,
+            color = textColor,
             modifier = Modifier.padding(horizontal = Spacing.space6, vertical = Spacing.space2)
         )
     }

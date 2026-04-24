@@ -89,6 +89,21 @@ object CategoryChipPalette {
     val defaultFg = Color(0xFF888888)
 }
 
+// --- 뉴스 언론사 칩 (리스트·바텀시트) ---
+object PublisherChipPalette {
+    val mkBg = Color(0xFF603629)
+    val mkFg = Color(0xFFF8AD88)
+    val hankyungBg = Color(0xFF314180)
+    val hankyungFg = Color(0xFF88ABF8)
+    val chosunBg = Color(0xFFC04B41)
+    val chosunFg = Color(0xFFDD9B96)
+    val cnbcBg = Color(0xFF2B6734)
+    val cnbcFg = Color(0xFF7CC387)
+    /** 매칭 안 됨(해외·국내 등) */
+    val defaultBg = Color(0xFF222222)
+    val defaultFg = Color(0xFF888888)
+}
+
 // --- 마켓 섹터 칩 ---
 object SectorChipPalette {
     fun colors(sector: String): Pair<Color, Color> = when (sector.trim()) {

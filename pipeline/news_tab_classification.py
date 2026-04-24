@@ -2,7 +2,7 @@
 뉴스 **국내 탭** 3분류용 LLM 지시문 및 도우미.
 
 - 앱 / Firestore: `domestic_market` · `global_market` · `ai_issue` ( `NewsRepository.kt` 의 `NewsFeedType` 과 동일 )
-- 매경·한경·조선 풀: `NEWS_TAB_CLASSIFICATION_INSTRUCTION_KO` + `classify_article_domestic_tab` 으로 3탭 라우팅 (`crawler.crawl_domestic`). 실패·AI off 시 `feed_fallback`.
+- 매경·한경·조선 풀: `classify_article_domestic_tab` → `finalize_kr_overseas_tab_label`(제목/요약에 미시장 키워드 없으면 해외증시→국내증시) (`crawler.crawl_domestic`). LLM 실패·AI off 시 키워드·국내로 폴백.
 - CNBC 풀: **`ai_issue` Firestore 문서에만** 적재; 동일 규칙으로 **「AI 이슈」만** 남기고 국내증시·해외증시 판정은 제외(실패 시 해당 건은 유지). 매경·한경·조선 풀에서 「AI 이슈」로 나온 건은 `crawl_domestic`에서 국내/해외 탭으로만 보냄.
 """
 
@@ -19,17 +19,20 @@ logger = logging.getLogger(__name__)
 NEWS_TAB_CLASSIFICATION_INSTRUCTION_KO = """[AI 분류 시스템 지시문]
 당신은 경제 및 테크 뉴스 큐레이터입니다. 수집된 기사의 제목과 요약본을 읽고 다음 3가지 중 하나로 분류하십시오.
 
-국내증시: 한국 주식 시장, 한국 상장사, 국내 경제 지표가 주된 내용일 때. (코스피, 코스닥)
+국내증시: 한국 주식 시장, 한국 상장사, 국내 경제·정책·지표가 주된 내용일 때. (코스피, 코스닥, 한국 투자자·상장·거래소)
 
-해외증시: 미국 주식 시장, 미국 기업의 '실적, 주가, 투자 지표, 거시경제(금리 등)'가 주된 내용일 때. (나스닥, S&P500)
+해외증시(미국 증시·자본시장): **나스닥·S&P500·다우 등 미국 증권시장, 미국 상장사 주가·실적·ETF, 연준·금리·미 국채·달러(투자·시장에 초점), 뉴욕 시장** 등 **미국 자본시장**과 직접 연관될 때만. (해외=미국시장이 아님. 일반 국제 뉴스를 해외증시로 넣지 말 것.)
 
-AI 이슈: 주식이나 실적보다는 AI 모델 출시, 기술 발전, 반도체 성능 향상, 규제 등 '기술과 산업 트렌드' 자체가 주된 내용일 때.
+AI 이슈: 주가·지수보다 **AI·반도체·빅테크 기술·제품·규제**가 주제일 때. (모델, GPU, OpenAI, 선단 공정 등)
+
+[해외증시에 넣지 말 것 — 아주 중요]
+- 사회, 사건, 범죄, 재난, 날씨, 정치(일반), 문화, 스포츠·연예 **단독** 보도이고 **나스닥·S&P·다우·연준·미 상장사 실적/주가·FX(투자)**가 본문 주제가 **아닐** 때
+- EU·일본·중국 등 **다른 나라** 이슈만이고 **미국 증시·미 기업(상장) 투자**와 **무관**할 때
+- 그런 기사는 '해외증시'가 **아님** → 한국 투자자/시장과 맞닿으면 '국내증시', 기술·AI 중심이면 'AI 이슈'로
 
 [판단 주의사항]
-
-해외 기업 기사라도 한국 시장과 엮여 있다면 '국내증시'로 분류할 것.
-
-같은 기업(예: 오픈AI, 엔비디아)의 기사라도 주가/실적 위주면 '해외증시', 신제품이나 기술 설명 위주면 'AI 이슈'로 분류할 것."""
+해외 기업 기사라도 **한국 시장·투자자**와 엮이면 '국내증시'로.
+같은 기업(엔비디아 등)도 **주가·실적·시총**이면 '해외증시', **제품·기술**이면 'AI 이슈'."""
 
 NEWS_TAB_LABELS: tuple[str, ...] = ("국내증시", "해외증시", "AI 이슈")
 
@@ -50,6 +53,80 @@ _TAB_ALIASES: dict[str, str] = {
     "ai 이슈": "AI 이슈",
     "aiissue": "AI 이슈",
 }
+
+# 제목+요약에 **미국 자본시장** 힌트 (LLM '해외증시'·해외 RSS 폴백 검증). "미국" 단독·일반 사회 뉴스는 제외.
+_US_CAPITAL_MARKET_SIGNALS = re.compile(
+    (
+        r"나스닥|NASDAQ|"
+        r"에스앤피|\bS\s*＆\s*P\s*500|\bS&P\s*500|\bS\&P\b|"
+        r"다우\s*지?수?|Dow\s*Jones|\bDJI\b|"
+        r"뉴욕\s*증[시권]|뉴욓\s*증[시권]|뉴욕\s*장|뉴욓\s*장|"
+        r"\bNYSE\b|뉴욕\s*거래소|"
+        r"필라델피아|"
+        r"나스닥\s*100|"
+        r"라셀|Russell|\bIWM\b|"
+        r"FOMC|"
+        r"FRB|연\s*준|Federal\s*Reserve|파월|"
+        r"기준\s*금리.?(?:인하|인상|동결|결정|발표|회의|선언)"
+        r"|미국채|미국\s*국채|10\s*년.?(?:\s*미국|물).{0,6}채|"
+        r"미국\s*증[시권]|\b미시장|미\s*증[시권]"
+        r"|\bNVDA\b|\bTSLA\b|\bAAPL\b|\bMSFT\b|\bAMZN\b|\bGOOGL|\bGOOG\b|\bMETA\b|"
+        r"엔비디아.?(?:주[가]|시총|실적|어닝|급등|급락|발표)"
+        r"|테슬라.?(?:주[가]|시총|실적)"
+        r"|빅테크.?(?:주[가]|\s*기술주\)|\s*실적)"
+        r"|\bCPI\b.{0,50}미국|미국.{0,50}\bCPI\b|ADP|"
+        r"장\s*마감.?(?:\s*뉴욓|\s*뉴욕|나스|다우|미국)"
+        r"|\bWTI\b|원/달러|\bDXY\b"
+        r"|월가"
+    ),
+    re.IGNORECASE,
+)
+
+
+def _text_for_tab_signals(title: str, summary: str) -> str:
+    t = f"{(title or '').strip()} {(summary or '').strip()}"
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def looks_us_capital_markets_centric(title: str, summary: str) -> bool:
+    """제목+요약에 **미국 증시/연준/주요 티커·뉴욕 시장** 힌트가 있는지."""
+    text = _text_for_tab_signals(title, summary)
+    if not text:
+        return False
+    if _US_CAPITAL_MARKET_SIGNALS.search(text):
+        return True
+    return False
+
+
+def finalize_kr_overseas_tab_label(
+    label: str | None,
+    title: str,
+    summary: str,
+    feed_fallback: str,
+) -> str:
+    """
+    매경·한경·조선 KR/해외 풀: LLM 결과 + 제목/요약으로 탭을 확정.
+    - '해외증시'이나 제목·요약에 **미국 자본시장** 신호가 없으면 '국내증시'로 내림(미국탭 오염 방지).
+    - LLM None·AI off: 미국 시장 힌트가 있을 때만 '해외증시', 그 외(특히 해외 RSS)는 '국내증시'.
+    """
+    fb = (feed_fallback or "domestic_market").strip()
+    if fb not in ("domestic_market", "global_market"):
+        fb = "domestic_market"
+    t_raw = (title or "").strip()
+    s_raw = (summary or "").strip()
+    us = looks_us_capital_markets_centric(t_raw, s_raw)
+    t_norm = _normalize_tab_label((label or "").strip()) if (label and str(label).strip()) else None
+    if t_norm is None:
+        return "해외증시" if us else "국내증시"
+    if t_norm == "해외증시" and not us:
+        logger.info(
+            "뉴스탭: 해외증시→국내증시(미시장 키워드 없음) feed_fallback=%s title=%.100s",
+            fb,
+            t_raw,
+        )
+        return "국내증시"
+    return t_norm
 
 
 def _normalize_tab_label(raw: str) -> str | None:
