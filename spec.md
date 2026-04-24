@@ -98,7 +98,7 @@ Sapiens/
 
 - **`crawl_domestic`**: 탭마다 **지정 RSS만** 읽어 `domestic_market` / `global_market` / `ai_issue` 문서에 넣는다. 풀을 합쳐 LLM으로 탭을 나누지 않는다.
   - **국내증시**: `RSS_FEEDS_NEWS_KR_MARKET`(매경 증권·한경 finance).
-  - **미국증시**: `RSS_FEEDS_NEWS_CNBC_MARKETS`(Yahoo Finance `https://finance.yahoo.com/news/rssindex` + FT `https://www.ft.com/companies?format=rss`; 기사 URL은 `yahoo.com`·`ft.com`).
+  - **미국증시**: `RSS_FEEDS_NEWS_CNBC_MARKETS`(Yahoo Finance `https://finance.yahoo.com/news/rssindex` 단일 피드; 기사 URL은 `yahoo.com`만).
   - **AI 이슈**: `RSS_FEEDS_NEWS_AI`(CNBC Tech).
 - `RSS_FEEDS_NEWS_OVERSEAS` 등은 이 경로에서 사용하지 않는다(필요 시 별도 호출·기능에 연결).
 - 레거시 LLM 탭 분류 프롬프트는 `news_tab_classification.py`에 남아 있으나 `crawl_domestic`에서는 호출하지 않는다.
