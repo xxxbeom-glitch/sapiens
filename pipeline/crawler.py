@@ -847,7 +847,15 @@ RSS_FEEDS_NEWS_CNBC_MARKETS: list[str] = [
     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258",
 ]
 
-MK_ARTICLE_BODY_SELECTORS = (
+_RSS_SOURCE_LABEL_MAP: dict[str, str] = {
+    "https://www.mk.co.kr/rss/50200011/": "매일경제",
+    "https://www.mk.co.kr/rss/30300018/": "매일경제",
+    "https://www.hankyung.com/feed/finance": "한국경제",
+    "https://www.hankyung.com/feed/international": "한국경제",
+    "https://www.chosun.com/arc/outboundfeeds/rss/category/international/?outputType=xml": "조선일보",
+    "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910": "CNBC",
+    "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258": "CNBC",
+}
     "div.news_cnt_detail",
     "div#article",
     "div.article",
@@ -959,7 +967,7 @@ def _crawl_rss_feed_urls(
             fd = getattr(parsed, "feed", None)
             if fd is not None and getattr(fd, "title", None):
                 feed_title = str(fd.title).strip()
-            source_label = feed_title or urlparse(feed_url).netloc or "RSS"
+            source_label = _RSS_SOURCE_LABEL_MAP.get(feed_url) or feed_title or urlparse(feed_url).netloc or "RSS"
             taken_this_feed = 0
             for entry in getattr(parsed, "entries", None) or []:
                 if per_feed_mode and taken_this_feed >= max_items_per_feed:
