@@ -1,5 +1,5 @@
 """
-기사 요약·시황: Anthropic Claude Haiku API (1차 전환).
+기사 요약·시황·기업 분석: Anthropic Claude API 전용.
 """
 from __future__ import annotations
 
@@ -10,29 +10,27 @@ import re
 import time
 from typing import Any
 
-from anthropic import Anthropic
+import anthropic
 
 logger = logging.getLogger(__name__)
 
-# Haiku — `CLAUDE_MODEL` 환경변수로 덮어쓸 수 있음.
-CLAUDE_HAIKU_MODEL = (os.environ.get("CLAUDE_MODEL") or "claude-3-5-haiku-20241022").strip()
+CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 
-# SAPIENS_ARTICLE_LLM_JUDGE=1: 기사 JSON 요약을 [단일 LLM 호출·재시도 2회]만 사용.
-# 미설정·0이면 _call_news_llm 기반 2회 재시도 경로(동일 Haiku).
+# SAPIENS_ARTICLE_LLM_JUDGE=1: 기사 JSON 요약을 [Claude 1경로(단일 호출, 재시도 2회)]만 사용.
+# 미설정·0이면 _call_news_llm 기반 2회 재시도 경로(동일 Claude).
 def _article_llm_judge_enabled() -> bool:
     v = (os.environ.get("SAPIENS_ARTICLE_LLM_JUDGE") or "").strip().lower()
     return v in ("1", "true", "yes", "on")
 
 SELECTED_MODEL_CLAUDE = "claude"
 
-# 파이프라인: 제품은 Claude Haiku(구성 값과 무관하게 [configure_ai]가 claude로 고정).
 _RUNTIME_SELECTED_MODEL = SELECTED_MODEL_CLAUDE
 
 _token_input_total: int = 0
 _token_output_total: int = 0
 _token_model: str = ""
 
-_anthropic_client: Anthropic | None = None
+_claude_client: Any = None
 SYSTEM = (
     "당신은 한국 투자자를 위한 금융 뉴스 에디터입니다.\n"
     "뉴스를 분석해서 핵심 내용을 명확하고 구체적으로 요약하세요.\n"
@@ -254,19 +252,10 @@ def _require_json_dict(text: str) -> dict[str, Any]:
 
 
 def configure_ai(*, selected_model: str) -> None:
-    """main.py에서 Firebase settings/ai_config 읽은 뒤 호출. 런타임은 항상 Claude Haiku."""
+    """main.py에서 Firebase settings/ai_config 읽은 뒤 호출. 런타임은 항상 Claude."""
     global _RUNTIME_SELECTED_MODEL
-    m = (selected_model or "").strip().lower()
-    if m == "gemini":
-        logger.info(
-            "summarizer: Firestore selected_model=gemini 였으나 제품은 Claude Haiku로 실행합니다",
-        )
     _RUNTIME_SELECTED_MODEL = SELECTED_MODEL_CLAUDE
-    logger.info(
-        "summarizer AI runtime: selected_model=%s (anthropic_model=%s)",
-        _RUNTIME_SELECTED_MODEL,
-        CLAUDE_HAIKU_MODEL,
-    )
+    logger.info("summarizer AI runtime: selected_model=%s", _RUNTIME_SELECTED_MODEL)
 
 
 def reset_token_counters() -> None:
@@ -318,62 +307,59 @@ def _usage_meta_get_int(obj: Any, *names: str) -> int:
     return 0
 
 
-def _accumulate_anthropic_usage(message: Any) -> None:
+def _accumulate_claude_usage(response: Any) -> None:
     global _token_input_total, _token_output_total
-    u = getattr(message, "usage", None)
-    if u is None:
+    usage = getattr(response, "usage", None)
+    if usage is None:
         return
-    inp = int(getattr(u, "input_tokens", 0) or 0)
-    out = int(getattr(u, "output_tokens", 0) or 0)
+    inp = _usage_meta_get_int(usage, "input_tokens")
+    out = _usage_meta_get_int(usage, "output_tokens")
     _token_input_total += max(0, inp)
     _token_output_total += max(0, out)
-    _append_model_label(CLAUDE_HAIKU_MODEL)
+    _append_model_label(CLAUDE_MODEL)
 
 
 def _ai_any_news_enabled() -> bool:
     return True
 
 
-def _call_news_llm(user_content: str) -> str:
-    """뉴스/시황/큐레이션 — Claude Haiku."""
-    if not _ai_any_news_enabled():
-        return ""
-    return str(_call_claude_haiku(user_content) or "").strip()
-
-
-def _get_anthropic_client() -> Anthropic:
-    global _anthropic_client
-    if _anthropic_client is not None:
-        return _anthropic_client
+def _get_claude_client() -> Any:
+    global _claude_client
+    if _claude_client is not None:
+        return _claude_client
     key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not key:
         raise RuntimeError("ANTHROPIC_API_KEY 가 설정되어 있어야 합니다.")
-    _anthropic_client = Anthropic(api_key=key)
-    return _anthropic_client
+    _claude_client = anthropic.Anthropic(api_key=key)
+    return _claude_client
 
 
-def _call_claude_haiku(user_content: str) -> str:
+def _call_claude(user_content: str) -> str:
     try:
-        client = _get_anthropic_client()
-        msg = client.messages.create(
-            model=CLAUDE_HAIKU_MODEL,
+        client = _get_claude_client()
+        response = client.messages.create(
+            model=CLAUDE_MODEL,
             max_tokens=4096,
             system=SYSTEM,
             messages=[{"role": "user", "content": user_content}],
         )
         try:
-            _accumulate_anthropic_usage(msg)
+            _accumulate_claude_usage(response)
         except Exception as e:
-            logger.warning("Anthropic usage 집계 실패(무시): %s", e)
-        parts: list[str] = []
-        for block in getattr(msg, "content", None) or []:
-            if getattr(block, "type", None) == "text":
-                parts.append(getattr(block, "text", "") or "")
-        raw = "".join(parts).strip()
-        return raw
+            logger.warning("Claude usage 집계 실패(무시): %s", e)
+        if not response.content:
+            return ""
+        return str(response.content[0].text).strip()
     except Exception as e:
-        logger.exception("_call_claude_haiku 실패: %s", e)
+        logger.exception("_call_claude 실패: %s", e)
         return ""
+
+
+def _call_news_llm(user_content: str) -> str:
+    """뉴스/시황/큐레이션 — Claude."""
+    if not _ai_any_news_enabled():
+        return ""
+    return str(_call_claude(user_content) or "").strip()
 
 
 def _validate_summarize_article_shape(data: dict[str, Any]) -> None:
@@ -421,13 +407,13 @@ def _summarize_article_claude_judge_once(
     max_points_keep: int,
 ) -> dict[str, Any]:
     """
-    SAPIENS_ARTICLE_LLM_JUDGE=1: Claude Haiku 1호출·JSON 파싱 후 반환(일반 2회 재시도 루프는 생략).
+    SAPIENS_ARTICLE_LLM_JUDGE=1: Claude 1호출·JSON 파싱 후 반환(일반 2회 재시도 루프는 생략).
     JSON·스키마 오류 시 최대 2회까지 동일 프롬프트로 재시도.
     """
     last_err: Exception | None = None
     for attempt in range(2):
         try:
-            raw = _call_claude_haiku(user)
+            raw = _call_claude(user)
             if not (raw or "").strip():
                 raise ValueError("empty Claude response")
             data = _require_json_dict(raw)
