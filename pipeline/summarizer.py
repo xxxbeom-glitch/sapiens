@@ -8,7 +8,7 @@ import logging
 import os
 import re
 import time
-from typing import Any
+from typing import Any, Literal
 
 import anthropic
 
@@ -69,6 +69,16 @@ _ARTICLE_CATEGORY_ALIASES: dict[str, str] = {
     "채권": "증시",
     "매크로": "경제",
 }
+
+# 미국증시·AI 이슈(해외 RSS) 요약 시에만 프롬프트에 삽입. 국내증시(domestic_market)는 제외.
+_FOREIGN_RSS_NEWS_FEEDS: frozenset[str] = frozenset({"global_market", "ai_issue"})
+_FOREIGN_RSS_BRAND_EN_BLOCK = (
+    "【해외 RSS】영문 출처 기사입니다. 회사·브랜드·제품·서비스·모델·API·매체 이름은 "
+    "공식 영문(라틴 문자) 표기를 그대로 쓰세요(예: Google Gemini, OpenAI, Anthropic, NVIDIA, CNBC, S&P 500). "
+    "한글로 음역하거나 한글 발음으로만 쓰지 마세요(예: 젬나이, 오픈에이아이 등 금지). "
+    "headline은 한국어 문장으로 작성하되, 필요한 고유명은 위 영문 규칙을 따르세요. "
+    "summary_points도 설명은 한국어, 고유명은 영문 표기를 유지하세요.\n"
+)
 
 _SUMMARIZE_ARTICLE_CATEGORY_BLOCK = (
     "category는 반드시 다음 중 **정확히 표기된 문자열 하나**만 사용하세요: "
@@ -431,11 +441,16 @@ def _summarize_article_claude_judge_once(
     raise last_err or RuntimeError("claude_judge_once summarize failed")
 
 
+NewsFeedId = Literal["domestic_market", "global_market", "ai_issue"]
+
+
 def summarize_article(
     title: str,
     summary: str,
     source: str,
     body: str = "",
+    *,
+    news_feed: NewsFeedId | None = None,
 ) -> dict[str, Any]:
     """
     반환:
@@ -459,12 +474,16 @@ def summarize_article(
         article_block = f"제목: {title}\n목록/리드 요약문:\n{summary_stripped}\n"
 
     max_points_keep = 10
+    foreign_rss_extra = (
+        _FOREIGN_RSS_BRAND_EN_BLOCK if (news_feed in _FOREIGN_RSS_NEWS_FEEDS) else ""
+    )
     user = (
         f"다음 뉴스를 분석해 JSON만 출력하세요.\n"
         f'키: "headline", "category", "summary_points"\n'
         f"headline·summary_points 각 문자열 안에 **큰따옴표(\")를 넣지 마세요**. "
         f"인용이 필요하면 작은따옴표(')나 「」를 쓰세요.\n"
         f"headline은 반드시 한국어로 작성하세요. 원문이 영어면 자연스러운 한국어 제목으로 번역하세요.\n"
+        f"{foreign_rss_extra}"
         f"{_SUMMARIZE_ARTICLE_CATEGORY_BLOCK}"
         f"summary_points는 기사 핵심을 빠짐없이 담은 문자열 배열로 작성하세요.\n"
         f"반드시 2개 이상 4개 이하로 작성하세요. 각 포인트는 30자 이상 70자 이내로 작성하세요.\n"
@@ -589,6 +608,8 @@ def generate_market_report(
 
 def summarize_batch(
     items: list[dict[str, Any]],
+    *,
+    news_feed: NewsFeedId | None = None,
 ) -> list[dict[str, Any]]:
     """기사 목록 순차 요약. 항목 사이 0.5초."""
     out: list[dict[str, Any]] = []
@@ -599,6 +620,7 @@ def summarize_batch(
                 summary=it.get("summary", ""),
                 source=it.get("source", ""),
                 body=str(it.get("body") or ""),
+                news_feed=news_feed,
             )
             out.append({**it, "_ai": ai})
         except Exception as e:

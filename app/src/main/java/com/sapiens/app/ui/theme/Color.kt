@@ -99,6 +99,8 @@ object PublisherChipPalette {
     val chosunFg = Color(0xFFDD9B96)
     val cnbcBg = Color(0xFF2B6734)
     val cnbcFg = Color(0xFF7CC387)
+    val yahooFinanceBg = Color(0xFF6A71C3)
+    val yahooFinanceFg = Color(0xFFC8CCFF)
     /** 매칭 안 됨(해외·국내 등) */
     val defaultBg = Color(0xFF222222)
     val defaultFg = Color(0xFF888888)

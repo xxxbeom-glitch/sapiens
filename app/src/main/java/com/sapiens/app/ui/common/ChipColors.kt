@@ -35,6 +35,8 @@ fun publisherChipColors(displayLabel: String): Pair<Color, Color> {
     return when {
         lower.contains("cnbc") ->
             PublisherChipPalette.cnbcBg to PublisherChipPalette.cnbcFg
+        lower.contains("yahoo") ->
+            PublisherChipPalette.yahooFinanceBg to PublisherChipPalette.yahooFinanceFg
         t.contains("매일경제") ->
             PublisherChipPalette.mkBg to PublisherChipPalette.mkFg
         t.contains("한국경제") ->

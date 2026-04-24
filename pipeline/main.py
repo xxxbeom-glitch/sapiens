@@ -92,12 +92,12 @@ def _run_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
         if ai:
             fs_domestic_market.append(summarizer.merge_to_firestore_article(row, ai))
     fs_global_market: list[dict] = []
-    for row in summarizer.summarize_batch(domestic["global_market"]):
+    for row in summarizer.summarize_batch(domestic["global_market"], news_feed="global_market"):
         ai = row.pop("_ai", None)
         if ai:
             fs_global_market.append(summarizer.merge_to_firestore_article(row, ai))
     fs_ai_issue: list[dict] = []
-    for row in summarizer.summarize_batch(domestic["ai_issue"]):
+    for row in summarizer.summarize_batch(domestic["ai_issue"], news_feed="ai_issue"):
         ai = row.pop("_ai", None)
         if ai:
             fs_ai_issue.append(summarizer.merge_to_firestore_article(row, ai))
@@ -149,13 +149,13 @@ def _run_pipeline_full(crawler: Any, firebase_client: Any, summarizer: Any) -> N
             fs_domestic_market.append(summarizer.merge_to_firestore_article(row, ai))
 
     fs_global_market: list[dict] = []
-    for row in summarizer.summarize_batch(domestic["global_market"]):
+    for row in summarizer.summarize_batch(domestic["global_market"], news_feed="global_market"):
         ai = row.pop("_ai", None)
         if ai:
             fs_global_market.append(summarizer.merge_to_firestore_article(row, ai))
 
     fs_ai_issue: list[dict] = []
-    for row in summarizer.summarize_batch(domestic["ai_issue"]):
+    for row in summarizer.summarize_batch(domestic["ai_issue"], news_feed="ai_issue"):
         ai = row.pop("_ai", None)
         if ai:
             fs_ai_issue.append(summarizer.merge_to_firestore_article(row, ai))

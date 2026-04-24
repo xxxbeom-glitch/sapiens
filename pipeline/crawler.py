@@ -841,8 +841,9 @@ RSS_FEEDS_NEWS_OVERSEAS: list[str] = [
     "https://www.chosun.com/arc/outboundfeeds/rss/category/international/?outputType=xml",
 ]
 # ai_issue — CNBC Tech combinedcms + Yahoo Finance 다티커 헤드라인 RSS
+# CNBC: 테스트 중 임시 비활성화(복구 시 아래 한 줄을 RSS_FEEDS_NEWS_AI 리스트 맨 앞에 다시 넣으면 됨).
+# "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910",
 RSS_FEEDS_NEWS_AI: list[str] = [
-    "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910",
     "https://finance.yahoo.com/rss/headline?s=NVDA,AMD,AVGO,TSM,MU,ANET,ASML,LRCX,INTC,MSFT,GOOGL,AMZN,META,PLTR,SNOW,ORCL,CRM,NOW,ADBE,TSLA,AAPL,FIG",
 ]
 # global_market 전용 — Yahoo Finance rssindex + 다티커 헤드라인 (`crawl_domestic`에서 URL 도메인 필터와 함께 사용)
@@ -1096,7 +1097,7 @@ def crawl_rss_domestic_overseas() -> list[dict[str, Any]]:
 
 
 def crawl_rss_domestic_ai_issue() -> list[dict[str, Any]]:
-    """뉴스 탭 — AI ISSUE (CNBC Tech RSS + Yahoo 다티커 헤드라인 RSS, MK/한경 본문 fetch 없음)."""
+    """뉴스 탭 — AI ISSUE (RSS_FEEDS_NEWS_AI: Yahoo 헤드라인 + 설정 시 CNBC Tech, MK/한경 본문 fetch 없음)."""
     return _crawl_rss_feed_urls(
         RSS_FEEDS_NEWS_AI,
         max_items_per_feed=RSS_DOMESTIC_CNBC_MAX_ITEMS,
