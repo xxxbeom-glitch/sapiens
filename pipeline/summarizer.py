@@ -329,20 +329,9 @@ def _ai_any_news_enabled() -> bool:
     return True
 
 
-def _ai_any_company_enabled() -> bool:
-    return True
-
-
 def _call_news_llm(user_content: str) -> str:
     """뉴스/시황/큐레이션 — Gemini."""
     if not _ai_any_news_enabled():
-        return ""
-    return str(_call_gemini(user_content) or "").strip()
-
-
-def _call_company_llm(user_content: str) -> str:
-    """종목 분석 — Gemini."""
-    if not _ai_any_company_enabled():
         return ""
     return str(_call_gemini(user_content) or "").strip()
 
@@ -356,63 +345,6 @@ def _get_gemini_client() -> Any:
         raise RuntimeError("GEMINI_API_KEY 가 설정되어 있어야 합니다.")
     _gemini_client = genai.Client(api_key=key)
     return _gemini_client
-
-
-def _stub_company_ai_result() -> dict[str, Any]:
-    """종목 분석 API 미사용 시 Firestore 호환 기본값."""
-    hs = {
-        "debt_ratio_status": "안정",
-        "current_ratio_status": "안정",
-        "equity_ratio_status": "안정",
-        "cash_status": "안정",
-        "interest_status": "안정",
-    }
-    return {
-        "business": "",
-        "revenue_model": "",
-        "outlook_2026": "",
-        "risk_factors": "",
-        "capital": "",
-        "health_summary": "",
-        "ai_analyst_summary": "",
-        "health_status": hs,
-        "health_score": 3,
-    }
-
-
-def _finalize_company_ai_dict(data: dict[str, Any]) -> dict[str, Any]:
-    required_str_keys = (
-        "business",
-        "revenue_model",
-        "outlook_2026",
-        "risk_factors",
-        "capital",
-        "health_summary",
-        "ai_analyst_summary",
-    )
-    for k in required_str_keys:
-        if k not in data or data[k] is None:
-            data[k] = ""
-        else:
-            data[k] = str(data[k])
-    hs = data.get("health_status")
-    if not isinstance(hs, dict):
-        hs = {}
-        data["health_status"] = hs
-    for hk in (
-        "debt_ratio_status",
-        "current_ratio_status",
-        "equity_ratio_status",
-        "cash_status",
-        "interest_status",
-    ):
-        hs.setdefault(hk, "안정")
-    try:
-        sc = int(data.get("health_score"))
-    except (TypeError, ValueError):
-        sc = 3
-    data["health_score"] = max(0, min(5, sc))
-    return data
 
 
 def _call_gemini(user_content: str) -> str:
@@ -542,6 +474,7 @@ def summarize_article(
         f"headline은 반드시 한국어로 작성하세요. 원문이 영어면 자연스러운 한국어 제목으로 번역하세요.\n"
         f"{_SUMMARIZE_ARTICLE_CATEGORY_BLOCK}"
         f"summary_points는 기사 핵심을 빠짐없이 담은 문자열 배열로 작성하세요.\n"
+        f"반드시 2개 이상 4개 이하로 작성하세요. 각 포인트는 1~2문장으로 제한하세요.\n"
         f"중요한 사실·수치·배경·영향을 누락하지 말고, 내용을 함축하거나 생략하지 마세요.\n"
         f"구체성 규칙(headline·summary_points 모두 적용):\n"
         f"- 기업명, 종목명, 브랜드명, 인물명은 원문에 나온 표기를 그대로 포함할 것.\n"
@@ -549,9 +482,7 @@ def summarize_article(
         f"- 「특정 종목」「해당 기업」「관련 주」처럼 추상적으로 바꾸어 고유명·수치를 대체하거나 감추지 말 것.\n"
         f"- 핵심 정보(누가·무엇을·얼마나)를 빠뜨리지 말고 구체적으로 서술할 것.\n"
         f"어려운 경제/금융/전문 용어는 뜻을 유지하되 쉬운 일상 언어로 풀어쓰세요.\n"
-        f"문장은 짧고 자연스럽게 쓰고, 뉴스식 딱딱한 문체는 피하세요.\n"
-        f"분량은 고정하지 말고 내용량에 맞춰 유동적으로 작성하세요.\n"
-        f"(중요 내용이 많으면 길게, 단순한 내용이면 짧게)\n\n"
+        f"문장은 짧고 자연스럽게 쓰고, 뉴스식 딱딱한 문체는 피하세요.\n\n"
         f"{article_block}"
         f"출처: {source}\n"
     )
@@ -681,56 +612,6 @@ def summarize_batch(
             logger.error("배치 항목 스킵: %s — %s", it.get("title", "")[:40], e)
         time.sleep(0.5)
     return out
-
-
-def analyze_company(
-    ticker: str,
-    name: str,
-    financials: dict[str, Any],
-    health: dict[str, Any],
-    analyst: dict[str, Any],
-    profile: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """
-    기업 서술·건전성 라벨·점수·AI 증권 의견 (Gemini).
-    """
-    profile = profile or {}
-    payload = {
-        "ticker": ticker,
-        "name": name,
-        "profile": profile,
-        "financials": financials,
-        "health": health,
-        "analyst": analyst,
-    }
-    user = (
-        "다음 기업 데이터를 바탕으로 한국 투자자용 분석 JSON만 출력하세요.\n"
-        '필수 키: "business", "revenue_model", "outlook_2026", "risk_factors", "capital", '
-        '"health_status", "health_summary", "health_score", "ai_analyst_summary"\n'
-        "health_status는 객체이며 반드시 다음 키 포함:\n"
-        "debt_ratio_status, current_ratio_status, equity_ratio_status, "
-        "cash_status, interest_status\n"
-        "일반 지표 값은 우량/안정/주의/위험 중 하나.\n"
-        "cash_status만 풍부/안정/주의/부족 중 하나.\n"
-        "health_score: 0~5 정수.\n\n"
-        + json.dumps(payload, ensure_ascii=False)[:45000]
-    )
-    if not _ai_any_company_enabled():
-        logger.info("analyze_company: AI 모두 off — 스텁 저장")
-        return _stub_company_ai_result()
-
-    last_err: Exception | None = None
-    for attempt in range(2):
-        try:
-            raw = _call_company_llm(user)
-            data = _require_json_dict(raw)
-            return _finalize_company_ai_dict(data)
-        except Exception as e:
-            last_err = e
-            logger.warning("analyze_company 재시도 (%s): %s", attempt + 1, e)
-            if attempt == 0:
-                time.sleep(1.0)
-    raise last_err or RuntimeError("analyze_company failed")
 
 
 def merge_to_firestore_article(raw: dict[str, Any], ai: dict[str, Any]) -> dict[str, Any]:

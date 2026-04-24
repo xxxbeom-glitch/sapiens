@@ -6,7 +6,7 @@ PIPELINE_SECTION 환경변수:
   (구) domestic_news 는 news 와 동일하게 처리
 
   - all: 아래 두 블록을 순서대로 실행(각 블록은 해당 섹션의 휴장 규칙으로 개별 스킵).
-  - full: 레거시 전체 파이프라인(피드 초기화 + 종목 루프 포함).
+  - full: 레거시 전체 파이프라인(피드 초기화 등).
 
 `from main import run` 을 쓰는 러너(CI, Docker 등)는 import 시점에 부작용·무거운 초기화가
 돌아가지 않도록, 로깅 설정·환경 로드·하위 모듈 import는 모두 `run()` 안에서 수행합니다.
@@ -61,33 +61,19 @@ def is_skip_day(section: str) -> Tuple[bool, str]:
     return False, ""
 
 
-def _schedule_news_push(firebase_client: Any) -> None:
+def _schedule_unified_feed_push(firebase_client: Any) -> None:
+    """뉴스·마켓 반영 후 FCM 예약 1건(토픽 `sapiens_feed`)."""
     import push_schedule_util as psu
 
     when_k = psu.resolve_push_target_kst()
-    title, body = psu.news_title_body(when_k)
+    title, body = psu.unified_feed_push_content()
     firebase_client.write_push_schedule_entry(
-        doc_id=psu.push_doc_id("news", when_k),
+        doc_id=psu.push_doc_id("feed", when_k),
         section="news",
         scheduled_at_utc_iso=psu.kst_to_utc_iso_z(when_k),
         title=title,
         body=body,
-        topic="news_update",
-    )
-
-
-def _schedule_market_push(firebase_client: Any) -> None:
-    import push_schedule_util as psu
-
-    when_k = psu.resolve_push_target_kst()
-    title, body = psu.market_title_body(when_k)
-    firebase_client.write_push_schedule_entry(
-        doc_id=psu.push_doc_id("market", when_k),
-        section="market",
-        scheduled_at_utc_iso=psu.kst_to_utc_iso_z(when_k),
-        title=title,
-        body=body,
-        topic="market_update",
+        topic=psu.UNIFIED_FEED_TOPIC,
     )
 
 
@@ -119,7 +105,6 @@ def _run_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
     firebase_client.save_news_feed(fs_domestic_market, "domestic_market")
     firebase_client.save_news_feed(fs_global_market, "global_market")
     firebase_client.save_news_feed(fs_ai_issue, "ai_issue")
-    _schedule_news_push(firebase_client)
 
 
 def _run_market_only(crawler: Any, firebase_client: Any) -> None:
@@ -127,7 +112,6 @@ def _run_market_only(crawler: Any, firebase_client: Any) -> None:
     naver_upjong = crawler.crawl_naver_stock_upjong()
     firebase_client.save_market_themes(naver_themes)
     firebase_client.save_market_industries(naver_upjong)
-    _schedule_market_push(firebase_client)
 
 
 def _run_pipeline_full(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
@@ -190,35 +174,7 @@ def _run_pipeline_full(crawler: Any, firebase_client: Any, summarizer: Any) -> N
     firebase_client.save_news_feed(fs_global_market, "global_market")
     firebase_client.save_news_feed(fs_ai_issue, "ai_issue")
 
-    _schedule_news_push(firebase_client)
-    _schedule_market_push(firebase_client)
-
-    company_saved = 0
-    for bundle in crawler.crawl_all_company_bundles():
-        ticker = str(bundle.get("ticker", "")).strip()
-        if not ticker:
-            continue
-        try:
-            name = str(bundle.get("name") or ticker)
-            fin = bundle.get("financials") or {}
-            he = bundle.get("health") or {}
-            ana = bundle.get("analyst") or {}
-            prof = bundle.get("profile") or {}
-            ai_company = summarizer.analyze_company(ticker, name, fin, he, ana, prof)
-            doc: dict = {
-                "ticker": ticker,
-                "name": name,
-                "profile": prof,
-                "financials": fin,
-                "health": he,
-                "analyst": ana,
-            }
-            doc.update(ai_company)
-            firebase_client.save_company_data(ticker, doc)
-            company_saved += 1
-        except Exception as e:
-            logger.exception("종목 파이프라인 실패 [%s]: %s", ticker, e)
-        time.sleep(0.5)
+    _schedule_unified_feed_push(firebase_client)
 
     total_fs = (
         len(fs_domestic_market)
@@ -226,10 +182,9 @@ def _run_pipeline_full(crawler: Any, firebase_client: Any, summarizer: Any) -> N
         + len(fs_ai_issue)
     )
     logger.info(
-        "완료 — 뉴스 저장: %s건, 지표: %s, 종목 저장: %s",
+        "완료 — 뉴스 저장: %s건, 지표: %s",
         total_fs,
         len(indicators),
-        company_saved,
     )
 
 
@@ -308,10 +263,13 @@ def run() -> None:
         if section == PIPELINE_SECTION_ALL:
             _maybe_news()
             _maybe_market()
+            _schedule_unified_feed_push(firebase_client)
         elif section == PIPELINE_SECTION_NEWS:
             _run_news_only(crawler, firebase_client, summarizer)
+            _schedule_unified_feed_push(firebase_client)
         elif section == PIPELINE_SECTION_MARKET:
             _run_market_only(crawler, firebase_client)
+            _schedule_unified_feed_push(firebase_client)
 
         elapsed = time.perf_counter() - t0
         logger.info("파이프라인 종료 section=%s, 소요 %.1f초", section, elapsed)

@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.stableId
+import com.sapiens.app.data.text.normalizeNewsTextForDisplay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -109,24 +110,26 @@ private fun articleToJson(a: Article): JSONObject =
 
 private fun jsonToArticle(o: JSONObject): Article? {
     return try {
-        val headline = o.optString("headline", "").trim()
+        val headline = o.optString("headline", "").trim().normalizeNewsTextForDisplay()
         if (headline.isBlank()) return null
         val spArr = o.optJSONArray("summaryPoints")
         val points = buildList {
             if (spArr != null) {
                 for (i in 0 until spArr.length()) {
-                    spArr.optString(i).takeIf { it.isNotBlank() }?.let(::add)
+                    spArr.optString(i).takeIf { it.isNotBlank() }
+                        ?.normalizeNewsTextForDisplay()
+                        ?.let(::add)
                 }
             }
         }
         Article(
-            source = o.optString("source", ""),
+            source = o.optString("source", "").normalizeNewsTextForDisplay(),
             headline = headline,
-            summary = o.optString("summary", ""),
+            summary = o.optString("summary", "").normalizeNewsTextForDisplay(),
             time = o.optString("time", ""),
-            category = o.optString("category", ""),
+            category = o.optString("category", "").normalizeNewsTextForDisplay(),
             summaryPoints = points,
-            tag = o.optString("tag", ""),
+            tag = o.optString("tag", "").normalizeNewsTextForDisplay(),
             sourceColor = o.optString("sourceColor", "").trim().ifBlank { null },
             imageUrl = o.optString("imageUrl", ""),
             thumbnailUrl = o.optString("thumbnailUrl", ""),

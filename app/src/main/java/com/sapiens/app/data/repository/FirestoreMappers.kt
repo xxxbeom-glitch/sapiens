@@ -8,6 +8,7 @@ import com.sapiens.app.data.model.MarketIndicator
 import com.sapiens.app.data.model.MarketTheme
 import com.sapiens.app.data.model.ThemeStock
 import com.google.firebase.firestore.DocumentSnapshot
+import com.sapiens.app.data.text.normalizeNewsTextForDisplay
 
 internal fun DocumentSnapshot.parseArticles(field: String = "articles"): List<Article> {
     if (!exists()) return emptyList()
@@ -115,7 +116,9 @@ private fun Map<*, *>.toArticle(): Article? {
         "article image fields imageUrl='${this["imageUrl"]}' thumbnailUrl='${this["thumbnailUrl"]}' " +
             "thumbnail_url='${this["thumbnail_url"]}' image_url='${this["image_url"]}' mapped='$imageUrl/$thumbnailUrl'"
     )
-    val summaryPoints = (this["summaryPoints"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+    val summaryPoints =
+        (this["summaryPoints"] as? List<*>)?.mapNotNull { it as? String }?.map { it.normalizeNewsTextForDisplay() }
+            ?: emptyList()
     val url = (
         this["url"] as? String
             ?: this["link"] as? String

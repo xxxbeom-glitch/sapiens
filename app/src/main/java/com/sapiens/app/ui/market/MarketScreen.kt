@@ -83,7 +83,6 @@ private val ThemeStockLogoNameSpacing = Spacing.space12
 @Composable
 fun MarketScreen(
     viewModel: MarketViewModel,
-    onThemeStockNameClick: (stockCode: String) -> Unit,
 ) {
     val marketThemes by viewModel.marketThemes.collectAsState()
     val marketIndustries by viewModel.marketIndustries.collectAsState()
@@ -131,14 +130,8 @@ fun MarketScreen(
             beyondViewportPageCount = 1,
         ) { page ->
             when (page) {
-                0 -> MarketThemesTabBody(
-                    themes = marketThemes,
-                    onThemeStockNameClick = onThemeStockNameClick,
-                )
-                1 -> MarketIndustriesTabBody(
-                    industries = marketIndustries,
-                    onThemeStockNameClick = onThemeStockNameClick,
-                )
+                0 -> MarketThemesTabBody(themes = marketThemes)
+                1 -> MarketIndustriesTabBody(industries = marketIndustries)
             }
         }
     }
@@ -147,7 +140,6 @@ fun MarketScreen(
 @Composable
 private fun MarketThemesTabBody(
     themes: List<MarketTheme>,
-    onThemeStockNameClick: (stockCode: String) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -161,7 +153,6 @@ private fun MarketThemesTabBody(
             MarketThemeCard(
                 theme = theme,
                 modifier = Modifier.padding(horizontal = Spacing.space16),
-                onStockNameClick = onThemeStockNameClick
             )
         }
     }
@@ -170,7 +161,6 @@ private fun MarketThemesTabBody(
 @Composable
 private fun MarketIndustriesTabBody(
     industries: List<MarketTheme>,
-    onThemeStockNameClick: (stockCode: String) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -184,7 +174,6 @@ private fun MarketIndustriesTabBody(
             MarketThemeCard(
                 theme = industry,
                 modifier = Modifier.padding(horizontal = Spacing.space16),
-                onStockNameClick = onThemeStockNameClick
             )
         }
     }
@@ -221,7 +210,6 @@ private fun ThemeCardChangeText(
 private fun MarketThemeCard(
     theme: MarketTheme,
     modifier: Modifier = Modifier,
-    onStockNameClick: (stockCode: String) -> Unit,
 ) {
     val svgLoader = rememberSvgImageLoader()
     val displayStocks = theme.stocksForDisplay()
@@ -298,7 +286,6 @@ private fun MarketThemeCard(
                     ThemeStockRow(
                         stock = stock,
                         imageLoader = svgLoader,
-                        onNameClick = { onStockNameClick(stock.code) }
                     )
                     if (index < displayStocks.lastIndex) {
                         HorizontalDivider(
@@ -321,7 +308,6 @@ private fun MarketThemeCard(
 private fun ThemeStockRow(
     stock: ThemeStock,
     imageLoader: ImageLoader,
-    onNameClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -367,13 +353,7 @@ private fun ThemeStockRow(
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .weight(1f, fill = false)
-                    .clickable(
-                        indication = null,
-                        interactionSource = remember { MutableInteractionSource() },
-                        onClick = onNameClick
-                    )
+                modifier = Modifier.weight(1f, fill = false)
             )
         }
         Column(

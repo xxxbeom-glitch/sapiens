@@ -296,18 +296,6 @@ def save_market_industries(industries: List[dict[str, Any]]) -> None:
         logger.exception("업종 목록 조회(정리) 실패: %s", e)
 
 
-def save_company_data(ticker: str, data: dict[str, Any]) -> None:
-    """companies/{ticker} 문서에 병합 저장 + updated_at."""
-    try:
-        db = _get_db()
-        db.collection("companies").document(ticker).set(
-            {**data, "updated_at": SERVER_TIMESTAMP},
-            merge=True,
-        )
-    except Exception as e:
-        logger.exception("save_company_data 실패 [%s]: %s", ticker, e)
-
-
 def save_news_feed(articles: List[dict[str, Any]], feed_type: str) -> None:
     """
     news/{feed_type} 문서에 저장.

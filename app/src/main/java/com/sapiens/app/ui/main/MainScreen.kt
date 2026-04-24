@@ -22,7 +22,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -33,16 +32,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.sapiens.app.BuildConfig
 import com.sapiens.app.R
-import com.sapiens.app.data.stock.StockDetailRepositoryImpl
 import com.sapiens.app.data.repository.NewsRepositoryImpl
 import com.sapiens.app.data.sync.UserCloudBackupRepository
 import com.sapiens.app.data.sync.UserCloudBackupScheduler
 import com.sapiens.app.ui.market.MarketScreen
 import com.sapiens.app.ui.market.MarketViewModel
-import com.sapiens.app.ui.market.StockDetailBottomSheet
-import com.sapiens.app.ui.market.StockDetailViewModel
 import com.sapiens.app.ui.my.MyScreen
 import com.sapiens.app.ui.news.NewsScreen
 import com.sapiens.app.ui.news.NewsViewModel
@@ -71,19 +66,13 @@ fun MainScreen(
     onNavigateToSectionConsumed: () -> Unit = {},
 ) {
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-    var stockDetailCode by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
     val newsRepository = remember { NewsRepositoryImpl() }
-    val stockDetailRepository = remember {
-        StockDetailRepositoryImpl(BuildConfig.PUBLIC_DATA_API_KEY)
-    }
     val newsViewModel: NewsViewModel = viewModel(
         factory = NewsViewModel.factory(newsRepository)
     )
     val marketViewModel: MarketViewModel = viewModel(factory = MarketViewModel.factory(newsRepository))
-    val stockDetailViewModel: StockDetailViewModel =
-        viewModel(factory = StockDetailViewModel.factory(stockDetailRepository))
     val authViewModel: AuthViewModel = viewModel(
         factory = AuthViewModel.factory(context.applicationContext as Application)
     )
@@ -135,24 +124,10 @@ fun MainScreen(
         ) {
             when (selectedTabIndex) {
                 0 -> NewsScreen(viewModel = newsViewModel)
-                1 -> MarketScreen(
-                    viewModel = marketViewModel,
-                    onThemeStockNameClick = { code -> stockDetailCode = code }
-                )
+                1 -> MarketScreen(viewModel = marketViewModel)
                 else -> MyScreen(authViewModel = authViewModel)
             }
         }
-    }
-
-    stockDetailCode?.let { code ->
-        StockDetailBottomSheet(
-            stockCode = code,
-            viewModel = stockDetailViewModel,
-            onDismissRequest = {
-                stockDetailCode = null
-                stockDetailViewModel.reset()
-            }
-        )
     }
 
 }

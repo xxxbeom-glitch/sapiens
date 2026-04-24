@@ -1,14 +1,14 @@
 name: Sapiens Pipeline
 
 # ━ 스케줄(UTC): KST 20분 전 작업 → 정각 푸시(PUSH_KST_HOUR는 워크플로에서 고정).
+# ━ 07:40 슬롯은 PIPELINE_SECTION=all (뉴스+마켓 동시) → 푸시 1건(sapiens_feed).
 # ━ 수동 실행: job 1개(manual), `section` → PIPELINE_SECTION. 푸시 시각은 PUSH_KST 없을 때 다음 KST 정각.
 'on':
   schedule:
-    - cron: "40 22 * * *"  # 07:40 KST 뉴스
+    - cron: "40 22 * * *"  # 07:40 KST 뉴스+마켓(all)
     - cron: "40 1 * * *"   # 10:40 KST 뉴스
     - cron: "40 5 * * *"   # 14:40 KST 뉴스
-    - cron: "40 7 * * *"   # 16:40 KST 뉴스+마켓
-    - cron: "40 23 * * *"  # 08:40 KST 마켓(전용)
+    - cron: "40 7 * * *"   # 16:40 KST 뉴스+마켓(all)
   workflow_dispatch:
     inputs:
       section:
@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule' && github.event.schedule == '40 22 * * *'
     env:
-      PIPELINE_SECTION: news
+      PIPELINE_SECTION: all
       PUSH_KST_HOUR: "8"
     steps:
       - uses: actions/checkout@v4
@@ -100,29 +100,6 @@ jobs:
     env:
       PIPELINE_SECTION: all
       PUSH_KST_HOUR: "17"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install dependencies
-        run: pip install -r pipeline/requirements.txt
-      - name: Run pipeline
-        working-directory: pipeline
-        env:
-          PIPELINE_SECTION: ${{ env.PIPELINE_SECTION }}
-          PUSH_KST_HOUR: ${{ env.PUSH_KST_HOUR }}
-          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          SAPIENS_ARTICLE_LLM_JUDGE: "1"
-        run: python main.py
-
-  market_08_40_kst:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' && github.event.schedule == '40 23 * * *'
-    env:
-      PIPELINE_SECTION: market
-      PUSH_KST_HOUR: "9"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

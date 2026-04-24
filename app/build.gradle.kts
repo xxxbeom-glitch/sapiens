@@ -1,5 +1,3 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -22,14 +20,6 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        val localProps = Properties()
-        val lp = rootProject.file("local.properties")
-        if (lp.exists()) {
-            lp.inputStream().use { localProps.load(it) }
-        }
-        val publicDataKey = (localProps.getProperty("PUBLIC_DATA_API_KEY") ?: "").trim()
-        buildConfigField("String", "PUBLIC_DATA_API_KEY", "\"${publicDataKey.replace("\"", "\\\"")}\"")
     }
 
     buildTypes {
@@ -47,7 +37,6 @@ android {
     }
     buildFeatures {
         compose = true
-        buildConfig = true
     }
     packaging {
         resources {
@@ -93,6 +82,8 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    // 뉴스 제목·요약 등 한자어 → 한글 표기 (Firestore/북마크 로드 시 적용)
+    implementation("kr.bydelta:koalanlp-core:2.1.4")
     // 동일 API(barteksc 기반). JitPack `com.github.barteksc:android-pdf-viewer`는 해석 실패가 많아 Maven Central 포크 사용.
     implementation("com.github.mhiew:android-pdf-viewer:3.2.0-beta.1") {
         exclude(group = "com.android.support")
