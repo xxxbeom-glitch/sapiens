@@ -22,7 +22,6 @@ import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -40,8 +39,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.sapiens.app.data.model.Article
+import com.sapiens.app.ui.news.newsPublisherChipText
 import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.AppShapes
+import com.sapiens.app.ui.theme.BottomSheet
 import com.sapiens.app.ui.theme.BottomSheetBottomPadding
 import com.sapiens.app.ui.theme.Card
 import com.sapiens.app.ui.theme.OnPrimaryFixed
@@ -82,7 +83,7 @@ fun ArticleBottomSheet(
     ModalBottomSheet(
         sheetState = sheetState,
         onDismissRequest = onDismissRequest,
-        containerColor = Card,
+        containerColor = BottomSheet,
         dragHandle = null,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -107,43 +108,51 @@ fun ArticleBottomSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = SheetTop),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "${article.source} · ${article.time}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
+                PublisherChip(
+                    text = newsPublisherChipText(article.source).ifBlank { article.source.trim() }
+                        .ifBlank { "출처" }
                 )
-                CategoryChip(label = article.category.ifBlank { "경제" })
             }
 
             when (kind) {
                 ArticleBottomSheetKind.Standard -> {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = Spacing.space14),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(top = Spacing.space14)
                     ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = article.headline,
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = TextPrimary,
+                                maxLines = 3,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(modifier = Modifier.width(Spacing.space12))
+                            Icon(
+                                imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                                contentDescription = if (isBookmarked) "저장됨" else "저장",
+                                tint = if (isBookmarked) Accent else TextSecondary,
+                                modifier = Modifier
+                                    .size(Spacing.space24)
+                                    .clickable(
+                                        indication = null,
+                                        interactionSource = remember { MutableInteractionSource() }
+                                    ) { onBookmarkToggle() }
+                            )
+                        }
                         Text(
-                            text = article.headline,
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = TextPrimary,
-                            maxLines = 3,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(modifier = Modifier.width(Spacing.space12))
-                        Icon(
-                            imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                            contentDescription = if (isBookmarked) "저장됨" else "저장",
-                            tint = if (isBookmarked) Accent else TextSecondary,
-                            modifier = Modifier
-                                .size(Spacing.space24)
-                                .clickable(
-                                    indication = null,
-                                    interactionSource = remember { MutableInteractionSource() }
-                                ) { onBookmarkToggle() }
+                            text = articleTimeForDisplay(article.time),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                            modifier = Modifier.padding(top = Spacing.space6)
                         )
                     }
                 }
@@ -154,22 +163,27 @@ fun ArticleBottomSheet(
                             lineHeight = (lineHeight.value - 1f).sp
                         )
                     }
-                    Text(
-                        text = article.headline,
-                        style = headlineStyle,
-                        color = TextPrimary,
-                        maxLines = 3,
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = Spacing.space14)
-                    )
+                    ) {
+                        Text(
+                            text = article.headline,
+                            style = headlineStyle,
+                            color = TextPrimary,
+                            maxLines = 3,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            text = articleTimeForDisplay(article.time),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                            modifier = Modifier.padding(top = Spacing.space6)
+                        )
+                    }
                 }
             }
-
-            HorizontalDivider(
-                modifier = Modifier.padding(top = Spacing.space14),
-                color = TextSecondary.copy(alpha = 0.24f)
-            )
 
             Column(
                 modifier = Modifier.padding(top = Spacing.space14),
@@ -270,14 +284,14 @@ private fun NewsSaveBookmarkButton(
 }
 
 @Composable
-private fun CategoryChip(label: String) {
-    val (backgroundColor, textColor) = categoryChipColors(label)
+private fun PublisherChip(text: String) {
+    val (backgroundColor, textColor) = categoryChipColors(text)
     Surface(
         color = backgroundColor,
         shape = AppShapes.chip
     ) {
         Text(
-            text = label,
+            text = text,
             style = MaterialTheme.typography.labelSmall,
             color = textColor,
             modifier = Modifier.padding(horizontal = Spacing.space8, vertical = Spacing.space3)

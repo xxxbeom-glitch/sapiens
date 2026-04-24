@@ -69,6 +69,7 @@ import com.sapiens.app.data.store.UserPreferencesRepository
 import com.sapiens.app.messaging.FcmTopicSync
 import com.sapiens.app.ui.common.ArticleBottomSheet
 import com.sapiens.app.ui.common.ArticleBottomSheetKind
+import com.sapiens.app.ui.common.articleTimeForDisplay
 import com.sapiens.app.ui.common.transformNaverFinanceNewsReadUrlForMobile
 import com.sapiens.app.ui.theme.AppShapes
 import com.sapiens.app.ui.theme.Background
@@ -513,7 +514,7 @@ private fun BookmarkPagerPanel(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "${entry.article.source} · ${entry.article.time}",
+                            text = "${entry.article.source} · ${articleTimeForDisplay(entry.article.time)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )

@@ -870,19 +870,17 @@ RSS_FEEDS_OVERSEAS_TECH: list[str] = [
 ]
 
 # --- 뉴스 탭 국내: RSS 3풀(아래) → `crawl_domestic`에서 LLM 3분류(NEWS_TAB_CLASSIFICATION_INSTRUCTION_KO) → Firestore documents ---
-# 매경 30000001=헤드라인, 30100041=경제, 50200011=증권 / 한경 finance·economy
+# 매경 30100041=경제, 50200011=증권 / 한경 finance·economy
 RSS_FEEDS_NEWS_KR_MARKET: list[str] = [
-    "https://www.mk.co.kr/rss/30000001/",
     "https://www.mk.co.kr/rss/30100041/",
     "https://www.mk.co.kr/rss/50200011/",
     "https://www.hankyung.com/feed/finance",
     "https://www.hankyung.com/feed/economy",
 ]
-# 매경 30300018=국제 / 한경 international·all-news / 조선 international
+# 매경 30300018=국제 / 한경 international / 조선 international
 RSS_FEEDS_NEWS_OVERSEAS: list[str] = [
     "https://www.mk.co.kr/rss/30300018/",
     "https://www.hankyung.com/feed/international",
-    "https://www.hankyung.com/feed/all-news",
     "https://www.chosun.com/arc/outboundfeeds/rss/category/international/?outputType=xml",
 ]
 # ai_issue — CNBC Tech(19854910) search/combinedcms RSS
@@ -2070,26 +2068,12 @@ def _llm_select_cnbc_pool_for_ai_issue_tab(
     return kept
 
 
-def _merge_ai_issue_by_url(
-    from_kr_os_router: list[dict[str, Any]],
-    from_cnbc: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """URL 기준 합침(선행 순서: 라우터 쪽 먼저, 이어 CNBC)."""
-    seen: set[str] = set()
-    out: list[dict[str, Any]] = []
-    for r in from_kr_os_router + from_cnbc:
-        u = (r.get("url") or "").strip()
-        if not u or u in seen:
-            continue
-        seen.add(u)
-        out.append(r)
-    return out
-
-
 def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
     """
-    - 매경·한경·조선(국내/해외 RSS): 합쳐 dedupe → LLM 3탭(국내증시/해외증시/AI 이슈) 배정.
-    - CNBC RSS: **ai_issue 고정** → 같은 규칙으로 LLM 선별(「AI 이슈」만 유지, 국내/해외 판정은 탭에서 제외).
+    - 매경·한경·조선(국내/해외 RSS): 합쳐 dedupe → LLM 3탭 배정. 단, **Firestore `ai_issue` 문서에는
+      CNBC만** 넣는다. KR/해외 풀에서 「AI 이슈」로 나온 기사는 `feed_fallback` 기준으로
+      국내증시·해외증시 탭으로만 넣는다.
+    - CNBC RSS: LLM으로 「AI 이슈」만 유지(국내·해외 판정이면 제외; 분류 실패 시 보존).
     `summarizer.configure_ai` 먼저 호출할 것.
     """
     merged_kr_os: list[dict[str, Any]] = []
@@ -2106,9 +2090,18 @@ def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
     pool_cnbc = _dedupe_domestic_pooled_preserve_order([dict(r) for r in crawl_rss_domestic_ai_issue()])
 
     out = _llm_classify_kr_overseas_pool_to_domestic_tabs(pool_kr_os)
+    nmax = RSS_DOMESTIC_NEWS_MAX_ITEMS
+    # 앱 `ai_issue` 탭은 CNBC 전용 — KR·해외 RSS에서 LLM이 'AI 이슈'로 준 건은 국내/해외 탭으로만
+    for row in out["ai_issue"]:
+        fb = str(row.get("feed_fallback") or "domestic_market").strip()
+        if fb not in ("domestic_market", "global_market"):
+            fb = "domestic_market"
+        out[fb].append(row)
+    out["ai_issue"] = []
+    for k in ("domestic_market", "global_market"):
+        out[k] = _sort_domestic_rows_by_published_desc(out[k])[:nmax]
     cnbc_ai = _llm_select_cnbc_pool_for_ai_issue_tab(pool_cnbc)
-    merged_ai = _merge_ai_issue_by_url(out["ai_issue"], cnbc_ai)
-    out["ai_issue"] = _sort_domestic_rows_by_published_desc(merged_ai)[: RSS_DOMESTIC_NEWS_MAX_ITEMS]
+    out["ai_issue"] = _sort_domestic_rows_by_published_desc(cnbc_ai)[:nmax]
     return out
 
 

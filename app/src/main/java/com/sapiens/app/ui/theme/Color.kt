@@ -3,8 +3,8 @@ package com.sapiens.app.ui.theme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Color
 
-// --- Primary (주황 브랜드) ---
-val Primary = Color(0xFFF56E0F)
+// --- Primary (브랜드 포인트) ---
+val Primary = Color(0xFF1DC09A)
 
 /** @deprecated 호환용 — [Primary]와 동일. */
 val Accent: Color get() = Primary
@@ -12,11 +12,16 @@ val Accent: Color get() = Primary
 val OnPrimaryFixed = Color(0xFFFFFFFF)
 
 // --- Dark palette (정적 참조) ---
-val BackgroundDark = Color(0xFF151419)
-val CardDark = Color(0xFF1B1B1E)
+val BackgroundDark = Color(0xFF1B1E21)
+val CardDark = Color(0xFF232930)
+val BottomSheetDark = Color(0xFF1A2027)
 val ElevatedDark = Color(0xFF262626)
-val TextPrimaryDark = Color(0xFFFBFBFB)
-val TextSecondaryDark = Color(0xFF878787)
+/** 제목·강조(기본 폰트). */
+val TextPrimaryDark = Color(0xFFF4F4F4)
+/** 본문. */
+val TextSecondaryDark = Color(0xFFD6D6D7)
+/** 캡션·힌트·3차. */
+val TextTertiaryDark = Color(0xFF828282)
 val HairDark = Color(0x26FFFFFF)
 val UpDark = Color(0xFFFF3B30)
 val DownDark = Color(0xFF0064FF)
@@ -100,10 +105,11 @@ object SectorChipPalette {
 // --- 런타임 테마 (기존 패턴 유지) ---
 private val backgroundState = mutableStateOf(BackgroundDark)
 private val cardState = mutableStateOf(CardDark)
+private val bottomSheetState = mutableStateOf(BottomSheetDark)
 private val elevatedState = mutableStateOf(ElevatedDark)
 private val textPrimaryState = mutableStateOf(TextPrimaryDark)
 private val textSecondaryState = mutableStateOf(TextSecondaryDark)
-private val textTertiaryState = mutableStateOf(TextSecondaryDark)
+private val textTertiaryState = mutableStateOf(TextTertiaryDark)
 private val hairState = mutableStateOf(HairDark)
 private val marketUpState = mutableStateOf(UpDark)
 private val marketDownState = mutableStateOf(DownDark)
@@ -113,6 +119,9 @@ val Background: Color get() = backgroundState.value
 
 /** 카드·리스트 서페이스. */
 val Card: Color get() = cardState.value
+
+/** 모달 바텀시트 패널 배경. */
+val BottomSheet: Color get() = bottomSheetState.value
 
 /** 약간 올린 서페이스. */
 val Elevated: Color get() = elevatedState.value
@@ -134,10 +143,11 @@ val MarketFlat = Color(0xFF878787)
 fun applyThemePalette(darkTheme: Boolean) {
     backgroundState.value = if (darkTheme) BackgroundDark else BackgroundLight
     cardState.value = if (darkTheme) CardDark else CardLight
+    bottomSheetState.value = if (darkTheme) BottomSheetDark else CardLight
     elevatedState.value = if (darkTheme) ElevatedDark else ElevatedLight
     textPrimaryState.value = if (darkTheme) TextPrimaryDark else TextPrimaryLight
     textSecondaryState.value = if (darkTheme) TextSecondaryDark else TextSecondaryLight
-    textTertiaryState.value = if (darkTheme) TextSecondaryDark else TextSecondaryLight.copy(alpha = 0.85f)
+    textTertiaryState.value = if (darkTheme) TextTertiaryDark else TextSecondaryLight.copy(alpha = 0.85f)
     hairState.value = if (darkTheme) HairDark else HairLight
     marketUpState.value = if (darkTheme) UpDark else UpLight
     marketDownState.value = if (darkTheme) DownDark else DownLight

@@ -3,7 +3,7 @@
 
 - 앱 / Firestore: `domestic_market` · `global_market` · `ai_issue` ( `NewsRepository.kt` 의 `NewsFeedType` 과 동일 )
 - 매경·한경·조선 풀: `NEWS_TAB_CLASSIFICATION_INSTRUCTION_KO` + `classify_article_domestic_tab` 으로 3탭 라우팅 (`crawler.crawl_domestic`). 실패·AI off 시 `feed_fallback`.
-- CNBC 풀: **항상 `ai_issue` 전용**; 동일 규칙으로 **「AI 이슈」만** 남기고 국내증시·해외증시 판정은 제외(실패 시 해당 건은 유지).
+- CNBC 풀: **`ai_issue` Firestore 문서에만** 적재; 동일 규칙으로 **「AI 이슈」만** 남기고 국내증시·해외증시 판정은 제외(실패 시 해당 건은 유지). 매경·한경·조선 풀에서 「AI 이슈」로 나온 건은 `crawl_domestic`에서 국내/해외 탭으로만 보냄.
 """
 
 from __future__ import annotations

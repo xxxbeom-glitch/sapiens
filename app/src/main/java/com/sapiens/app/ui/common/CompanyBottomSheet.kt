@@ -73,6 +73,7 @@ import com.sapiens.app.ui.theme.DividerOnMutedSurface
 import com.sapiens.app.ui.theme.Error
 import com.sapiens.app.ui.theme.ErrorContainer
 import com.sapiens.app.ui.theme.MarketUp
+import com.sapiens.app.ui.theme.BottomSheet
 import com.sapiens.app.ui.theme.BottomSheetBottomPadding
 import com.sapiens.app.ui.theme.SapiensTextStyles
 import com.sapiens.app.ui.theme.SheetHorizontal
@@ -138,7 +139,7 @@ fun CompanyBottomSheet(
     ModalBottomSheet(
         sheetState = sheetState,
         onDismissRequest = onDismissRequest,
-        containerColor = Card,
+        containerColor = BottomSheet,
         scrimColor = Color.Black.copy(alpha = 0.6f),
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         properties = ModalBottomSheetProperties(

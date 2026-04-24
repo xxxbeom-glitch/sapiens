@@ -20,7 +20,6 @@ import java.util.Locale
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.Dispatchers
@@ -54,7 +53,7 @@ class NewsRepositoryImpl(
                 trySend(snapshot.parseArticles("articles"))
             }
         awaitClose { reg.remove() }
-    }.distinctUntilChanged()
+    }
 
     override fun getBriefingMaeilArticles(): Flow<List<Article>> = callbackFlow {
         val reg = firestore.collection(COLLECTION_BRIEFING).document(DOC_MAEIL)
@@ -70,7 +69,7 @@ class NewsRepositoryImpl(
                 trySend(snapshot.parseArticles("articles"))
             }
         awaitClose { reg.remove() }
-    }.distinctUntilChanged()
+    }
 
     override fun getUsArticles(): Flow<List<Article>> = callbackFlow {
         val reg = firestore.collection(COLLECTION_BRIEFING).document(DOC_US_MARKET)
@@ -86,7 +85,7 @@ class NewsRepositoryImpl(
                 trySend(snapshot.parseArticles("articles"))
             }
         awaitClose { reg.remove() }
-    }.distinctUntilChanged()
+    }
 
     override fun getMarketIndicators(): Flow<List<MarketIndicator>> = callbackFlow {
         val reg = firestore.collection(COLLECTION_MARKET).document(DOC_MARKET_INDICATORS)
@@ -102,7 +101,7 @@ class NewsRepositoryImpl(
                 trySend(snapshot.parseIndicators("indicators"))
             }
         awaitClose { reg.remove() }
-    }.distinctUntilChanged()
+    }
 
     override fun getRepresentativeIndices(): Flow<MarketIndexSnapshot> = flow {
         emit(loadRepresentativeIndices())
@@ -122,7 +121,7 @@ class NewsRepositoryImpl(
                 trySend(snapshot.parseArticles("articles"))
             }
         awaitClose { reg.remove() }
-    }.distinctUntilChanged()
+    }
 
     override fun getMarketThemes(): Flow<List<MarketTheme>> = callbackFlow {
         val coll = firestore.collection(COLLECTION_MARKET)
@@ -144,7 +143,7 @@ class NewsRepositoryImpl(
             trySend(sorted.mapNotNull { it.toMarketThemeDoc() })
         }
         awaitClose { reg.remove() }
-    }.distinctUntilChanged()
+    }
 
     private fun loadRepresentativeIndices(): MarketIndexSnapshot {
         val now = System.currentTimeMillis()

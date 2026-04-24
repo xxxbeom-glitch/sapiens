@@ -1,10 +1,5 @@
 package com.sapiens.app.ui.news
 
-import java.time.Instant
-import java.time.OffsetDateTime
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -24,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import com.sapiens.app.data.model.Article
+import com.sapiens.app.ui.common.articleTimeForDisplay
 import com.sapiens.app.ui.common.categoryChipColors
 import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.AppShapes
@@ -62,27 +58,27 @@ fun NewsFeedList(
     }
 }
 
-/** 해외 뉴스 카드: ISO 8601 등 → KST `MM.dd HH:mm`. 파싱 실패 시 원문. */
-internal fun formatOverseasNewsTimeKst(raw: String): String {
-    val t = raw.trim()
-    if (t.isBlank()) return raw
-    val seoul = ZoneId.of("Asia/Seoul")
-    val outFmt = DateTimeFormatter.ofPattern("MM.dd HH:mm", Locale.ROOT)
-    return runCatching {
-        val instant = try {
-            Instant.parse(t)
-        } catch (_: Exception) {
-            OffsetDateTime.parse(t).toInstant()
-        }
-        instant.atZone(seoul).format(outFmt)
-    }.getOrDefault(raw)
-}
-
-/** `섹션 | 언론사` → 마지막 구간만. `|` 없으면 원문. */
-internal fun formatOverseasNewsSource(raw: String): String {
-    val s = raw.trim()
-    if (!s.contains('|')) return s
-    return s.substringAfterLast('|').trim().ifBlank { s }
+/**
+ * 리스트 상단 출처 칩: 해외는 `|` 뒤, 국내 RSS는 `매일경제 : 헤드라인` 형태에서 콜론 앞(언론사)만.
+ */
+internal fun newsPublisherChipText(raw: String): String {
+    val rawTrim = raw.trim()
+    if (rawTrim.isEmpty()) return rawTrim
+    var s = rawTrim
+    if (s.contains('|')) {
+        s = s.substringAfterLast('|').trim()
+    }
+    val spaced = s.indexOf(" : ")
+    if (spaced > 0) {
+        val head = s.substring(0, spaced).trim()
+        if (head.isNotEmpty()) return head
+    }
+    val c = s.indexOf(':')
+    if (c > 0) {
+        val head = s.substring(0, c).trim()
+        if (head.any { it in '\uAC00'..'\uD7A3' }) return head.ifBlank { s }
+    }
+    return s.ifBlank { rawTrim }
 }
 
 @Composable
@@ -95,7 +91,7 @@ fun NewsFeedRow(
     /** null 이면 [Article.source] 사용. 해외 탭에서 언론사만 전달. */
     sourceDisplayOverride: String? = null,
 ) {
-    val timeText = timeDisplayOverride ?: item.time
+    val timeText = timeDisplayOverride ?: articleTimeForDisplay(item.time)
     val sourceText = sourceDisplayOverride ?: item.source
     Column(
         modifier = Modifier

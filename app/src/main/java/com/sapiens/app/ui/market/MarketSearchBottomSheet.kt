@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import com.sapiens.app.data.model.Company
 import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.AppShapes
+import com.sapiens.app.ui.theme.BottomSheet
 import com.sapiens.app.ui.theme.BottomSheetBottomPadding
 import com.sapiens.app.ui.theme.Card
 import com.sapiens.app.ui.theme.Elevated
@@ -84,7 +85,7 @@ fun MarketSearchBottomSheet(
     ModalBottomSheet(
         sheetState = sheetState,
         onDismissRequest = onDismissRequest,
-        containerColor = Card,
+        containerColor = BottomSheet,
         scrimColor = Color.Black.copy(alpha = 0.6f),
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         dragHandle = null,

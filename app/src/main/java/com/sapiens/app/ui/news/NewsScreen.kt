@@ -8,8 +8,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
@@ -19,9 +22,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,8 +48,9 @@ import com.sapiens.app.ui.theme.SapiensTextStyles
 import com.sapiens.app.ui.theme.Spacing
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
+import kotlinx.coroutines.launch
 
-private val domesticTabLabels = listOf("국내 증시", "해외 증시", "AI ISSUE")
+private val domesticTabLabels = listOf("#국내 증시", "#미국 증시", "AI ISSUE")
 private val overseasTabLabels = listOf("Stocks", "Technology")
 
 @Composable
@@ -112,27 +117,12 @@ fun NewsScreen(
     var selectedArticle by remember { mutableStateOf<Article?>(null) }
     val bookmarkedIds by viewModel.bookmarkedArticleIds.collectAsState()
     val context = LocalContext.current
-    // 국내(3탭: 국내 증시·해외 증시·AI ISSUE)·해외(2탭) 인덱스를 분리해 두지 않으면, 국내 3번째 탭에서 해외로 바꿀 때
-    // 한 프레임이라도 selectedTabIndex(2) >= 해외 tabCount(2)가 되어 PrimaryTabRow가 크래시난다.
-    var domesticTabIndex by remember { mutableIntStateOf(0) }
-    var overseasTabIndex by remember { mutableIntStateOf(0) }
-
+    // 국내(3)·해외(2)는 Pager 상태를 각각 두어, 리전 전환 시에도 PrimaryTabRow 인덱스가 탭 수를 넘지 않게 한다.
+    val domesticPagerState = rememberPagerState(pageCount = { domesticTabLabels.size })
+    val overseasPagerState = rememberPagerState(pageCount = { overseasTabLabels.size })
+    val pagerState = if (isOverseas) overseasPagerState else domesticPagerState
     val tabLabels = if (isOverseas) overseasTabLabels else domesticTabLabels
-    val selectedTabIndex = if (isOverseas) overseasTabIndex else domesticTabIndex
-
-    val currentItems = when {
-        isOverseas -> when (overseasTabIndex) {
-            0 -> overseasStocks
-            1 -> overseasTech
-            else -> overseasStocks
-        }
-        else -> when (domesticTabIndex) {
-            0 -> domesticMarketNews
-            1 -> globalMarketNews
-            else -> aiIssueNews
-        }
-    }
-    val displayItems = if (isOverseas) currentItems.map { it.withKoreanHeadlineFallback() } else currentItems
+    val scope = rememberCoroutineScope()
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (isLoading) {
@@ -151,16 +141,16 @@ fun NewsScreen(
                     .background(Background)
             ) {
                 PrimaryTabRow(
-                    selectedTabIndex = selectedTabIndex,
+                    selectedTabIndex = pagerState.currentPage,
                     containerColor = Background,
                     contentColor = Accent
                 ) {
                     tabLabels.forEachIndexed { index, label ->
-                        val selected = selectedTabIndex == index
+                        val selected = pagerState.currentPage == index
                         Tab(
                             selected = selected,
                             onClick = {
-                                if (isOverseas) overseasTabIndex = index else domesticTabIndex = index
+                                scope.launch { pagerState.animateScrollToPage(index) }
                             },
                             text = {
                                 Text(
@@ -172,24 +162,49 @@ fun NewsScreen(
                     }
                 }
 
-                Column(
+                HorizontalPager(
+                    state = pagerState,
                     modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(vertical = RowVertical)
-                ) {
-                    ArticleMixedFeedCard(
-                        articles = displayItems,
-                        onClickArticle = { selectedArticle = it },
-                        topChipForArticle = { article ->
-                            if (isOverseas) {
-                                formatOverseasNewsSource(article.source).ifBlank { "해외" }
-                            } else {
-                                article.source.ifBlank { "국내" }
-                            }
-                        },
-                        emptyStateText = "불러온 기사가 없습니다."
-                    )
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) { page ->
+                    val pageItems = when {
+                        isOverseas -> when (page) {
+                            0 -> overseasStocks
+                            1 -> overseasTech
+                            else -> overseasStocks
+                        }
+                        else -> when (page) {
+                            0 -> domesticMarketNews
+                            1 -> globalMarketNews
+                            else -> aiIssueNews
+                        }
+                    }
+                    val displayItems =
+                        if (isOverseas) pageItems.map { it.withKoreanHeadlineFallback() } else pageItems
+                    key(page) {
+                        val scrollState = rememberScrollState()
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(scrollState)
+                                .padding(vertical = RowVertical)
+                        ) {
+                            ArticleMixedFeedCard(
+                                articles = displayItems,
+                                onClickArticle = { selectedArticle = it },
+                                topChipForArticle = { article ->
+                                    val chip = newsPublisherChipText(article.source)
+                                    when {
+                                        chip.isNotBlank() -> chip
+                                        isOverseas -> "해외"
+                                        else -> "국내"
+                                    }
+                                },
+                                emptyStateText = "불러온 기사가 없습니다."
+                            )
+                        }
+                    }
                 }
             }
         }

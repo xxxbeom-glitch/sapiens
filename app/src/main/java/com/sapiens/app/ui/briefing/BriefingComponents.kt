@@ -43,6 +43,7 @@ import com.sapiens.app.data.model.MarketDirection
 import com.sapiens.app.data.model.MarketIndex
 import com.sapiens.app.data.model.MarketIndicator
 import com.sapiens.app.ui.common.MarketIndexStyleChangeText
+import com.sapiens.app.ui.common.articleTimeForDisplay
 import com.sapiens.app.ui.common.categoryChipColors
 import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.AppShapes
@@ -101,7 +102,7 @@ fun MorningSourceCard(
     if (articles.isEmpty()) return
     val topArticles = articles.take(10)
     val first = topArticles.first()
-    val publishedAt = first.time.ifBlank { "-" }
+    val publishedAt = articleTimeForDisplay(first.time).ifBlank { "-" }
     Surface(
         modifier = modifier,
         color = MaterialTheme.colorScheme.surface,
@@ -312,7 +313,7 @@ fun MorningCardPager(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "${article.source} · ${article.time}",
+                                text = "${article.source} · ${articleTimeForDisplay(article.time)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary
                             )

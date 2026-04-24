@@ -64,10 +64,16 @@ class NewsViewModel(
                     emit(Triple(emptyList(), emptyList(), emptyList()))
                 }
                 .collect { (domesticMarket, globalMarket, aiIssue) ->
-                    _domesticMarketNews.value =
-                        domesticMarket.ifEmpty { MockData.NEWS_DOMESTIC_MARKET }
-                    _globalMarketNews.value = globalMarket.ifEmpty { MockData.NEWS_GLOBAL_MARKET }
-                    _aiIssueNews.value = aiIssue
+                    // Firestore 리스너가 오류·캐시 전환 등으로 잠깐 빈 리스트를 줄 때가 있어,
+                    // 빈 값은 직전 화면 상태를 유지하고(파이프라인 직후 갱신 체감), 최초만 목업.
+                    _domesticMarketNews.value = domesticMarket.takeIf { it.isNotEmpty() }
+                        ?: _domesticMarketNews.value.takeIf { it.isNotEmpty() }
+                        ?: MockData.NEWS_DOMESTIC_MARKET
+                    _globalMarketNews.value = globalMarket.takeIf { it.isNotEmpty() }
+                        ?: _globalMarketNews.value.takeIf { it.isNotEmpty() }
+                        ?: MockData.NEWS_GLOBAL_MARKET
+                    _aiIssueNews.value = aiIssue.takeIf { it.isNotEmpty() }
+                        ?: _aiIssueNews.value
                     _isLoading.value = false
                 }
         }
