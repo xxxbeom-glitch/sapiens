@@ -852,12 +852,6 @@ HANKYUNG_ARTICLE_BODY_SELECTORS = (
     "div.article-body",
     "div.article-txt",
 )
-CHOSUN_ARTICLE_BODY_SELECTORS = (
-    "div.article-body",
-    "#article-body",
-    "div.par",
-    "section.article-body",
-)
 
 
 def _rss_entry_published_utc(entry: Any) -> datetime | None:
@@ -1021,7 +1015,7 @@ def _article_plain_from_soup(soup: BeautifulSoup, selectors: tuple[str, ...]) ->
 
 def _fetch_mk_hankyung_article_body(article_url: str) -> str:
     u = (article_url or "").strip()
-    if not u or ("mk.co.kr" not in u and "hankyung.com" not in u and "chosun.com" not in u):
+    if not u or "mk.co.kr" not in u and "hankyung.com" not in u:
         return ""
     html = _fetch(u)
     if not html:
@@ -1034,18 +1028,16 @@ def _fetch_mk_hankyung_article_body(article_url: str) -> str:
         return _article_plain_from_soup(soup, HANKYUNG_ARTICLE_BODY_SELECTORS)
     if "mk.co.kr" in u.lower():
         return _article_plain_from_soup(soup, MK_ARTICLE_BODY_SELECTORS)
-    if "chosun.com" in u.lower():
-        return _article_plain_from_soup(soup, CHOSUN_ARTICLE_BODY_SELECTORS)
     return ""
 
 
 def _attach_mk_hankyung_bodies(rows: list[dict[str, Any]], pause_sec: float = 0.06) -> None:
-    """MK·한경·조선 기사 URL에서 본문을 채워 요약기에 전달(실패 시 RSS description만 사용)."""
+    """MK·한경 기사 URL에서 본문을 채워 요약기에 전달(실패 시 RSS description만 사용)."""
     for row in rows:
         u = (row.get("url") or "").strip()
         if not u:
             continue
-        if "mk.co.kr" not in u and "hankyung.com" not in u and "chosun.com" not in u:
+        if "mk.co.kr" not in u and "hankyung.com" not in u:
             continue
         try:
             body = _fetch_mk_hankyung_article_body(u)
@@ -1674,6 +1666,7 @@ def _llm_classify_kr_overseas_pool_to_domestic_tabs(
     }
     n_label_ok = 0
     n_fallback = 0
+    n_excluded = 0
     for row in pool:
         fb = str(row.get("feed_fallback") or "domestic_market").strip()
         if fb not in out:
@@ -1683,6 +1676,11 @@ def _llm_classify_kr_overseas_pool_to_domestic_tabs(
         s = str(row.get("summary") or "")
         label = ntc.classify_article_domestic_tab(t, s)
         label_ko = ntc.finalize_kr_overseas_tab_label(label, t, s, fb)
+        # 제외 판정: 버림
+        if label_ko == "제외" or label == "제외":
+            n_excluded += 1
+            logger.info("뉴스탭: 제외 처리 title=%.80s", t)
+            continue
         doc = ntc.tab_to_firestore_document_id(label_ko) or fb
         if not doc or doc not in out:
             doc = fb
@@ -1696,10 +1694,11 @@ def _llm_classify_kr_overseas_pool_to_domestic_tabs(
     for k in out:
         out[k] = _sort_domestic_rows_by_published_desc(out[k])[:nmax]
     logger.info(
-        "국내 3탭 LLM(한국·조선 풀만): %d건 → JSON성공 %d 폴백 %d → D%d G%d A%d",
+        "국내 3탭 LLM(한국·조선 풀만): %d건 → JSON성공 %d 폴백 %d 제외 %d → D%d G%d A%d",
         len(pool),
         n_label_ok,
         n_fallback,
+        n_excluded,
         len(out["domestic_market"]),
         len(out["global_market"]),
         len(out["ai_issue"]),
