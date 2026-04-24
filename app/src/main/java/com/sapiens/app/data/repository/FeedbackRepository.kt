@@ -2,7 +2,7 @@ package com.sapiens.app.data.repository
 
 /**
  * 사용자 선호도 피드백 — Firestore `feedback/{article_id}`.
- * 뉴스 탭(국내·해외) 북마크 시에만 기록; 브리핑 북마크는 사용하지 않음.
+ * 뉴스 탭 북마크 시에만 기록; 브리핑 북마크는 사용하지 않음.
  */
 interface FeedbackRepository {
     suspend fun saveArticleLike(articleId: String, category: String)

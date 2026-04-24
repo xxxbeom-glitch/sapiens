@@ -1,5 +1,5 @@
 """
-기사 요약·시황·기업 분석: Firebase settings/ai_config 의 selected_model 에 따른 Claude / Gemini 분기.
+기사 요약·시황·기업 분석: Google Gemini API 전용.
 """
 from __future__ import annotations
 
@@ -10,24 +10,21 @@ import re
 import time
 from typing import Any
 
-import anthropic
 from google import genai
 
 logger = logging.getLogger(__name__)
 
 GEMINI_MODEL = "gemini-2.5-flash"
-CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 
-# SAPIENS_ARTICLE_LLM_JUDGE=1: Claude(Haiku) 1회 요약만(검수·제미나이 루프·제미나이 폴백 없음).
-# 미설정·0이면 기존 _call_news_llm(선택 모델) 2회 재시도 경로.
+# SAPIENS_ARTICLE_LLM_JUDGE=1: 기사 JSON 요약을 [Gemini 1경로(단일 호출, 재시도 2회)]만 사용.
+# 미설정·0이면 _call_news_llm 기반 2회 재시도 경로(동일 Gemini).
 def _article_llm_judge_enabled() -> bool:
     v = (os.environ.get("SAPIENS_ARTICLE_LLM_JUDGE") or "").strip().lower()
     return v in ("1", "true", "yes", "on")
 
-SELECTED_MODEL_CLAUDE = "claude"
 SELECTED_MODEL_GEMINI = "gemini"
 
-# 파이프라인 시작 시 [configure_ai]로 설정 (기본: gemini).
+# 파이프라인: 제품은 Gemini 전용(구성 값과 무관하게 [configure_ai]가 gemini로 고정).
 _RUNTIME_SELECTED_MODEL = SELECTED_MODEL_GEMINI
 
 _token_input_total: int = 0
@@ -256,12 +253,14 @@ def _require_json_dict(text: str) -> dict[str, Any]:
 
 
 def configure_ai(*, selected_model: str) -> None:
-    """main.py에서 Firebase settings/ai_config 읽은 뒤 호출."""
+    """main.py에서 Firebase settings/ai_config 읽은 뒤 호출. 런타임은 항상 Gemini."""
     global _RUNTIME_SELECTED_MODEL
     m = (selected_model or "").strip().lower()
-    if m not in (SELECTED_MODEL_CLAUDE, SELECTED_MODEL_GEMINI):
-        m = SELECTED_MODEL_GEMINI
-    _RUNTIME_SELECTED_MODEL = m
+    if m == "claude":
+        logger.info(
+            "summarizer: Firestore selected_model=claude 였으나 제품은 Gemini 전용으로 실행합니다",
+        )
+    _RUNTIME_SELECTED_MODEL = SELECTED_MODEL_GEMINI
     logger.info("summarizer AI runtime: selected_model=%s", _RUNTIME_SELECTED_MODEL)
 
 
@@ -326,22 +325,6 @@ def _accumulate_gemini_usage(response: Any) -> None:
     _append_model_label(GEMINI_MODEL)
 
 
-def _accumulate_claude_usage(response: Any) -> None:
-    global _token_input_total, _token_output_total
-    usage = getattr(response, "usage", None)
-    if usage is None:
-        return
-    if isinstance(usage, dict):
-        inp = int(usage.get("input_tokens") or 0)
-        out = int(usage.get("output_tokens") or 0)
-    else:
-        inp = int(getattr(usage, "input_tokens", None) or 0)
-        out = int(getattr(usage, "output_tokens", None) or 0)
-    _token_input_total += max(0, inp)
-    _token_output_total += max(0, out)
-    _append_model_label(CLAUDE_MODEL)
-
-
 def _ai_any_news_enabled() -> bool:
     return True
 
@@ -350,79 +333,17 @@ def _ai_any_company_enabled() -> bool:
     return True
 
 
-def _persist_selected_model_gemini() -> None:
-    """Claude 실패 후 Gemini 폴백 시 원격·런타임을 gemini로 맞춤."""
-    global _RUNTIME_SELECTED_MODEL
-    _RUNTIME_SELECTED_MODEL = SELECTED_MODEL_GEMINI
-    try:
-        import firebase_client
-
-        firebase_client.set_ai_config_selected_model(SELECTED_MODEL_GEMINI)
-    except Exception as e:
-        logger.warning("Firebase selected_model=gemini 반영 실패: %s", e)
-
-
-def _call_claude(user_content: str) -> str:
-    """Anthropic Messages API. 실패 시 예외, 빈 content 는 빈 문자열."""
-    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not key:
-        raise RuntimeError("ANTHROPIC_API_KEY 가 설정되어 있어야 합니다.")
-    prompt = f"{SYSTEM}\n\n{user_content}"
-    client = anthropic.Anthropic(api_key=key)
-    response = client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=4096,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    try:
-        _accumulate_claude_usage(response)
-    except Exception as e:
-        logger.warning("Claude usage 집계 실패(무시): %s", e)
-    blocks = getattr(response, "content", None) or []
-    if not blocks:
-        return ""
-    first = blocks[0]
-    raw = getattr(first, "text", None)
-    if raw is None and isinstance(first, dict):
-        raw = first.get("text")
-    return str(raw or "").strip()
-
-
 def _call_news_llm(user_content: str) -> str:
-    """
-    뉴스/브리핑/시황/큐레이션.
-    - selected_model == gemini → Gemini만.
-    - selected_model == claude → Claude 우선, 실패·빈 응답 시 Gemini 폴백 + Firebase selected_model=gemini.
-    """
+    """뉴스/시황/큐레이션 — Gemini."""
     if not _ai_any_news_enabled():
         return ""
-    if _RUNTIME_SELECTED_MODEL == SELECTED_MODEL_GEMINI:
-        return str(_call_gemini(user_content) or "").strip()
-    try:
-        raw = _call_claude(user_content)
-        if raw:
-            return raw
-    except Exception as e:
-        logger.warning("Claude 뉴스/요약 호출 실패: %s", e)
-    logger.info("뉴스 요약: Claude 실패 또는 빈 응답 → Gemini 폴백, settings/ai_config selected_model=gemini")
-    _persist_selected_model_gemini()
     return str(_call_gemini(user_content) or "").strip()
 
 
 def _call_company_llm(user_content: str) -> str:
-    """종목 분석. 분기 규칙은 [_call_news_llm] 과 동일."""
+    """종목 분석 — Gemini."""
     if not _ai_any_company_enabled():
         return ""
-    if _RUNTIME_SELECTED_MODEL == SELECTED_MODEL_GEMINI:
-        return str(_call_gemini(user_content) or "").strip()
-    try:
-        raw = _call_claude(user_content)
-        if raw:
-            return raw
-    except Exception as e:
-        logger.warning("Claude 기업 분석 호출 실패: %s", e)
-    logger.info("기업 분석: Claude 실패 또는 빈 응답 → Gemini 폴백, settings/ai_config selected_model=gemini")
-    _persist_selected_model_gemini()
     return str(_call_gemini(user_content) or "").strip()
 
 
@@ -551,7 +472,7 @@ def _postprocess_summarize_article_dict(
     return out
 
 
-def _summarize_article_claude_once(
+def _summarize_article_gemini_judge_once(
     user: str,
     *,
     title: str,
@@ -561,28 +482,28 @@ def _summarize_article_claude_once(
     max_points_keep: int,
 ) -> dict[str, Any]:
     """
-    Claude(Haiku) 1회만 호출·JSON 파싱 후 반환. Gemini 검수/재작성/Gemini 폴백 없음.
-    JSON·스키마 오류 시 최대 2회까지 Claude 재시도(동일 프롬프트).
+    SAPIENS_ARTICLE_LLM_JUDGE=1: Gemini 1호출·JSON 파싱 후 반환(일반 2회 재시도 루프는 생략).
+    JSON·스키마 오류 시 최대 2회까지 동일 프롬프트로 재시도.
     """
     last_err: Exception | None = None
     for attempt in range(2):
         try:
-            raw = _call_claude(user)
+            raw = _call_gemini(user)
             if not (raw or "").strip():
-                raise ValueError("empty Claude response")
+                raise ValueError("empty Gemini response")
             data = _require_json_dict(raw)
             _validate_summarize_article_shape(data)
             out = _postprocess_summarize_article_dict(
                 data, max_points_keep, title, source, summary, body_stripped
             )
-            out["_quality"] = {"path": "claude_once", "attempts": attempt + 1}
+            out["_quality"] = {"path": "gemini_judge_once", "attempts": attempt + 1}
             return out
         except Exception as e:
             last_err = e
-            logger.warning("Claude 1차 요약 재시도 (%s/2): %s", attempt + 1, e)
+            logger.warning("Gemini(저지 1경로) 요약 재시도 (%s/2): %s", attempt + 1, e)
             if attempt == 0:
                 time.sleep(0.5)
-    raise last_err or RuntimeError("claude_once summarize failed")
+    raise last_err or RuntimeError("gemini_judge_once summarize failed")
 
 
 def summarize_article(
@@ -590,8 +511,6 @@ def summarize_article(
     summary: str,
     source: str,
     body: str = "",
-    *,
-    briefing_newspaper: bool = False,
 ) -> dict[str, Any]:
     """
     반환:
@@ -600,15 +519,8 @@ def summarize_article(
     body_stripped = (body or "").strip()
     summary_stripped = (summary or "").strip()
 
-    if briefing_newspaper and len(body_stripped) < 200:
-        logger.info(
-            "briefing 신문: 본문 %d자(200자 미만) — 요약 API 스킵, summary_points=[]",
-            len(body_stripped),
-        )
-        return {"headline": "", "category": "", "summary_points": []}
-
     if not _ai_any_news_enabled():
-        logger.info("summarize_article: Claude/Gemini 모두 off — 원문 폴백용 스텁")
+        logger.info("summarize_article: AI off — 원문 폴백용 스텁")
         return {"headline": "", "category": "", "summary_points": []}
 
     if body_stripped:
@@ -622,67 +534,31 @@ def summarize_article(
         article_block = f"제목: {title}\n목록/리드 요약문:\n{summary_stripped}\n"
 
     max_points_keep = 10
-    if briefing_newspaper and len(body_stripped) >= 200:
-        blen = len(body_stripped)
-        if blen < 500:
-            max_points_keep = 2
-            pts_count_rule = (
-                "summary_points 배열 길이: 원문 분량에 맞게 **1개 또는 2개**만 사용하세요. "
-                "짧은 기사는 **1개**만으로 충분할 수 있습니다. 억지로 bullet을 늘리거나 한 문장을 잘게 쪼개지 마세요.\n"
-            )
-        else:
-            max_points_keep = 4
-            pts_count_rule = (
-                "summary_points 배열 길이: **3개 또는 4개**만 사용하세요(5개 이상 금지). "
-                "핵심이 3개로 충분하면 3개만 써도 됩니다.\n"
-            )
-        user = (
-            "다음 뉴스를 분석해 JSON만 출력하세요.\n"
-            f'키: "headline", "category", "summary_points"\n'
-            "headline·summary_points 각 문자열 안에 **큰따옴표(\")를 넣지 마세요**. "
-            "인용이 필요하면 작은따옴표(')나 「」를 쓰세요.\n"
-            "headline은 반드시 한국어로 작성하세요. 원문이 영어면 자연스러운 한국어 제목으로 번역하세요.\n"
-            f"{_SUMMARIZE_ARTICLE_CATEGORY_BLOCK}"
-            f"{pts_count_rule}"
-            "각 summary_points 항목은 **하나의 완전한 문장**으로 끝내세요. "
-            "항목별 글자 수·길이 상한을 두지 말고, 읽기 자연스러운 분량으로 쓰세요.\n"
-            "중요한 사실·수치·배경·영향을 누락하지 마세요.\n"
-            "구체성 규칙(headline·summary_points 모두 적용):\n"
-            "- 기업명, 종목명, 브랜드명, 인물명은 원문에 나온 표기를 그대로 포함할 것.\n"
-            "- 주가, 등락률·퍼센트, 금액 등 구체적 수치가 원문에 있으면 반드시 요약에 포함할 것.\n"
-            "- 「특정 종목」「해당 기업」「관련 주」처럼 추상적으로 바꾸어 고유명·수치를 대체하거나 감추지 말 것.\n"
-            "- 핵심 정보(누가·무엇을·얼마나)를 빠뜨리지 말고 구체적으로 서술할 것.\n"
-            "어려운 경제/금융/전문 용어는 뜻을 유지하되 쉬운 일상 언어로 풀어쓰세요.\n"
-            "뉴스식 딱딱한 문체는 피하세요.\n\n"
-            f"{article_block}"
-            f"출처: {source}\n"
-        )
-    else:
-        user = (
-            f"다음 뉴스를 분석해 JSON만 출력하세요.\n"
-            f'키: "headline", "category", "summary_points"\n'
-            f"headline·summary_points 각 문자열 안에 **큰따옴표(\")를 넣지 마세요**. "
-            f"인용이 필요하면 작은따옴표(')나 「」를 쓰세요.\n"
-            f"headline은 반드시 한국어로 작성하세요. 원문이 영어면 자연스러운 한국어 제목으로 번역하세요.\n"
-            f"{_SUMMARIZE_ARTICLE_CATEGORY_BLOCK}"
-            f"summary_points는 기사 핵심을 빠짐없이 담은 문자열 배열로 작성하세요.\n"
-            f"중요한 사실·수치·배경·영향을 누락하지 말고, 내용을 함축하거나 생략하지 마세요.\n"
-            f"구체성 규칙(headline·summary_points 모두 적용):\n"
-            f"- 기업명, 종목명, 브랜드명, 인물명은 원문에 나온 표기를 그대로 포함할 것.\n"
-            f"- 주가, 등락률·퍼센트, 금액 등 구체적 수치가 원문에 있으면 반드시 요약에 포함할 것.\n"
-            f"- 「특정 종목」「해당 기업」「관련 주」처럼 추상적으로 바꾸어 고유명·수치를 대체하거나 감추지 말 것.\n"
-            f"- 핵심 정보(누가·무엇을·얼마나)를 빠뜨리지 말고 구체적으로 서술할 것.\n"
-            f"어려운 경제/금융/전문 용어는 뜻을 유지하되 쉬운 일상 언어로 풀어쓰세요.\n"
-            f"문장은 짧고 자연스럽게 쓰고, 뉴스식 딱딱한 문체는 피하세요.\n"
-            f"분량은 고정하지 말고 내용량에 맞춰 유동적으로 작성하세요.\n"
-            f"(중요 내용이 많으면 길게, 단순한 내용이면 짧게)\n\n"
-            f"{article_block}"
-            f"출처: {source}\n"
-        )
+    user = (
+        f"다음 뉴스를 분석해 JSON만 출력하세요.\n"
+        f'키: "headline", "category", "summary_points"\n'
+        f"headline·summary_points 각 문자열 안에 **큰따옴표(\")를 넣지 마세요**. "
+        f"인용이 필요하면 작은따옴표(')나 「」를 쓰세요.\n"
+        f"headline은 반드시 한국어로 작성하세요. 원문이 영어면 자연스러운 한국어 제목으로 번역하세요.\n"
+        f"{_SUMMARIZE_ARTICLE_CATEGORY_BLOCK}"
+        f"summary_points는 기사 핵심을 빠짐없이 담은 문자열 배열로 작성하세요.\n"
+        f"중요한 사실·수치·배경·영향을 누락하지 말고, 내용을 함축하거나 생략하지 마세요.\n"
+        f"구체성 규칙(headline·summary_points 모두 적용):\n"
+        f"- 기업명, 종목명, 브랜드명, 인물명은 원문에 나온 표기를 그대로 포함할 것.\n"
+        f"- 주가, 등락률·퍼센트, 금액 등 구체적 수치가 원문에 있으면 반드시 요약에 포함할 것.\n"
+        f"- 「특정 종목」「해당 기업」「관련 주」처럼 추상적으로 바꾸어 고유명·수치를 대체하거나 감추지 말 것.\n"
+        f"- 핵심 정보(누가·무엇을·얼마나)를 빠뜨리지 말고 구체적으로 서술할 것.\n"
+        f"어려운 경제/금융/전문 용어는 뜻을 유지하되 쉬운 일상 언어로 풀어쓰세요.\n"
+        f"문장은 짧고 자연스럽게 쓰고, 뉴스식 딱딱한 문체는 피하세요.\n"
+        f"분량은 고정하지 말고 내용량에 맞춰 유동적으로 작성하세요.\n"
+        f"(중요 내용이 많으면 길게, 단순한 내용이면 짧게)\n\n"
+        f"{article_block}"
+        f"출처: {source}\n"
+    )
 
     if _article_llm_judge_enabled():
         try:
-            return _summarize_article_claude_once(
+            return _summarize_article_gemini_judge_once(
                 user,
                 title=title,
                 source=source,
@@ -692,7 +568,7 @@ def summarize_article(
             )
         except Exception as e:
             logger.exception(
-                "SAPIENS_ARTICLE_LLM_JUDGE(Claude 1차) 실패, 기존 _call_news_llm 경로로 폴백: %s",
+                "SAPIENS_ARTICLE_LLM_JUDGE(Gemini 1경로) 실패, _call_news_llm 경로로 폴백: %s",
                 e,
             )
 
@@ -787,75 +663,8 @@ def generate_market_report(
     raise last_err or RuntimeError("generate_market_report failed")
 
 
-def curate_us_market_articles(
-    items: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """
-    stocks+tech 합친 리스트에서 Gemini로 최대 8개 엄선 (중복·광고성 제외).
-    8개 미만이면 전부 반환; 8개 이하면 API 생략하고 전부 반환.
-    """
-    if not items:
-        return []
-    n = len(items)
-    if n <= 8:
-        return [dict(x) for x in items]
-
-    if not _ai_any_news_enabled():
-        return [dict(items[i]) for i in range(8)]
-
-    lines: list[str] = []
-    for i, it in enumerate(items):
-        t = str(it.get("title", ""))[:220]
-        s = str(it.get("summary", ""))[:400]
-        src = str(it.get("source", ""))[:80]
-        u = str(it.get("url", ""))[:300]
-        lines.append(f'[{i}] title: {t}\n  source: {src}\n  url: {u}\n  lead: {s}')
-    body = "\n\n".join(lines)
-    user = (
-        "당신은 글로벌 금융 뉴스 큐레이터입니다.\n"
-        "투자자 관점에서 가장 중요하고, 서로 **다른 주제**를 넓게 커버하도록 **정확히 8개** 기사를 고르세요. "
-        "제목·내용이 **중복/유사**한 기사는 **하나만** 남기세요. **광고성·낚시성(클릭베이트)** 느낌이 강한 기사는 제외하세요.\n"
-        f"아래 [0]~[{n-1}] 인덱스로 식별됩니다. **서로 다른 정수 8개**의 인덱스만 JSON으로 출력하세요.\n"
-        '형식(배열만, 길이 8): {{"selected_indices": [0,1,2,3,4,5,6,7]}}\n\n'
-        f"{body}"
-    )
-    last_err: Exception | None = None
-    for attempt in range(2):
-        try:
-            raw = _call_news_llm(user)
-            data = _require_json_dict(raw)
-            idxs = data.get("selected_indices", [])
-            if not isinstance(idxs, list) or not idxs:
-                raise ValueError("missing or invalid selected_indices")
-            picked: list[dict[str, Any]] = []
-            seen: set[int] = set()
-            for j in idxs:
-                if not isinstance(j, int) or j < 0 or j >= n or j in seen:
-                    continue
-                seen.add(j)
-                picked.append(dict(items[j]))
-            if not picked:
-                return [dict(items[i]) for i in range(min(8, n))]
-            for i in range(n):
-                if len(picked) >= 8:
-                    break
-                if i not in seen:
-                    seen.add(i)
-                    picked.append(dict(items[i]))
-            return picked[:8]
-        except Exception as e:
-            last_err = e
-            logger.warning("curate_us_market_articles 재시도 (%s): %s", attempt + 1, e)
-            if attempt == 0:
-                time.sleep(1.0)
-    logger.warning("curate_us_market_articles 실패, 상위 8개 사용: %s", last_err)
-    return [dict(items[i]) for i in range(min(8, n))]
-
-
 def summarize_batch(
     items: list[dict[str, Any]],
-    *,
-    briefing_newspaper: bool = False,
 ) -> list[dict[str, Any]]:
     """기사 목록 순차 요약. 항목 사이 0.5초."""
     out: list[dict[str, Any]] = []
@@ -866,7 +675,6 @@ def summarize_batch(
                 summary=it.get("summary", ""),
                 source=it.get("source", ""),
                 body=str(it.get("body") or ""),
-                briefing_newspaper=briefing_newspaper,
             )
             out.append({**it, "_ai": ai})
         except Exception as e:
@@ -884,7 +692,7 @@ def analyze_company(
     profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
-    기업 서술·건전성 라벨·점수·AI 증권 의견 (Firebase ai_config 에 따른 Claude / Gemini).
+    기업 서술·건전성 라벨·점수·AI 증권 의견 (Gemini).
     """
     profile = profile or {}
     payload = {

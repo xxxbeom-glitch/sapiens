@@ -41,7 +41,7 @@
 | `firebase-admin` | Firestore 서버 쓰기 |
 | `python-dotenv` | `.env` 로드 |
 | `pytz` | 시간대(신문 API 등) |
-| `playwright`, `runpod` | `requirements.txt`에 포함(토스 등 경로에서 선택적 사용) |
+| `playwright` | 토스 등 경로에서 선택적 사용 |
 
 ### 2.3 외부 서비스·API
 
@@ -87,7 +87,7 @@ Sapiens/
 │   ├── firebase_client.py            # Firestore 쓰기 헬퍼
 │   ├── company_crawler.py
 │   ├── requirements.txt
-│   └── .env                          # 로컬/RunPod 비밀키 (커밋 제외 권장)
+│   └── .env                          # 로컬/CI 비밀키 (커밋 제외 권장)
 ├── gradle/libs.versions.toml
 ├── settings.gradle.kts
 ├── build.gradle.kts
@@ -235,7 +235,7 @@ sequenceDiagram
 |------|------|
 | 원격 GitHub 연동 | 로컬에서 `git remote`로 확인 가능 — 본 문서는 URL 고정하지 않음 |
 | GitHub Actions | 저장소 루트에 `.github/workflows` **없음** (추가 시 CI/CD 명세 여기에 확장) |
-| 비밀 관리 | 서비스 계정 JSON·API 키는 **Git에 커밋하지 말 것** — RunPod/Secrets·로컬 `.env` |
+| 비밀 관리 | 서비스 계정 JSON·API 키는 **Git에 커밋하지 말 것** — GitHub Secrets·로컬 `.env` |
 
 ---
 

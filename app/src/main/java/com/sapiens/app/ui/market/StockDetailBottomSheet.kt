@@ -58,7 +58,7 @@ import com.sapiens.app.data.stock.StockDetailUiState
 import com.sapiens.app.data.stock.StockNewsItem
 import com.sapiens.app.data.stock.StockReportItem
 import com.sapiens.app.data.model.Article
-import com.sapiens.app.ui.briefing.SectionLabel
+import com.sapiens.app.ui.common.SectionLabel
 import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.AppShapes
 import com.sapiens.app.ui.theme.Background

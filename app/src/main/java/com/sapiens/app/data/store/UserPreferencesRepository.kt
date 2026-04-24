@@ -88,11 +88,7 @@ class UserPreferencesRepository(
                 val legacyClaude = data["apiClaudeEnabled"] as? Boolean
                 val legacyGemini = data["apiGeminiEnabled"] as? Boolean
                 if (legacyClaude != null || legacyGemini != null) {
-                    val inferred = when {
-                        legacyClaude == true && legacyGemini != true -> AiSelectedModel.CLAUDE
-                        else -> AiSelectedModel.GEMINI
-                    }
-                    preferences[apiSelectedModelKey] = inferred
+                    preferences[apiSelectedModelKey] = AiSelectedModel.GEMINI
                 }
             }
             (data["pushNotificationsEnabled"] as? Boolean)?.let {

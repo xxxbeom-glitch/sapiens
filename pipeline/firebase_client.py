@@ -17,17 +17,18 @@ logger = logging.getLogger(__name__)
 
 _db: firestore.Client | None = None
 
-# 뉴스·브리핑 피드 문서(단일 문서 + articles 배열). 국내 탭 3분류: domestic/global market + AI.
+# 뉴스 피드 문서(단일 문서 + articles 배열). 국내 탭 3분류: domestic/global market + AI.
 _NEWS_FEED_DOC_IDS = (
     "domestic_market",
     "global_market",
     "ai_issue",
-    "overseas_stocks",
-    "overseas_tech",
 )
-# 이전 ID(네이버 3탭) — `clear_news_and_briefing_feeds`에서 함께 제거해 마이그레이션 정리
+# 해외 Stocks·Tech 전용 탭 제거 — 잔여 `news` 문서 정리
+_NEWS_OVERSEAS_TAB_LEGACY_DOC_IDS = ("overseas_stocks", "overseas_tech")
+# 이전 ID(네이버 3탭) — `clear_news_feeds`에서 함께 제거해 마이그레이션 정리
 _LEGACY_NEWS_DOC_IDS = ("realtime", "popular", "main")
-_BRIEFING_FEED_DOC_IDS = ("hankyung", "maeil")  # 제품 상 domestic/overseas 신문 풀과 대응
+# 브리핑 제품 제거 후 Firestore `briefing` 잔여 문서 정리
+_BRIEFING_LEGACY_DOC_IDS = ("hankyung", "maeil", "us_market")
 
 _SAVED_ARTICLES = "saved_articles"
 _MARKET = "market"
@@ -155,9 +156,9 @@ def _delete_feed_document(
         logger.exception("피드 문서 삭제 실패 %s/%s: %s", collection, doc_id, e)
 
 
-def clear_news_and_briefing_feeds() -> None:
+def clear_news_feeds() -> None:
     """
-    크롤링 전 뉴스·브리핑 피드 문서를 비움.
+    크롤링 전 뉴스 피드 문서를 비움. `briefing` 컬렉션 레거시 문서도 제거(제품에서 미사용).
     saved_articles 에 등록된 article_id와 동일한 ID의 하위 문서는 삭제하지 않음.
     """
     db = _get_db()
@@ -166,58 +167,10 @@ def clear_news_and_briefing_feeds() -> None:
         _delete_feed_document(db, "news", doc_id, protected)
     for doc_id in _LEGACY_NEWS_DOC_IDS:
         _delete_feed_document(db, "news", doc_id, protected)
-    for doc_id in _BRIEFING_FEED_DOC_IDS:
+    for doc_id in _NEWS_OVERSEAS_TAB_LEGACY_DOC_IDS:
+        _delete_feed_document(db, "news", doc_id, protected)
+    for doc_id in _BRIEFING_LEGACY_DOC_IDS:
         _delete_feed_document(db, "briefing", doc_id, protected)
-
-
-def save_briefing_hankyung_articles(articles: List[dict[str, Any]]) -> None:
-    """briefing/hankyung 문서에 articles + updated_at 저장."""
-    try:
-        db = _get_db()
-        db.collection("briefing").document("hankyung").set(
-            {
-                "articles": articles,
-                "updated_at": SERVER_TIMESTAMP,
-            },
-            merge=False,
-        )
-    except Exception as e:
-        logger.exception("save_briefing_hankyung_articles 실패: %s", e)
-
-
-def save_briefing_maeil_articles(articles: List[dict[str, Any]]) -> None:
-    """briefing/maeil 문서에 articles + updated_at 저장."""
-    try:
-        db = _get_db()
-        db.collection("briefing").document("maeil").set(
-            {
-                "articles": articles,
-                "updated_at": SERVER_TIMESTAMP,
-            },
-            merge=False,
-        )
-    except Exception as e:
-        logger.exception("save_briefing_maeil_articles 실패: %s", e)
-
-
-def save_us_market_articles(articles: List[dict[str, Any]]) -> None:
-    """briefing/us_market 문서에 articles (Yahoo market 뉴스 요약 등)."""
-    try:
-        db = _get_db()
-        db.collection("briefing").document("us_market").set(
-            {
-                "articles": articles,
-                "updated_at": SERVER_TIMESTAMP,
-            },
-            merge=True,
-        )
-    except Exception as e:
-        logger.exception("save_us_market_articles 실패: %s", e)
-
-
-def save_us_articles(articles: List[dict[str, Any]]) -> None:
-    """briefing/us_market — `save_us_market_articles` 별칭 (하위 호환)."""
-    save_us_market_articles(articles)
 
 
 def save_market_indicators(indicators: List[dict[str, Any]]) -> None:
@@ -375,36 +328,6 @@ def save_news_feed(articles: List[dict[str, Any]], feed_type: str) -> None:
         logger.exception("save_news_feed 실패 [%s]: %s", feed_type, e)
 
 
-def save_overseas_stocks_articles(articles: List[dict[str, Any]]) -> None:
-    """news/overseas_stocks 문서에 articles 배열 + updated_at (CNBC·Guardian 등 RSS)."""
-    try:
-        db = _get_db()
-        db.collection("news").document("overseas_stocks").set(
-            {
-                "articles": articles,
-                "updated_at": SERVER_TIMESTAMP,
-            },
-            merge=False,
-        )
-    except Exception as e:
-        logger.exception("save_overseas_stocks_articles 실패: %s", e)
-
-
-def save_overseas_tech_articles(articles: List[dict[str, Any]]) -> None:
-    """news/overseas_tech 문서에 articles 배열 + updated_at (CNBC·Verge·Ars 등 RSS)."""
-    try:
-        db = _get_db()
-        db.collection("news").document("overseas_tech").set(
-            {
-                "articles": articles,
-                "updated_at": SERVER_TIMESTAMP,
-            },
-            merge=False,
-        )
-    except Exception as e:
-        logger.exception("save_overseas_tech_articles 실패: %s", e)
-
-
 _SETTINGS = "settings"
 _AI_CONFIG_DOC = "ai_config"
 
@@ -424,9 +347,8 @@ def _normalize_ai_selected_model(raw: object | None) -> str | None:
 
 def get_ai_config() -> dict[str, str]:
     """
-    settings/ai_config — 파이프라인 AI 분기용.
-    [selected_model]: \"claude\" | \"gemini\". 없으면 gemini 기본.
-    레거시 [claude_enabled]/[gemini_enabled]만 있으면 이전 의미로 유도.
+    settings/ai_config — 파이프라인은 Gemini 전용.
+    문서에 claude·레거시 bool이 있어도 항상 selected_model=gemini 로 정규화.
     """
     defaults: dict[str, str] = {"selected_model": _AI_MODEL_GEMINI}
     try:
@@ -436,14 +358,11 @@ def get_ai_config() -> dict[str, str]:
             return dict(defaults)
         d = snap.to_dict() or {}
         sm = _normalize_ai_selected_model(d.get("selected_model"))
-        if sm:
-            return {"selected_model": sm}
-        # 레거시 bool 필드
+        if sm == _AI_MODEL_CLAUDE:
+            return {"selected_model": _AI_MODEL_GEMINI}
+        if sm == _AI_MODEL_GEMINI:
+            return {"selected_model": _AI_MODEL_GEMINI}
         if "claude_enabled" in d or "gemini_enabled" in d:
-            c = bool(d.get("claude_enabled", True))
-            g = bool(d.get("gemini_enabled", True))
-            if c and not g:
-                return {"selected_model": _AI_MODEL_CLAUDE}
             return {"selected_model": _AI_MODEL_GEMINI}
         return dict(defaults)
     except Exception as e:
@@ -523,8 +442,10 @@ def write_pipeline_log(
 
 
 def set_ai_config_selected_model(model: str) -> None:
-    """Claude 실패 후 Gemini 폴백 등에서 원격 selected_model 갱신."""
+    """원격 selected_model 갱신(제품은 gemini)."""
     m = _normalize_ai_selected_model(model) or _AI_MODEL_GEMINI
+    if m == _AI_MODEL_CLAUDE:
+        m = _AI_MODEL_GEMINI
     try:
         db = _get_db()
         db.collection(_SETTINGS).document(_AI_CONFIG_DOC).set(

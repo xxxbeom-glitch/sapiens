@@ -56,14 +56,6 @@ def next_kst_top_of_hour(after: datetime) -> datetime:
     return base + timedelta(hours=1)
 
 
-def next_briefing_push_kst(now_kst: datetime) -> datetime:
-    """당일 06:00 KST. 이미 지났으면 익일 06:00."""
-    target = now_kst.replace(hour=6, minute=0, second=0, microsecond=0)
-    if now_kst < target:
-        return target
-    return target + timedelta(days=1)
-
-
 def domestic_news_title_body(scheduled_kst: datetime) -> tuple[str, str]:
     h = scheduled_kst.hour
     if h <= 8:

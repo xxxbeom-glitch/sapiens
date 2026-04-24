@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.MarketDirection
-import com.sapiens.app.data.model.MarketIndicator
 import com.sapiens.app.data.model.MarketIndex
 import com.sapiens.app.data.model.MarketIndexSnapshot
 import com.sapiens.app.data.model.MarketTheme
@@ -38,70 +37,6 @@ class NewsRepositoryImpl(
         firestore = FirebaseFirestore.getInstance(FirebaseApp.getInstance(), DATABASE_ID),
         appContext = FirebaseApp.getInstance().applicationContext
     )
-
-    override fun getBriefingHankyungArticles(): Flow<List<Article>> = callbackFlow {
-        val reg = firestore.collection(COLLECTION_BRIEFING).document(DOC_HANKYUNG)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    trySend(emptyList())
-                    return@addSnapshotListener
-                }
-                if (snapshot == null) {
-                    trySend(emptyList())
-                    return@addSnapshotListener
-                }
-                trySend(snapshot.parseArticles("articles"))
-            }
-        awaitClose { reg.remove() }
-    }
-
-    override fun getBriefingMaeilArticles(): Flow<List<Article>> = callbackFlow {
-        val reg = firestore.collection(COLLECTION_BRIEFING).document(DOC_MAEIL)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    trySend(emptyList())
-                    return@addSnapshotListener
-                }
-                if (snapshot == null) {
-                    trySend(emptyList())
-                    return@addSnapshotListener
-                }
-                trySend(snapshot.parseArticles("articles"))
-            }
-        awaitClose { reg.remove() }
-    }
-
-    override fun getUsArticles(): Flow<List<Article>> = callbackFlow {
-        val reg = firestore.collection(COLLECTION_BRIEFING).document(DOC_US_MARKET)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    trySend(emptyList())
-                    return@addSnapshotListener
-                }
-                if (snapshot == null) {
-                    trySend(emptyList())
-                    return@addSnapshotListener
-                }
-                trySend(snapshot.parseArticles("articles"))
-            }
-        awaitClose { reg.remove() }
-    }
-
-    override fun getMarketIndicators(): Flow<List<MarketIndicator>> = callbackFlow {
-        val reg = firestore.collection(COLLECTION_MARKET).document(DOC_MARKET_INDICATORS)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    trySend(emptyList())
-                    return@addSnapshotListener
-                }
-                if (snapshot == null) {
-                    trySend(emptyList())
-                    return@addSnapshotListener
-                }
-                trySend(snapshot.parseIndicators("indicators"))
-            }
-        awaitClose { reg.remove() }
-    }
 
     override fun getRepresentativeIndices(): Flow<MarketIndexSnapshot> = flow {
         emit(loadRepresentativeIndices())
@@ -358,17 +293,11 @@ class NewsRepositoryImpl(
 
     companion object {
         private const val DATABASE_ID = "sapiens"
-        private const val COLLECTION_BRIEFING = "briefing"
         private const val COLLECTION_NEWS = "news"
         private const val COLLECTION_MARKET = "market"
         /** `market/themes/by_no/{theme_no}` 부모 문서. */
         private const val DOC_MARKET_THEMES_ROOT = "themes"
         private const val SUB_MARKET_THEMES_BY_NO = "by_no"
-        /** `market/indicators` 시장 지표 문서. */
-        private const val DOC_MARKET_INDICATORS = "indicators"
-        private const val DOC_HANKYUNG = "hankyung"
-        private const val DOC_MAEIL = "maeil"
-        private const val DOC_US_MARKET = "us_market"
         private const val PREFS_MARKET_CACHE = "market_index_cache"
         private const val PREF_LAST_FETCH_MILLIS = "last_fetch_millis"
         private const val PREF_CACHED_INDICES = "cached_indices_json"

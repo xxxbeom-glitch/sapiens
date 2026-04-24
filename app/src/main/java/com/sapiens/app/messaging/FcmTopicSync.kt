@@ -12,7 +12,6 @@ import kotlinx.coroutines.tasks.await
 /** Cloud Functions / 파이프라인에서 발송하는 FCM 토픽과 동일한 이름. */
 object FcmTopicSync {
     val topics: List<String> = listOf(
-        "briefing_update",
         "news_update",
         "market_update",
     )

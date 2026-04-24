@@ -10,37 +10,8 @@ import com.sapiens.app.data.model.MarketIndicator
 import com.sapiens.app.data.model.MarketTheme
 import com.sapiens.app.data.model.ThemeStock
 import com.sapiens.app.data.model.YearFinancialValue
-import com.sapiens.app.data.model.USReport
 
 object MockData {
-    val briefingHankyungArticles: List<Article> = (1..5).map { i ->
-        Article(
-            source = "한국경제",
-            sourceColor = "kr",
-            headline = "데모 한국경제 신문 기사 제목 $i",
-            summary = "Firestore briefing/hankyung 이 비었을 때 표시됩니다.",
-            time = String.format("2026-04-19 %02d:00", 8 + i),
-            category = "경제",
-            summaryPoints = listOf("파이프라인 실행 후 실제 한국경제 기사가 동기화됩니다."),
-            tag = "HK",
-            url = "https://demo.sapiens.invalid/briefing/hankyung/$i"
-        )
-    }
-
-    val briefingMaeilArticles: List<Article> = (1..5).map { i ->
-        Article(
-            source = "매일경제",
-            sourceColor = "kr",
-            headline = "데모 매일경제 신문 기사 제목 $i",
-            summary = "Firestore briefing/maeil 이 비었을 때 표시됩니다.",
-            time = String.format("2026-04-19 %02d:30", 12 + i),
-            category = "매크로",
-            summaryPoints = listOf("파이프라인 실행 후 실제 매일경제 기사가 동기화됩니다."),
-            tag = "MK",
-            url = "https://demo.sapiens.invalid/briefing/maeil/$i"
-        )
-    }
-
     val marketIndicators = listOf(
         MarketIndicator(name = "다우존스", value = "39,582.10", change = "+0.84%", direction = MarketDirection.UP),
         MarketIndicator(name = "나스닥", value = "17,940.22", change = "+1.21%", direction = MarketDirection.UP),
@@ -120,86 +91,6 @@ object MockData {
 
     /** Firestore `market/industries` 비어 있을 때 업종 탭용(테마와 동일 [MarketTheme] 스키마). */
     val marketIndustries: List<MarketTheme> = emptyList()
-
-    val usReport = USReport(
-        date = "4/18 현지시간",
-        body = "뉴욕증시 3대 지수는 강한 기업 실적과 인플레이션 둔화 신호에 힘입어 일제히 상승 마감했다. 엔비디아가 3.2% 오르며 AI 반도체 랠리를 다시 이끌었고, 금융주도 견조한 흐름을 보였다. 장 후반 발표된 주간 실업수당 청구건수가 예상치를 하회하며 연착륙 기대를 키웠다."
-    )
-
-    val usArticles = listOf(
-        Article(
-            source = "Bloomberg",
-            headline = "엔비디아 신제품 공개 기대에 주가 사상 최고치 재경신",
-            summary = "신형 AI 가속기 공개 기대와 데이터센터 수요가 겹치며 주가가 신고가를 재차 경신했다.",
-            time = "06:40",
-            category = "빅테크",
-            summaryPoints = listOf(
-                "엔비디아 주가는 장중 $1,045까지 오르며 사상 최고치를 다시 썼고, 20거래일 누적 상승률은 17%로 S&P500 대비 초과수익이 크게 확대됐습니다.",
-                "클라우드 사업자 4곳의 2026년 AI 서버 CAPEX 가이던스가 전년 대비 평균 28% 상향된 점이 배경이며, 블랙웰 출하 일정이 투자심리를 추가로 자극했습니다.",
-                "주가가 선행 EPS 41배 수준까지 올라 밸류 부담 논란은 있으나, 공급 병목 완화가 확인되면 실적 추정치 상향이 한 차례 더 나올 수 있다는 전망이 나옵니다."
-            )
-        ),
-        Article(
-            source = "Reuters",
-            headline = "애플 서비스 매출 분기 최대, 온디바이스 AI 전환 가속",
-            summary = "서비스 부문 기록 경신과 온디바이스 AI 전략 강화가 동시에 확인됐다.",
-            time = "06:12",
-            category = "빅테크",
-            summaryPoints = listOf(
-                "애플 서비스 매출은 분기 기준 $25.3B로 전년 대비 13% 증가해 역대 최고치를 기록했고, 총이익률도 46%로 0.8%p 개선됐습니다.",
-                "차기 OS 업데이트에서 온디바이스 AI 기능을 대거 탑재한다는 계획이 제시되며 아이폰 교체 주기 단축 기대가 재점화됐습니다.",
-                "하드웨어 성장 둔화를 서비스가 방어하는 구조가 강화되면 실적 안정성이 높아지지만, 앱스토어 규제 리스크가 멀티플 확장 속도를 제약할 수 있습니다."
-            )
-        ),
-        Article(
-            source = "WSJ",
-            headline = "JP모건, 미국 경제 연착륙 확률 70%로 상향 제시",
-            summary = "고용·소비 지표가 예상보다 견조해 경기 침체 가능성이 낮아졌다는 분석이 나왔다.",
-            time = "05:58",
-            category = "매크로",
-            summaryPoints = listOf(
-                "JP모건은 12개월 내 경기침체 확률을 35%에서 25%로 낮추고, 연착륙 시나리오 확률을 70%로 상향 조정했습니다.",
-                "핵심 근거로 실업률 4.0% 유지, 소매판매 전월 대비 0.6% 증가, 기업 신용스프레드 안정 구간 지속을 제시했습니다.",
-                "연착륙 기대가 강화되면 금융·산업재에 우호적이지만, 물가 재가속이 발생하면 금리 인하 경로가 지연되어 밸류 성장주 변동성이 확대될 수 있습니다."
-            )
-        ),
-        Article(
-            source = "CNBC",
-            headline = "테슬라 2분기 인도량 예상 상회, 생산 효율 개선 확인",
-            summary = "공격적 가격정책과 생산 효율 개선으로 인도량이 컨센서스를 웃돌았다.",
-            time = "05:30",
-            category = "모빌리티",
-            summaryPoints = listOf(
-                "테슬라 2분기 인도량은 46.8만대로 시장 예상치 44.9만대를 4.2% 상회했고, 상하이 공장 가동률 개선이 물량 회복을 이끌었습니다.",
-                "평균판매단가(ASP)는 전년 대비 6% 하락했지만 원가 절감과 물류 효율화로 자동차 부문 총마진이 18% 수준을 방어했다는 평가가 나왔습니다.",
-                "인도량 반등은 단기 실적에 긍정적이지만 추가 가격 인하 경쟁이 재개되면 하반기 EPS 추정치가 재차 하향될 가능성이 있습니다."
-            )
-        ),
-        Article(
-            source = "Bloomberg",
-            headline = "연준 의사록, 6월 금리 인하 가능성 신호 한층 강화",
-            summary = "의사록에서 인플레이션 둔화 확인 시 정책 완화 여지가 언급됐다.",
-            time = "05:02",
-            category = "금리",
-            summaryPoints = listOf(
-                "FOMC 의사록에서 다수 위원이 물가 둔화의 추가 증거가 확인되면 정책금리 인하를 검토할 수 있다고 명시해 시장 기대를 키웠습니다.",
-                "미국 2년물 금리는 발표 직후 11bp 하락한 4.31%를 기록했고, 나스닥 선물은 +0.9% 반등하며 금리 민감주가 강세를 보였습니다.",
-                "다만 위원들은 임금과 서비스 물가의 하방 경직성을 리스크로 지적해, 향후 고용지표가 강하면 인하 시점이 재차 밀릴 수 있음을 시사했습니다."
-            )
-        ),
-        Article(
-            source = "FT",
-            headline = "달러 인덱스 3주래 최저 하락, 원화 강세 흐름 전환",
-            summary = "달러 약세와 위험선호 회복으로 원화가 강세 구간에 진입했다.",
-            time = "04:45",
-            category = "환율",
-            summaryPoints = listOf(
-                "달러 인덱스(DXY)는 103.1까지 하락해 3주 최저를 기록했고, 원/달러 환율은 역외에서 1,359원까지 내려오며 심리적 저항선을 이탈했습니다.",
-                "미국 금리 하락과 아시아 증시 자금 유입이 맞물리며 KRW·TWD 등 위험통화가 동반 강세를 보였고, 수입 기업의 환헤지 수요도 완화됐습니다.",
-                "환율 하향 안정은 국내 물가 부담 완화에 긍정적이지만, 지정학 이벤트로 달러 수요가 재점화되면 변동성이 빠르게 확대될 수 있습니다."
-            )
-        )
-    )
 
     val newsFeed = listOf(
         Article(

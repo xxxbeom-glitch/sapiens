@@ -40,12 +40,6 @@ class NewsViewModel(
     private val _aiIssueNews = MutableStateFlow(emptyList<Article>())
     val aiIssueNews: StateFlow<List<Article>> = _aiIssueNews.asStateFlow()
 
-    private val _overseasStocks = MutableStateFlow(emptyList<Article>())
-    val overseasStocks: StateFlow<List<Article>> = _overseasStocks.asStateFlow()
-
-    private val _overseasTech = MutableStateFlow(emptyList<Article>())
-    val overseasTech: StateFlow<List<Article>> = _overseasTech.asStateFlow()
-
     val bookmarkedArticleIds: StateFlow<Set<String>> = bookmarksRepository.bookmarksFlow
         .map { entries -> entries.map { it.article.stableId() }.toSet() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
@@ -75,26 +69,6 @@ class NewsViewModel(
                     _aiIssueNews.value = aiIssue.takeIf { it.isNotEmpty() }
                         ?: _aiIssueNews.value
                     _isLoading.value = false
-                }
-        }
-        viewModelScope.launch {
-            repository.getNewsFeed(NewsFeedType.OVERSEAS_STOCKS)
-                .catch { e ->
-                    Log.w(TAG, "overseas_stocks", e)
-                    emit(emptyList())
-                }
-                .collect { list ->
-                    _overseasStocks.value = list
-                }
-        }
-        viewModelScope.launch {
-            repository.getNewsFeed(NewsFeedType.OVERSEAS_TECH)
-                .catch { e ->
-                    Log.w(TAG, "overseas_tech", e)
-                    emit(emptyList())
-                }
-                .collect { list ->
-                    _overseasTech.value = list
                 }
         }
     }

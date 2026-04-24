@@ -10,4 +10,4 @@ COPY . .
 
 ENV PYTHONUNBUFFERED=1
 
-CMD ["python", "-u", "handler.py"]
+CMD ["python", "-u", "main.py"]

@@ -170,10 +170,10 @@ fun MyScreen(
 
         val notifPermitted = FcmTopicSync.hasNotificationPermission(context)
         val pushSubtitle = when {
-            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU -> "브리핑·뉴스·마켓 알림"
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU -> "뉴스·마켓 알림"
             pushNotificationsEnabled && !notifPermitted ->
                 "설정에서 알림 권한을 허용해 주세요"
-            else -> "브리핑·뉴스·마켓 알림"
+            else -> "뉴스·마켓 알림"
         }
         PushNotificationMenuRow(
             subtitle = pushSubtitle,
@@ -340,7 +340,7 @@ private fun ApiAiInfoMenuRow(modifier: Modifier = Modifier) {
                     color = TextPrimary
                 )
                 Text(
-                    text = "Claude Haiku 초안과 Gemini 검증을 함께 사용합니다. 앱에서 엔진을 바꿀 수 없습니다.",
+                    text = "뉴스·시황·기업 요약은 Google Gemini API로 생성합니다. 앱에서 엔진을 바꿀 수 없습니다.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary,
                     maxLines = 4,

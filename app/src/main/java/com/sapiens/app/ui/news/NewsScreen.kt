@@ -3,13 +3,10 @@ package com.sapiens.app.ui.news
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -30,8 +27,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.stableId
 import com.sapiens.app.ui.common.ArticleBottomSheet
@@ -39,89 +34,27 @@ import com.sapiens.app.ui.common.ArticleBottomSheetKind
 import com.sapiens.app.ui.common.ArticleMixedFeedCard
 import com.sapiens.app.ui.common.transformNaverFinanceNewsReadUrlForMobile
 import com.sapiens.app.ui.theme.Accent
-import com.sapiens.app.ui.theme.AppShapes
 import com.sapiens.app.ui.theme.Background
-import com.sapiens.app.ui.theme.Card
-import com.sapiens.app.ui.theme.OnPrimaryFixed
 import com.sapiens.app.ui.theme.RowVertical
-import com.sapiens.app.ui.theme.SapiensTextStyles
-import com.sapiens.app.ui.theme.Spacing
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 
-private val domesticTabLabels = listOf("#국내 증시", "#미국 증시", "AI ISSUE")
-private val overseasTabLabels = listOf("Stocks", "Technology")
-
-@Composable
-fun NewsRegionToggle(
-    isOverseas: Boolean,
-    onIsOverseasChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val pillSurface = Card.copy(alpha = 0.5f)
-    val innerH = Spacing.space24
-    Row(
-        modifier = modifier
-            .height(Spacing.space30)
-            .clip(AppShapes.pill)
-            .background(pillSurface)
-            .padding(Spacing.space3),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .height(innerH)
-                .clip(AppShapes.pillInner)
-                .background(if (!isOverseas) Accent else Color.Transparent)
-                .clickable { onIsOverseasChange(false) }
-                .padding(horizontal = Spacing.space12)
-        ) {
-            Text(
-                text = "국내",
-                color = if (!isOverseas) OnPrimaryFixed else TextSecondary,
-                style = SapiensTextStyles.toggleLabel12
-            )
-        }
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .height(innerH)
-                .clip(AppShapes.pillInner)
-                .background(if (isOverseas) Accent else Color.Transparent)
-                .clickable { onIsOverseasChange(true) }
-                .padding(horizontal = Spacing.space12)
-        ) {
-            Text(
-                text = "해외",
-                color = if (isOverseas) OnPrimaryFixed else TextSecondary,
-                style = SapiensTextStyles.toggleLabel12
-            )
-        }
-    }
-}
+private val tabLabels = listOf("#국내 증시", "#미국 증시", "AI ISSUE")
 
 @Composable
 fun NewsScreen(
     viewModel: NewsViewModel,
-    isOverseas: Boolean
 ) {
     val isLoading by viewModel.isLoading.collectAsState()
     val domesticMarketNews by viewModel.domesticMarketNews.collectAsState()
     val globalMarketNews by viewModel.globalMarketNews.collectAsState()
     val aiIssueNews by viewModel.aiIssueNews.collectAsState()
-    val overseasStocks by viewModel.overseasStocks.collectAsState()
-    val overseasTech by viewModel.overseasTech.collectAsState()
 
     var selectedArticle by remember { mutableStateOf<Article?>(null) }
     val bookmarkedIds by viewModel.bookmarkedArticleIds.collectAsState()
     val context = LocalContext.current
-    // 국내(3)·해외(2)는 Pager 상태를 각각 두어, 리전 전환 시에도 PrimaryTabRow 인덱스가 탭 수를 넘지 않게 한다.
-    val domesticPagerState = rememberPagerState(pageCount = { domesticTabLabels.size })
-    val overseasPagerState = rememberPagerState(pageCount = { overseasTabLabels.size })
-    val pagerState = if (isOverseas) overseasPagerState else domesticPagerState
-    val tabLabels = if (isOverseas) overseasTabLabels else domesticTabLabels
+    val pagerState = rememberPagerState(pageCount = { tabLabels.size })
     val scope = rememberCoroutineScope()
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -168,20 +101,11 @@ fun NewsScreen(
                         .weight(1f)
                         .fillMaxWidth()
                 ) { page ->
-                    val pageItems = when {
-                        isOverseas -> when (page) {
-                            0 -> overseasStocks
-                            1 -> overseasTech
-                            else -> overseasStocks
-                        }
-                        else -> when (page) {
-                            0 -> domesticMarketNews
-                            1 -> globalMarketNews
-                            else -> aiIssueNews
-                        }
+                    val pageItems = when (page) {
+                        0 -> domesticMarketNews
+                        1 -> globalMarketNews
+                        else -> aiIssueNews
                     }
-                    val displayItems =
-                        if (isOverseas) pageItems.map { it.withKoreanHeadlineFallback() } else pageItems
                     key(page) {
                         val scrollState = rememberScrollState()
                         Column(
@@ -191,13 +115,13 @@ fun NewsScreen(
                                 .padding(vertical = RowVertical)
                         ) {
                             ArticleMixedFeedCard(
-                                articles = displayItems,
+                                articles = pageItems,
                                 onClickArticle = { selectedArticle = it },
                                 topChipForArticle = { article ->
                                     val chip = newsPublisherChipText(article.source)
                                     when {
                                         chip.isNotBlank() -> chip
-                                        isOverseas -> "해외"
+                                        page == 1 -> "해외"
                                         else -> "국내"
                                     }
                                 },
@@ -232,20 +156,3 @@ fun NewsScreen(
         }
     }
 }
-
-private fun Article.withKoreanHeadlineFallback(): Article {
-    val headlineTrimmed = headline.trim()
-    if (!headlineTrimmed.looksEnglishOnlyHeadline()) return this
-    val translatedFallback = summaryPoints.firstOrNull { it.containsHangul() }?.trim()
-    if (translatedFallback.isNullOrBlank()) return this
-    return copy(headline = translatedFallback)
-}
-
-private fun String.looksEnglishOnlyHeadline(): Boolean {
-    if (isBlank()) return false
-    val hasLatin = any { it in 'a'..'z' || it in 'A'..'Z' }
-    val hasHangul = containsHangul()
-    return hasLatin && !hasHangul
-}
-
-private fun String.containsHangul(): Boolean = any { it in '\uAC00'..'\uD7A3' }

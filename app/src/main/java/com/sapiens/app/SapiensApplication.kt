@@ -18,7 +18,7 @@ class SapiensApplication : Application() {
             "Sapiens 뉴스 알림",
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
-            description = "브리핑·뉴스·마켓 업데이트 알림"
+            description = "뉴스·마켓 업데이트 알림"
         }
         (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
             .createNotificationChannel(channel)

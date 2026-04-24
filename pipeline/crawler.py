@@ -1,5 +1,5 @@
 ﻿"""
-국내 뉴스 탭(3요약): 3개 RSS 풀 합친 뒤 LLM이 뉴스탭 3분류(국내증시/해외증시/AI 이슈)로 배정(`news_tab_classification`) 후 요약. 해외 뉴스·브리핑은 별도 RSS 등.
+국내 뉴스 탭(3요약): 3개 RSS 풀 합친 뒤 LLM이 뉴스탭 3분류(국내증시/해외증시/AI 이슈)로 배정(`news_tab_classification`) 후 요약. 해외 뉴스는 별도 RSS.
 (토스증권 Playwright `crawl_tossinvest_news` 는 보존. `crawl_domestic` 은 `crawl_naver_*` 를 쓰지 않는다.)
 """
 from __future__ import annotations
@@ -39,8 +39,6 @@ MAX_PER_SECTION = 10
 MAX_TOSS_NEWS = 20
 SUMMARY_CHARS = 200
 ARTICLE_BODY_MAX_CHARS = 2000
-# 브리핑(한경·매경 신문) 저장 후보: 본문이 이 길이 미만이면 제외 (summarizer briefing_newspaper 기준과 동일)
-BRIEFING_NEWSPAPER_MIN_BODY_CHARS = 200
 # 수집 제외: 기사 **제목**에 아래 대괄호를 포함한 문자열이 있으면 수집하지 않음
 _EXCLUDE_TITLE_BRACKET_MARKERS: tuple[str, ...] = ("[사설]", "[포토]", "[표]")
 
@@ -210,37 +208,6 @@ def _attach_naver_article_bodies(rows: list[dict[str, Any]], pause_sec: float = 
         row["body"] = _fetch_naver_article_body(row) if u else ""
         if pause_sec > 0:
             time.sleep(pause_sec)
-
-
-def _filter_briefing_newspaper_rows_by_body(
-    rows: list[dict[str, Any]],
-    *,
-    press_code: str = "",
-) -> list[dict[str, Any]]:
-    """
-    브리핑 신문(한경·매경) 전용: 저장·요약 파이프라인에 넘기기 전 본문 검사.
-    - body가 None이거나 공백만인 항목 제거
-    - strip 이후 길이가 BRIEFING_NEWSPAPER_MIN_BODY_CHARS 미만 제거
-    """
-    kept: list[dict[str, Any]] = []
-    for row in rows:
-        raw = row.get("body")
-        if raw is None:
-            continue
-        text = str(raw).strip()
-        if not text or len(text) < BRIEFING_NEWSPAPER_MIN_BODY_CHARS:
-            continue
-        kept.append(row)
-    dropped = len(rows) - len(kept)
-    if dropped:
-        logger.info(
-            "브리핑 신문 본문 필터: 제거 %d건(본문 없음 또는 %d자 미만), 남음 %d건, press=%s",
-            dropped,
-            BRIEFING_NEWSPAPER_MIN_BODY_CHARS,
-            len(kept),
-            press_code or "?",
-        )
-    return kept
 
 
 def _normalize_url(url: str) -> str:
@@ -847,27 +814,11 @@ def crawl_tossinvest_news() -> dict[str, list[dict[str, Any]]]:
 
 # --- 해외 뉴스: CNBC / Guardian / Verge / Ars RSS (48h, URL 중복 제거, 카테고리당 합산 15건) ---
 RSS_OVERSEAS_MAX_AGE_HOURS = 48.0
-RSS_OVERSEAS_TARGET_ITEMS = 15
 # 뉴스 탭 국내: MK·한경·조선 RSS는 **주소(피드)당** 최대 N건, CNBC 단일 피드는 M건까지 수집
 RSS_DOMESTIC_ITEMS_PER_FEED = 10
 RSS_DOMESTIC_CNBC_MAX_ITEMS = 30
 # LLM 분류 후 Firestore `articles` 배열당 상한(탭별)
 RSS_DOMESTIC_NEWS_MAX_ITEMS = 20
-
-RSS_FEEDS_BRIEFING_OVERSEAS: list[str] = [
-    "https://www.cnbc.com/id/10000664/device/rss/rss.html",
-    "https://www.cnbc.com/id/20409666/device/rss/rss.html",
-    "https://www.theguardian.com/business/rss",
-]
-RSS_FEEDS_OVERSEAS_STOCKS: list[str] = [
-    "https://www.cnbc.com/id/10000664/device/rss/rss.html",
-    "https://www.theguardian.com/business/rss",
-]
-RSS_FEEDS_OVERSEAS_TECH: list[str] = [
-    "https://www.cnbc.com/id/19854910/device/rss/rss.html",
-    "https://www.theverge.com/rss/index.xml",
-    "https://feeds.arstechnica.com/arstechnica/index/",
-]
 
 # --- 뉴스 탭 국내: RSS 3풀(아래) → `crawl_domestic`에서 LLM 3분류(NEWS_TAB_CLASSIFICATION_INSTRUCTION_KO) → Firestore documents ---
 # 매경 30100041=경제, 50200011=증권 / 한경 finance·economy
@@ -1125,292 +1076,6 @@ def crawl_rss_domestic_ai_issue() -> list[dict[str, Any]]:
         max_items_per_feed=RSS_DOMESTIC_CNBC_MAX_ITEMS,
         allow_missing_published=True,
     )
-
-
-def crawl_rss_overseas_stocks() -> list[dict[str, Any]]:
-    """뉴스 탭 Stocks(증시/경제): CNBC Markets + The Guardian business."""
-    return _crawl_rss_feed_urls(RSS_FEEDS_OVERSEAS_STOCKS, max_items=RSS_OVERSEAS_TARGET_ITEMS)
-
-
-def crawl_rss_overseas_tech() -> list[dict[str, Any]]:
-    """뉴스 탭 Tech: CNBC Tech + The Verge + Ars Technica."""
-    return _crawl_rss_feed_urls(RSS_FEEDS_OVERSEAS_TECH, max_items=RSS_OVERSEAS_TARGET_ITEMS)
-
-
-def crawl_rss_briefing_overseas() -> list[dict[str, Any]]:
-    """브리핑 해외 주요: CNBC Markets + CNBC Markets Insider + Guardian business."""
-    return _crawl_rss_feed_urls(RSS_FEEDS_BRIEFING_OVERSEAS, max_items=RSS_OVERSEAS_TARGET_ITEMS)
-
-
-NAVER_MEDIA = "https://media.naver.com"
-MAX_NEWSPAPER_ITEMS = 30
-
-
-def _absolutize_media_naver_url(href: str) -> str:
-    h = (href or "").strip()
-    if not h or h.startswith("#") or "javascript" in h.lower():
-        return ""
-    if h.startswith("http://") or h.startswith("https://"):
-        return h.split("#")[0]
-    if h.startswith("//"):
-        return ("https:" + h).split("#")[0]
-    return urljoin(NAVER_MEDIA, h).split("#")[0]
-
-
-def _absolutize_naver_newspaper_img(src: str) -> str:
-    t = (src or "").strip()
-    if not t or t.startswith("data:"):
-        return ""
-    if t.startswith("//"):
-        return "https:" + t
-    if t.startswith("http://") or t.startswith("https://"):
-        return t.split("#")[0]
-    if t.startswith("/"):
-        return urljoin(NAVER_MEDIA, t)
-    return t
-
-
-def _parse_naver_press_newspaper_li(li, source_label: str) -> dict[str, Any] | None:
-    """ul.newspaper_article_lst li — a[href], strong 제목, img[ src ]."""
-    a = li.select_one("a[href]")
-    if not a:
-        return None
-    url = _absolutize_media_naver_url(a.get("href", ""))
-    if not url:
-        return None
-    st = a.select_one("strong") or li.select_one("strong")
-    title = (st.get_text(strip=True) if st else a.get_text(strip=True) or "").strip()
-    if len(title) < 2:
-        return None
-    if _is_excluded_collected_title(title):
-        return None
-    img = li.select_one("img[src]")
-    thumb = _absolutize_naver_newspaper_img((img.get("src") or "").strip()) if img else ""
-    summ = (title[:SUMMARY_CHARS] + ("…" if len(title) > SUMMARY_CHARS else "")).strip()
-    return {
-        "title": title,
-        "summary": summ,
-        "source": source_label,
-        "url": _normalize_url(url),
-        "published_at": "",
-        "category": "",
-        "thumbnail_url": thumb,
-    }
-
-
-def _newspaper_paper_number_int(node: dict[str, Any]) -> int:
-    """paperNumber(예: A1)에서 숫자만 추출. 없거나 숫자 없으면 999."""
-    raw = node.get("paperNumber") or node.get("paper_number")
-    if raw is None:
-        return 999
-    s = str(raw).strip()
-    if not s:
-        return 999
-    m = re.search(r"\d+", s)
-    return int(m.group()) if m else 999
-
-
-def _newspaper_detail_position_int(node: dict[str, Any]) -> int:
-    """detailPosition — 면 내 기사 순서. 없거나 비정상이면 99."""
-    v = node.get("detailPosition")
-    if v is None:
-        return 99
-    try:
-        return int(v)
-    except (TypeError, ValueError):
-        return 99
-
-
-def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> list[dict[str, Any]]:
-    def _newspaper_service_time_published(val: Any) -> str:
-        """serviceTime(밀리초 epoch 문자열/숫자) → KST 표시 문자열. 실패 시 빈 문자열."""
-        if val is None:
-            return ""
-        s = str(val).strip()
-        if not s or not s.isdigit():
-            return ""
-        try:
-            ms = int(s)
-            dt_utc = datetime.fromtimestamp(ms / 1000.0, tz=pytz.UTC)
-            dt_seoul = dt_utc.astimezone(pytz.timezone("Asia/Seoul"))
-            return dt_seoul.strftime("%Y-%m-%d %H:%M")
-        except (OSError, ValueError, OverflowError):
-            return ""
-
-    def _parse_payload(payload: Any, fallback_source: str, limit: int) -> list[dict[str, Any]]:
-        """
-        API dict: { officeId, newspaperOfficeMainPerPaper: [{ paperNumber, newspaperOfficeMain }, ...] }
-        레거시 list: [{ paperNumber, newspaperOfficeMain }, ...]
-        기사 URL: https://n.news.naver.com/article/{officeId}/{articleId}
-        """
-        root_office_id = ""
-        if isinstance(payload, dict):
-            sections = payload.get("newspaperOfficeMainPerPaper") or []
-            root_office_id = str(payload.get("officeId") or "").strip()
-        elif isinstance(payload, list):
-            sections = payload
-        else:
-            return []
-
-        if not isinstance(sections, list):
-            return []
-
-        out: list[dict[str, Any]] = []
-        for section in sections:
-            if not isinstance(section, dict):
-                continue
-            paper_number = _newspaper_paper_number_int(section)
-            articles = section.get("newspaperOfficeMain")
-            if not isinstance(articles, list):
-                continue
-            for art in articles:
-                if not isinstance(art, dict):
-                    continue
-                article_id = str(art.get("articleId") or "").strip()
-                office_id = str(art.get("officeId") or "").strip() or root_office_id
-                if not article_id or not office_id:
-                    continue
-                url = _normalize_url(f"https://n.news.naver.com/article/{office_id}/{article_id}")
-                if not url:
-                    continue
-                title = str(art.get("title") or "").strip()
-                if len(title) < 2:
-                    continue
-                if _is_excluded_collected_title(title):
-                    continue
-                thumb_raw = str(
-                    art.get("thumbnailImgUrl")
-                    or art.get("thumnailImgUrl")
-                    or art.get("thumbnailUrl")
-                    or ""
-                ).strip()
-                thumb = _absolutize_naver_newspaper_img(thumb_raw)
-                if not thumb:
-                    thumb = _extract_naver_article_first_image(url)
-                detail_position = _newspaper_detail_position_int(art)
-                source = str(art.get("officeName") or "").strip() or fallback_source
-                summary_raw = str(art.get("summary") or art.get("lede") or "").strip()
-                summary = (
-                    (summary_raw[:SUMMARY_CHARS] + ("…" if len(summary_raw) > SUMMARY_CHARS else ""))
-                    if summary_raw
-                    else (title[:SUMMARY_CHARS] + ("…" if len(title) > SUMMARY_CHARS else ""))
-                ).strip()
-                published = _newspaper_service_time_published(art.get("serviceTime"))
-                if not published:
-                    published = str(
-                        art.get("date") or art.get("publishedAt") or art.get("articleDate") or ""
-                    ).strip()
-
-                out.append(
-                    {
-                        "title": title,
-                        "summary": summary,
-                        "source": source,
-                        "url": url,
-                        "published_at": published,
-                        "category": "",
-                        "thumbnail_url": thumb,
-                        "paper_number": paper_number,
-                        "detail_position": detail_position,
-                    }
-                )
-
-        out.sort(key=lambda r: (r["paper_number"], r["detail_position"]))
-        seen_url: set[str] = set()
-        deduped: list[dict[str, Any]] = []
-        for row in out:
-            u = (row.get("url") or "").strip()
-            if not u or u in seen_url:
-                continue
-            seen_url.add(u)
-            deduped.append(row)
-        return deduped[:limit]
-
-    seoul = pytz.timezone("Asia/Seoul")
-    today = datetime.now(seoul)
-    date_try_labels = ("오늘", "어제", "그제", "3일 전")
-    # 오늘 → 어제 → 그제 → 3일 전까지 (주말·공휴일 등으로 당일 API가 빈 배열일 때 대비)
-    for days_back in range(4):
-        target_day = today - timedelta(days=days_back)
-        date_str = target_day.strftime("%Y%m%d")
-        api_url = f"{NAVER_MEDIA}/api/press/{press_code}/newspaper?date={date_str}"
-        date_try_label = date_try_labels[days_back]
-
-        req_headers = dict(HEADERS)
-        req_headers["Referer"] = f"https://media.naver.com/press/{press_code}/newspaper"
-        req_headers["User-Agent"] = (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        )
-
-        status_code: int | None = None
-        raw_json: Any = None
-        try:
-            r = requests.get(api_url, headers=req_headers, timeout=REQUEST_TIMEOUT)
-            status_code = r.status_code
-            r.raise_for_status()
-            raw_json = r.json()
-        except requests.HTTPError as e:
-            if e.response is not None:
-                status_code = e.response.status_code
-            logger.warning("_crawl_naver_newspaper HTTP 오류 press=%s url=%s: %s", press_code, api_url, e)
-        except Exception as e:
-            logger.warning("_crawl_naver_newspaper 요청 실패 press=%s url=%s: %s", press_code, api_url, e)
-
-        payload = raw_json
-        logger.info("RAW PAYLOAD 앞 500자: %s", str(payload)[:500])
-
-        rows = _parse_payload(payload, source_label, max_n) if payload is not None else []
-        logger.info(
-            "_crawl_naver_newspaper press=%s source=%s 날짜시도=%s(%s) url=%s status=%s articles=%d",
-            press_code,
-            source_label,
-            date_try_label,
-            date_str,
-            api_url,
-            status_code if status_code is not None else "-",
-            len(rows),
-        )
-        if rows:
-            rows.sort(key=lambda r: (r.get("paper_number", 999), r.get("detail_position", 99)))
-            # 뉴스탭(crawl_naver_realtime 등)과 동일: 각 row에 `body` 채움 → 브리핑 요약에 본문 전달
-            _attach_naver_article_bodies(rows)
-            # 한경·매경 공통: 본문 없음·짧은 기사는 풀에 넣지 않음 (briefing_hankyung_pool / briefing_maeil_pool 동일 기준)
-            filtered = _filter_briefing_newspaper_rows_by_body(rows, press_code=press_code)
-            if filtered:
-                return filtered
-            logger.info(
-                "브리핑 신문: 본문 필터로 당일 후보 전부 제거 → 다음 날짜 시도 press=%s %s(%s)",
-                press_code,
-                date_try_label,
-                date_str,
-            )
-    return []
-
-
-def crawl_hankyung_newspaper() -> list[dict[str, Any]]:
-    """NAVER 뉴스 — 한국경제 신문 스탠드 (최대 30). 본문 200자 미만·빈 본문은 제외. 파이프라인은 면·면 내 순 정렬 후 상위 5건만 briefing/hankyung에 저장."""
-    try:
-        return _crawl_naver_newspaper(
-            "015",
-            "한국경제",
-            MAX_NEWSPAPER_ITEMS,
-        )
-    except Exception as e:
-        logger.exception("crawl_hankyung_newspaper 실패: %s", e)
-        return []
-
-
-def crawl_maeil_newspaper() -> list[dict[str, Any]]:
-    """NAVER 뉴스 — 매일경제 신문 스탠드 (최대 30). 본문 200자 미만·빈 본문은 제외. 파이프라인은 면·면 내 순 정렬 후 상위 5건만 briefing/maeil에 저장."""
-    try:
-        return _crawl_naver_newspaper(
-            "009",
-            "매일경제",
-            MAX_NEWSPAPER_ITEMS,
-        )
-    except Exception as e:
-        logger.exception("crawl_maeil_newspaper 실패: %s", e)
-        return []
 
 
 def _fetch_stock_naver_json(url: str) -> Any | None:

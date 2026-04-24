@@ -42,14 +42,11 @@ import com.sapiens.app.data.repository.SavedArticlesFirestoreWriter
 import com.sapiens.app.data.sync.UserCloudBackupRepository
 import com.sapiens.app.data.sync.UserCloudBackupScheduler
 import com.sapiens.app.data.store.ArticleBookmarksRepository
-import com.sapiens.app.ui.briefing.BriefingScreen
-import com.sapiens.app.ui.briefing.BriefingViewModel
 import com.sapiens.app.ui.market.MarketScreen
 import com.sapiens.app.ui.market.MarketViewModel
 import com.sapiens.app.ui.market.StockDetailBottomSheet
 import com.sapiens.app.ui.market.StockDetailViewModel
 import com.sapiens.app.ui.my.MyScreen
-import com.sapiens.app.ui.news.NewsRegionToggle
 import com.sapiens.app.ui.news.NewsScreen
 import com.sapiens.app.ui.news.NewsViewModel
 import com.sapiens.app.ui.theme.Accent
@@ -66,7 +63,6 @@ private data class BottomTab(
 )
 
 private val tabs = listOf(
-    BottomTab(label = "브리핑", iconResId = R.drawable.ico_brief),
     BottomTab(label = "뉴스", iconResId = R.drawable.ico_news),
     BottomTab(label = "마켓", iconResId = R.drawable.ico_market),
     BottomTab(label = "마이", iconResId = R.drawable.ico_my)
@@ -78,7 +74,6 @@ fun MainScreen(
     onNavigateToSectionConsumed: () -> Unit = {},
 ) {
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-    var isOverseasNews by remember { mutableStateOf(false) }
     var stockDetailCode by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
@@ -93,7 +88,6 @@ fun MainScreen(
         )
     }
     val feedbackRepository = remember { FeedbackRepositoryImpl() }
-    val briefingViewModel: BriefingViewModel = viewModel(factory = BriefingViewModel.factory(newsRepository))
     val newsViewModel: NewsViewModel = viewModel(
         factory = NewsViewModel.factory(
             newsRepository,
@@ -126,12 +120,8 @@ fun MainScreen(
     LaunchedEffect(navigateToSectionKey) {
         val key = navigateToSectionKey?.trim()?.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
         when (key) {
-            "briefing" -> selectedTabIndex = 0
-            "domestic_news" -> {
-                selectedTabIndex = 1
-                isOverseasNews = false
-            }
-            "market" -> selectedTabIndex = 2
+            "briefing", "domestic_news" -> selectedTabIndex = 0
+            "market" -> selectedTabIndex = 1
         }
         onNavigateToSectionConsumed()
     }
@@ -142,9 +132,6 @@ fun MainScreen(
         topBar = {
             MainTopAppBar(
                 title = tabs[selectedTabIndex].label,
-                showNewsRegionToggle = selectedTabIndex == 1,
-                isOverseasNews = isOverseasNews,
-                onOverseasNewsChange = { isOverseasNews = it }
             )
         },
         bottomBar = {
@@ -161,15 +148,8 @@ fun MainScreen(
                 .padding(innerPadding)
         ) {
             when (selectedTabIndex) {
-                0 -> BriefingScreen(
-                    viewModel = briefingViewModel,
-                    bookmarksRepository = bookmarksRepository
-                )
-                1 -> NewsScreen(
-                    viewModel = newsViewModel,
-                    isOverseas = isOverseasNews
-                )
-                2 -> MarketScreen(
+                0 -> NewsScreen(viewModel = newsViewModel)
+                1 -> MarketScreen(
                     viewModel = marketViewModel,
                     onThemeStockNameClick = { code -> stockDetailCode = code }
                 )
@@ -199,9 +179,6 @@ fun MainScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 private fun MainTopAppBar(
     title: String,
-    showNewsRegionToggle: Boolean = false,
-    isOverseasNews: Boolean = false,
-    onOverseasNewsChange: (Boolean) -> Unit = {}
 ) {
     TopAppBar(
         modifier = Modifier
@@ -217,16 +194,6 @@ private fun MainTopAppBar(
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold
             )
-        },
-        actions = {
-            if (showNewsRegionToggle) {
-                Box(Modifier.padding(end = Spacing.space4)) {
-                    NewsRegionToggle(
-                        isOverseas = isOverseasNews,
-                        onIsOverseasChange = onOverseasNewsChange
-                    )
-                }
-            }
         },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = Background,
