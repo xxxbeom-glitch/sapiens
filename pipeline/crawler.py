@@ -856,6 +856,7 @@ _RSS_SOURCE_LABEL_MAP: dict[str, str] = {
     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910": "CNBC",
     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258": "CNBC",
 }
+MK_ARTICLE_BODY_SELECTORS = (
     "div.news_cnt_detail",
     "div#article",
     "div.article",

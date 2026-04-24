@@ -126,11 +126,11 @@ fun ArticleMixedFeedCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .height(Spacing.space44)
                         .clickable(
                             indication = null,
                             interactionSource = remember { MutableInteractionSource() }
-                        ) { onClickArticle(article) }
-                        .padding(vertical = Spacing.space8),
+                        ) { onClickArticle(article) },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
