@@ -81,12 +81,13 @@ _ARTICLE_CATEGORY_ALIASES: dict[str, str] = {
 
 # 미국증시·AI 이슈(해외 RSS) 요약 시에만 프롬프트에 삽입. 국내증시(domestic_market)는 제외.
 _FOREIGN_RSS_NEWS_FEEDS: frozenset[str] = frozenset({"global_market", "ai_issue"})
-_FOREIGN_RSS_BRAND_EN_BLOCK = (
-    "【해외 RSS】영문 출처 기사입니다. 회사·브랜드·제품·서비스·모델·API·매체 이름은 "
-    "공식 영문(라틴 문자) 표기를 그대로 쓰세요(예: Google Gemini, OpenAI, Anthropic, NVIDIA, CNBC, S&P 500). "
-    "한글로 음역하거나 한글 발음으로만 쓰지 마세요(예: 젬나이, 오픈에이아이 등 금지). "
-    "headline은 한국어 문장으로 작성하되, 필요한 고유명은 위 영문 규칙을 따르세요. "
-    "summary_points도 설명은 한국어, 고유명은 영문 표기를 유지하세요.\n"
+_FOREIGN_RSS_KO_FORMAL_BLOCK = (
+    "【해외 RSS】영문 출처 기사입니다. 회사·브랜드·제품·서비스·모델·인물·매체명은 "
+    "**한국어 정식 명칭**이나 국내 금융·테크 뉴스에서 통용되는 한글 표기를 쓰세요 "
+    "(예: 마이크로소프트, 엔비디아, 오픈AI, 앤스로픽, 구글, 애플, 메타, 스탠더드앤드푸어스 500). "
+    "원문 영문 표기를 그대로 베끼지 마세요. 어색한 순수 음역(예: 젬나이)보다 통용 한글명을 택하세요. "
+    "아래 구체성 규칙의 ‘원문 표기’는 이 【해외 RSS】 고유명 규칙보다 우선하지 않습니다. "
+    "headline·summary_points 모두 자연스러운 한국어 문장으로 작성하세요.\n"
 )
 
 _SUMMARIZE_ARTICLE_CATEGORY_BLOCK = (
@@ -495,7 +496,7 @@ def summarize_article(
 
     max_points_keep = 10
     foreign_rss_extra = (
-        _FOREIGN_RSS_BRAND_EN_BLOCK if (news_feed in _FOREIGN_RSS_NEWS_FEEDS) else ""
+        _FOREIGN_RSS_KO_FORMAL_BLOCK if (news_feed in _FOREIGN_RSS_NEWS_FEEDS) else ""
     )
     user = (
         f"다음 뉴스를 분석해 JSON만 출력하세요.\n"
