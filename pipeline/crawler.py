@@ -1756,7 +1756,7 @@ def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
         merged_kr_os.append(x)
     for r in crawl_rss_domestic_overseas():
         x = dict(r)
-        x["feed_fallback"] = "global_market"
+        x["feed_fallback"] = "domestic_market"
         merged_kr_os.append(x)
     pool_kr_os = _dedupe_domestic_pooled_preserve_order(merged_kr_os)
 
