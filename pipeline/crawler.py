@@ -840,13 +840,16 @@ RSS_FEEDS_NEWS_OVERSEAS: list[str] = [
     "https://www.hankyung.com/feed/international",
     "https://www.chosun.com/arc/outboundfeeds/rss/category/international/?outputType=xml",
 ]
-# ai_issue — CNBC Tech(19854910) search/combinedcms RSS
+# ai_issue — CNBC Tech combinedcms + Yahoo Finance 다티커 헤드라인 RSS
 RSS_FEEDS_NEWS_AI: list[str] = [
     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910",
+    "https://finance.yahoo.com/rss/headline?s=NVDA,AMD,AVGO,TSM,MU,ANET,ASML,LRCX,INTC,MSFT,GOOGL,AMZN,META,PLTR,SNOW,ORCL,CRM,NOW,ADBE,TSLA,AAPL,FIG",
 ]
-# global_market 전용 — Yahoo Finance News RSS index (`crawl_domestic`에서 URL 도메인 필터와 함께 사용)
+# global_market 전용 — Yahoo Finance rssindex + 다티커 헤드라인 (`crawl_domestic`에서 URL 도메인 필터와 함께 사용)
 RSS_FEEDS_NEWS_CNBC_MARKETS: list[str] = [
     "https://finance.yahoo.com/news/rssindex",
+    "https://finance.yahoo.com/rss/headline?s=WDC,STX,SNDK,BLK,BRK-B,JPM,GS,MS,BX,KKR",
+    "https://finance.yahoo.com/rss/headline?s=RKLB,LMT,BA,NOC,ASTS,LUNR,PL,BKSY,IRDM,SPCE",
 ]
 
 _RSS_SOURCE_LABEL_MAP: dict[str, str] = {
@@ -857,6 +860,9 @@ _RSS_SOURCE_LABEL_MAP: dict[str, str] = {
     "https://www.chosun.com/arc/outboundfeeds/rss/category/international/?outputType=xml": "조선일보",
     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910": "CNBC",
     "https://finance.yahoo.com/news/rssindex": "Yahoo Finance",
+    "https://finance.yahoo.com/rss/headline?s=NVDA,AMD,AVGO,TSM,MU,ANET,ASML,LRCX,INTC,MSFT,GOOGL,AMZN,META,PLTR,SNOW,ORCL,CRM,NOW,ADBE,TSLA,AAPL,FIG": "Yahoo Finance",
+    "https://finance.yahoo.com/rss/headline?s=WDC,STX,SNDK,BLK,BRK-B,JPM,GS,MS,BX,KKR": "Yahoo Finance",
+    "https://finance.yahoo.com/rss/headline?s=RKLB,LMT,BA,NOC,ASTS,LUNR,PL,BKSY,IRDM,SPCE": "Yahoo Finance",
 }
 MK_ARTICLE_BODY_SELECTORS = (
     "div.news_cnt_detail",
@@ -1090,7 +1096,7 @@ def crawl_rss_domestic_overseas() -> list[dict[str, Any]]:
 
 
 def crawl_rss_domestic_ai_issue() -> list[dict[str, Any]]:
-    """뉴스 탭 국내 — AI ISSUE (CNBC `19854910` combinedcms RSS, MK/한경 본문 fetch 없음)."""
+    """뉴스 탭 — AI ISSUE (CNBC Tech RSS + Yahoo 다티커 헤드라인 RSS, MK/한경 본문 fetch 없음)."""
     return _crawl_rss_feed_urls(
         RSS_FEEDS_NEWS_AI,
         max_items_per_feed=RSS_DOMESTIC_CNBC_MAX_ITEMS,
@@ -1100,7 +1106,7 @@ def crawl_rss_domestic_ai_issue() -> list[dict[str, Any]]:
 
 
 def crawl_rss_cnbc_markets() -> list[dict[str, Any]]:
-    """미국증시 탭 전용 — Yahoo Finance `rssindex` RSS (7일치, 본문 fetch 없음)."""
+    """미국증시 탭 전용 — Yahoo Finance rssindex + 다티커 헤드라인 RSS (7일치, 본문 fetch 없음)."""
     return _crawl_rss_feed_urls(
         RSS_FEEDS_NEWS_CNBC_MARKETS,
         max_items_per_feed=RSS_CNBC_MARKETS_MAX_ITEMS,
@@ -1683,14 +1689,14 @@ def _llm_select_cnbc_pool_for_ai_issue_tab(
     pool_cnbc: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """
-    CNBC RSS 풀은 **항상 `ai_issue` 탭 전용** 피드(테크 combinedcms)이므로 **전량 유지**한다.
+    `ai_issue` 탭용 RSS 풀(CNBC Tech + Yahoo 헤드라인 등)은 **LLM으로 탭 재분배하지 않고 전량 유지**한다.
 
-    예전에는 3탭 LLM으로 `AI 이슈`만 남기면, 헤드라인이 증시 톤으로 잡혀 `해외증시`로 나온
+    예전에는 3탭 LLM으로 `AI 이슈`만 남기면, 헤드라인이 증시 톤으로 잡혀 다른 탭으로 나간
     기사가 AI 탭에서 빠져 건수가 줄었다. 앱 상한([RSS_DOMESTIC_NEWS_MAX_ITEMS])까지 채우려면
-    CNBC 풀은 여기서 거르지 않는다.
+    이 풀은 여기서 거르지 않는다.
     """
     kept = [{k: v for k, v in row.items() if k != "feed_fallback"} for row in pool_cnbc]
-    logger.info("CNBC→ai_issue: 입력 %d건 → 전량 유지 %d건", len(pool_cnbc), len(kept))
+    logger.info("ai_issue RSS: 입력 %d건 → 전량 유지 %d건", len(pool_cnbc), len(kept))
     return kept
 
 
@@ -1706,7 +1712,7 @@ def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
 
     - `domestic_market`: [RSS_FEEDS_NEWS_KR_MARKET] 만 (매경 증권·한경 finance).
     - `global_market`: [RSS_FEEDS_NEWS_CNBC_MARKETS] 만, 기사 URL에 `yahoo.com` 포함 건만.
-    - `ai_issue`: CNBC Tech RSS([RSS_FEEDS_NEWS_AI]) 전량.
+    - `ai_issue`: `RSS_FEEDS_NEWS_AI`(CNBC Tech + Yahoo 다티커 헤드라인 RSS) 전량.
 
     `RSS_FEEDS_NEWS_OVERSEAS` 등은 이 경로에서 **사용하지 않음**(별도 탭·브리핑에 쓸 때만 호출).
     `summarizer.configure_ai` 먼저 호출할 것.

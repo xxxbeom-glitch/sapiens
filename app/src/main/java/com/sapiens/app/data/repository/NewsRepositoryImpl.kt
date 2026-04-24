@@ -26,7 +26,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /** Firestore `news` 문서 구독 시 탭당(국내·미국·AI) UI에 올릴 엄선 기사 최대 개수. */
-private const val NEWS_FEED_MAX_ARTICLES = 9
+private const val NEWS_FEED_MAX_ARTICLES = 15
 
 class NewsRepositoryImpl(
     private val firestore: FirebaseFirestore,
