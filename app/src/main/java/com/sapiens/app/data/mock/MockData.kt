@@ -282,6 +282,7 @@ object MockData {
         )
     )
 
+    /** 프리뷰·디버그용(앱 뉴스는 Firestore `ai_issue`를 구독). */
     val NEWS_AI_ISSUE = newsFeed
 
     val NEWS_DOMESTIC_MARKET = listOf(

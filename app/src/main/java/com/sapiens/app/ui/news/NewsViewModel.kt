@@ -37,7 +37,7 @@ class NewsViewModel(
     private val _globalMarketNews = MutableStateFlow(MockData.NEWS_GLOBAL_MARKET)
     val globalMarketNews: StateFlow<List<Article>> = _globalMarketNews.asStateFlow()
 
-    private val _aiIssueNews = MutableStateFlow(MockData.NEWS_AI_ISSUE)
+    private val _aiIssueNews = MutableStateFlow(emptyList<Article>())
     val aiIssueNews: StateFlow<List<Article>> = _aiIssueNews.asStateFlow()
 
     private val _overseasStocks = MutableStateFlow(emptyList<Article>())
@@ -67,7 +67,7 @@ class NewsViewModel(
                     _domesticMarketNews.value =
                         domesticMarket.ifEmpty { MockData.NEWS_DOMESTIC_MARKET }
                     _globalMarketNews.value = globalMarket.ifEmpty { MockData.NEWS_GLOBAL_MARKET }
-                    _aiIssueNews.value = aiIssue.ifEmpty { MockData.NEWS_AI_ISSUE }
+                    _aiIssueNews.value = aiIssue
                     _isLoading.value = false
                 }
         }

@@ -18,24 +18,8 @@ logger = logging.getLogger(__name__)
 GEMINI_MODEL = "gemini-2.5-flash"
 CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 
-# 기사 요약: Claude(Haiku) 초안 → Gemini 검증 → 최대 3회 재작성 → 실패 시 Gemini 전체 요약.
-# 켜기: 환경변수 SAPIENS_ARTICLE_LLM_JUDGE=1 (또는 true/yes). 미설정·0이면 기존 동작.
-_ORIGINAL_EXCERPT_FOR_JUDGE_MAX = 14000
-
-_JUDGE_SYSTEM = (
-    "당신은 금융 뉴스 사실 검증자입니다.\n"
-    "주어진 원문(또는 발췌)과 후보 JSON을 비교해 환각·오역·핵심 누락만 판정합니다.\n"
-    "반드시 지정된 JSON 스키마로만 응답하세요. 설명 문장이나 마크다운을 붙이지 마세요.\n"
-    "issues 배열은 최대 5개까지. 각 detail은 **120자 이내 한 줄**만(출력 잘림 방지)."
-)
-
-# Judge 응답이 잘려 json.loads가 실패할 때 verdict만 복구.
-_VERDICT_SNIFF_RE = re.compile(
-    r'["\']verdict["\']\s*:\s*["\']?(PASS|FAIL)\b',
-    re.IGNORECASE,
-)
-
-
+# SAPIENS_ARTICLE_LLM_JUDGE=1: Claude(Haiku) 1회 요약만(검수·제미나이 루프·제미나이 폴백 없음).
+# 미설정·0이면 기존 _call_news_llm(선택 모델) 2회 재시도 경로.
 def _article_llm_judge_enabled() -> bool:
     v = (os.environ.get("SAPIENS_ARTICLE_LLM_JUDGE") or "").strip().lower()
     return v in ("1", "true", "yes", "on")
@@ -187,16 +171,6 @@ def _count_json_brackets_outside_strings(text: str) -> tuple[int, int, int, int]
         elif ch == "]":
             csq += 1
     return oc, cc, osq, csq
-
-
-def _sniff_judge_verdict_token(text: str) -> str | None:
-    """모델 출력이 잘려 dict 파싱이 안 될 때 'PASS'|'FAIL'만 추출. 없으면 None."""
-    if not (text or "").strip():
-        return None
-    m = _VERDICT_SNIFF_RE.search(text[:16000])
-    if not m:
-        return None
-    return m.group(1).upper()
 
 
 def _try_repair_truncated_json_dict(core: str) -> dict[str, Any] | None:
@@ -542,29 +516,6 @@ def _call_gemini(user_content: str) -> str:
         return ""
 
 
-def _call_gemini_judge(user_content: str) -> str:
-    """Gemini 판정 전용. temperature 낮춤."""
-    try:
-        client = _get_gemini_client()
-        prompt = f"{_JUDGE_SYSTEM}\n\n{user_content}"
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config={"max_output_tokens": 4096, "temperature": 0.15},
-        )
-        try:
-            _accumulate_gemini_usage(response)
-        except Exception as e:
-            logger.warning("Gemini judge usage 집계 실패(무시): %s", e)
-        raw = getattr(response, "text", None)
-        if raw is None:
-            return ""
-        return str(raw).strip()
-    except Exception as e:
-        logger.exception("_call_gemini_judge 실패: %s", e)
-        return ""
-
-
 def _validate_summarize_article_shape(data: dict[str, Any]) -> None:
     if "headline" not in data or "category" not in data or "summary_points" not in data:
         raise ValueError(f"Invalid JSON keys: {list(data.keys())}")
@@ -600,242 +551,38 @@ def _postprocess_summarize_article_dict(
     return out
 
 
-def _gemini_judge_verdict(
-    original_excerpt: str,
-    draft: dict[str, Any],
-    *,
-    title: str,
-    source: str,
-) -> tuple[bool, list[dict[str, Any]]]:
-    """(통과 여부, 이슈 목록). 파싱 실패·모호 시 보수적으로 FAIL(재작성·폴백 유도)."""
-    candidate = json.dumps(
-        {
-            "headline": draft.get("headline"),
-            "category": draft.get("category"),
-            "summary_points": draft.get("summary_points"),
-        },
-        ensure_ascii=False,
-    )
-    judge_user = (
-        "원문(또는 발췌)과 후보 요약 JSON을 비교해 사실성을 판정하세요.\n\n"
-        f"[출처] {source}\n[제목] {title}\n\n"
-        f"[원문·블록 발췌]\n{original_excerpt}\n\n"
-        f"[후보 JSON]\n{candidate}\n\n"
-        "판정 규칙:\n"
-        "- 후보 headline·summary_points에 원문에 없는 사실·수치·인과가 있으면 FAIL(환각).\n"
-        "- 원문의 핵심 부정·조건·예외가 빠져 의미가 바뀌면 FAIL(누락).\n"
-        "- 고유명사·수치의 명백한 오역이 있으면 FAIL.\n"
-        "- 경미한 문장 표현 차이만 있으면 PASS.\n\n"
-        '반드시 JSON 한 개만 출력:\n'
-        '{"verdict":"PASS" 또는 "FAIL","issues":[{"type":"hallucination|omission|translation|format|other","detail":"한국어, 120자 이내 한 줄"}]}\n'
-        "PASS인 경우 issues는 빈 배열 []이어야 합니다."
-    )
-    raw = _call_gemini_judge(judge_user)
-    stripped = (raw or "").strip()
-    if not stripped:
-        logger.warning("Gemini judge 빈 응답 — FAIL 처리")
-        return False, [{"type": "other", "detail": "Gemini 판정 응답이 비어 있습니다."}]
-
-    parsed = _extract_json(stripped)
-    if not isinstance(parsed, dict):
-        sniff = _sniff_judge_verdict_token(stripped)
-        if sniff == "FAIL":
-            logger.warning("Gemini judge JSON 파싱 실패 — verdict=FAIL 스니핑으로 거부")
-            return False, [
-                {
-                    "type": "format",
-                    "detail": "판정 JSON이 불완전하지만 verdict=FAIL로 확인됨",
-                }
-            ]
-        if sniff == "PASS":
-            logger.warning("Gemini judge JSON 파싱 실패 — verdict=PASS 스니핑으로 통과")
-            return True, []
-        logger.warning("Gemini judge JSON 파싱 실패 — 보수적 FAIL")
-        return False, [{"type": "other", "detail": "판정 JSON 파싱 실패"}]
-
-    d = parsed
-    verdict = str(d.get("verdict", "")).strip().upper()
-    issues_raw = d.get("issues", [])
-    if not isinstance(issues_raw, list):
-        issues_raw = []
-    issues: list[dict[str, Any]] = []
-    for x in issues_raw:
-        if isinstance(x, dict):
-            issues.append(x)
-    if verdict == "PASS":
-        return True, []
-    return False, issues
-
-
-def _gemini_fallback_full_summarize(
+def _summarize_article_claude_once(
     user: str,
-    max_points_keep: int,
+    *,
     title: str,
     source: str,
     summary: str,
     body_stripped: str,
-    *,
-    quality_meta: dict[str, Any],
+    max_points_keep: int,
 ) -> dict[str, Any]:
-    """Judge 실패·Claude 실패 시 동일 user 프롬프트로 Gemini 전체 요약."""
+    """
+    Claude(Haiku) 1회만 호출·JSON 파싱 후 반환. Gemini 검수/재작성/Gemini 폴백 없음.
+    JSON·스키마 오류 시 최대 2회까지 Claude 재시도(동일 프롬프트).
+    """
     last_err: Exception | None = None
     for attempt in range(2):
         try:
-            raw = _call_gemini(user)
+            raw = _call_claude(user)
+            if not (raw or "").strip():
+                raise ValueError("empty Claude response")
             data = _require_json_dict(raw)
             _validate_summarize_article_shape(data)
             out = _postprocess_summarize_article_dict(
                 data, max_points_keep, title, source, summary, body_stripped
             )
-            meta = dict(quality_meta)
-            meta["fallback_model"] = GEMINI_MODEL
-            out["_quality"] = meta
+            out["_quality"] = {"path": "claude_once", "attempts": attempt + 1}
             return out
         except Exception as e:
             last_err = e
-            logger.warning("Gemini fallback summarize 재시도 (%s): %s", attempt + 1, e)
+            logger.warning("Claude 1차 요약 재시도 (%s/2): %s", attempt + 1, e)
             if attempt == 0:
-                time.sleep(1.0)
-    raise last_err or RuntimeError("gemini fallback summarize failed")
-
-
-def _summarize_article_llm_judge_path(
-    user: str,
-    *,
-    article_block: str,
-    title: str,
-    source: str,
-    summary: str,
-    body_stripped: str,
-    max_points_keep: int,
-) -> dict[str, Any]:
-    """
-    Claude Haiku 최대 3회(피드백 반영) → 매회 Gemini 검증.
-    3회 끝까지 미통과·Claude 실패 시 Gemini로 동일 프롬프트 전체 요약.
-    """
-    excerpt = (article_block or "").strip()
-    if len(excerpt) > _ORIGINAL_EXCERPT_FOR_JUDGE_MAX:
-        original_excerpt = excerpt[:_ORIGINAL_EXCERPT_FOR_JUDGE_MAX] + "\n\n...(원문 일부만 표시)"
-    else:
-        original_excerpt = excerpt
-
-    feedback_extra = ""
-    notes: list[dict[str, Any]] = []
-    haiku_round = 0
-
-    for round_ix in range(3):
-        user_haiku = user + feedback_extra
-        haiku_round += 1
-        try:
-            raw_haiku = _call_claude(user_haiku)
-        except Exception as e:
-            logger.warning(
-                "LLM judge: Haiku 호출 실패(라운드 %d) → Gemini 전체 요약: %s",
-                haiku_round,
-                e,
-            )
-            return _gemini_fallback_full_summarize(
-                user,
-                max_points_keep,
-                title,
-                source,
-                summary,
-                body_stripped,
-                quality_meta={
-                    "path": "gemini_fallback",
-                    "reason": "claude_error",
-                    "haiku_rounds": haiku_round - 1,
-                    "notes": notes,
-                },
-            )
-
-        if not (raw_haiku or "").strip():
-            logger.warning("LLM judge: Haiku 빈 응답 → Gemini 전체 요약")
-            return _gemini_fallback_full_summarize(
-                user,
-                max_points_keep,
-                title,
-                source,
-                summary,
-                body_stripped,
-                quality_meta={
-                    "path": "gemini_fallback",
-                    "reason": "empty_claude",
-                    "haiku_rounds": haiku_round - 1,
-                    "notes": notes,
-                },
-            )
-
-        try:
-            data = _require_json_dict(raw_haiku)
-            _validate_summarize_article_shape(data)
-        except Exception as e:
-            notes.append({"round": round_ix + 1, "parse_error": str(e)})
-            feedback_extra = (
-                "\n\n## 이전 출력 오류\n"
-                "유효한 JSON 객체 **한 개만** 출력해야 합니다. "
-                '키는 반드시 "headline", "category", "summary_points" 세 가지입니다.\n'
-                f"오류: {e}\n"
-            )
-            if round_ix == 2:
-                return _gemini_fallback_full_summarize(
-                    user,
-                    max_points_keep,
-                    title,
-                    source,
-                    summary,
-                    body_stripped,
-                    quality_meta={
-                        "path": "gemini_fallback",
-                        "reason": "haiku_json_fail_3x",
-                        "haiku_rounds": haiku_round,
-                        "notes": notes,
-                    },
-                )
-            continue
-
-        try:
-            passed, issues = _gemini_judge_verdict(
-                original_excerpt, data, title=title, source=source
-            )
-        except Exception as e:
-            logger.warning("LLM judge: 판정 예외 — FAIL 처리: %s", e)
-            passed, issues = False, [{"type": "other", "detail": f"판정 호출 예외: {e}"}]
-
-        if passed:
-            out = _postprocess_summarize_article_dict(
-                data, max_points_keep, title, source, summary, body_stripped
-            )
-            out["_quality"] = {
-                "path": "haiku_judge_pass",
-                "haiku_rounds": haiku_round,
-                "notes": notes,
-            }
-            return out
-
-        notes.append({"round": round_ix + 1, "issues": issues})
-        feedback_extra = (
-            "\n\n## 품질 검증 피드백(반드시 반영)\n"
-            "아래 지적을 모두 반영한 뒤, 동일 스키마의 JSON **한 개만** 다시 출력하세요.\n"
-            f"{json.dumps(issues, ensure_ascii=False)}\n"
-        )
-        if round_ix == 2:
-            return _gemini_fallback_full_summarize(
-                user,
-                max_points_keep,
-                title,
-                source,
-                summary,
-                body_stripped,
-                quality_meta={
-                    "path": "gemini_fallback",
-                    "reason": "judge_fail_after_3_haiku",
-                    "haiku_rounds": haiku_round,
-                    "notes": notes,
-                },
-            )
-
-    raise RuntimeError("LLM judge path: internal logic error (should not reach)")
+                time.sleep(0.5)
+    raise last_err or RuntimeError("claude_once summarize failed")
 
 
 def summarize_article(
@@ -935,9 +682,8 @@ def summarize_article(
 
     if _article_llm_judge_enabled():
         try:
-            return _summarize_article_llm_judge_path(
+            return _summarize_article_claude_once(
                 user,
-                article_block=article_block,
                 title=title,
                 source=source,
                 summary=summary,
@@ -946,7 +692,7 @@ def summarize_article(
             )
         except Exception as e:
             logger.exception(
-                "SAPIENS_ARTICLE_LLM_JUDGE 파이프라인 실패, 기존 _call_news_llm 경로로 폴백: %s",
+                "SAPIENS_ARTICLE_LLM_JUDGE(Claude 1차) 실패, 기존 _call_news_llm 경로로 폴백: %s",
                 e,
             )
 

@@ -1,5 +1,5 @@
 ﻿"""
-국내 뉴스 탭(3요약)은 매일경제·한국경제 RSS + 요약; 해외 뉴스 탭·브리핑은 해외 RSS(CNBC 등) + 네이버 금융(시장·테마) 등.
+국내 뉴스 탭(3요약): 3개 RSS 풀 합친 뒤 LLM이 뉴스탭 3분류(국내증시/해외증시/AI 이슈)로 배정(`news_tab_classification`) 후 요약. 해외 뉴스·브리핑은 별도 RSS 등.
 (토스증권 Playwright `crawl_tossinvest_news` 는 보존. `crawl_domestic` 은 `crawl_naver_*` 를 쓰지 않는다.)
 """
 from __future__ import annotations
@@ -41,6 +41,13 @@ SUMMARY_CHARS = 200
 ARTICLE_BODY_MAX_CHARS = 2000
 # 브리핑(한경·매경 신문) 저장 후보: 본문이 이 길이 미만이면 제외 (summarizer briefing_newspaper 기준과 동일)
 BRIEFING_NEWSPAPER_MIN_BODY_CHARS = 200
+# 수집 제외: 기사 **제목**에 아래 대괄호를 포함한 문자열이 있으면 수집하지 않음
+_EXCLUDE_TITLE_BRACKET_MARKERS: tuple[str, ...] = ("[사설]", "[포토]", "[표]")
+
+
+def _is_excluded_collected_title(title: str) -> bool:
+    t = title or ""
+    return any(m in t for m in _EXCLUDE_TITLE_BRACKET_MARKERS)
 NAVER_ARTICLE_BODY_SELECTORS = (
     "#dic_area",
     "div.article_body",
@@ -453,6 +460,8 @@ def _parse_naver_pc_article_block(dd_subj) -> dict[str, Any] | None:
     title = ((a.get("title") or "").strip() or a.get_text(strip=True) or "").strip()
     if len(title) < 2:
         return None
+    if _is_excluded_collected_title(title):
+        return None
 
     dl = dd_subj.find_parent("dl")
     asum = None
@@ -540,6 +549,8 @@ def _parse_naver_ranked_simple_news_li(li) -> dict[str, Any] | None:
         return None
     title = ((a.get("title") or "").strip() or a.get_text(strip=True) or "").strip()
     if len(title) < 2:
+        return None
+    if _is_excluded_collected_title(title):
         return None
     source, published = _extract_naver_source_and_published(asum=None, container=li)
     raw = a.get_text(separator=" ", strip=True)
@@ -743,6 +754,8 @@ def _extract_toss_items_from_page(page: Any, max_n: int) -> list[dict[str, Any]]
         title = (str(row.get("title") or "")).strip()
         if not url or not title:
             continue
+        if _is_excluded_collected_title(title):
+            continue
         press = (str(row.get("press") or "")).strip()
         time_s = (str(row.get("time") or "")).strip()
         thumb = (str(row.get("thumb") or "")).strip()
@@ -853,7 +866,7 @@ RSS_FEEDS_OVERSEAS_TECH: list[str] = [
     "https://feeds.arstechnica.com/arstechnica/index/",
 ]
 
-# --- 뉴스 탭 국내: 국내 증시 / 해외 증시 / AI ISSUE (Firestore: news/domestic_market, global_market, ai_issue) ---
+# --- 뉴스 탭 국내: RSS 3풀(아래) → `crawl_domestic`에서 LLM 3분류(NEWS_TAB_CLASSIFICATION_INSTRUCTION_KO) → Firestore documents ---
 # 매경 30000001=헤드라인, 30100041=경제, 50200011=증권 / 한경 finance·economy
 RSS_FEEDS_NEWS_KR_MARKET: list[str] = [
     "https://www.mk.co.kr/rss/30000001/",
@@ -862,16 +875,16 @@ RSS_FEEDS_NEWS_KR_MARKET: list[str] = [
     "https://www.hankyung.com/feed/finance",
     "https://www.hankyung.com/feed/economy",
 ]
-# 매경 30300018=국제 / 한경 international·all-news
+# 매경 30300018=국제 / 한경 international·all-news / 조선 international
 RSS_FEEDS_NEWS_OVERSEAS: list[str] = [
     "https://www.mk.co.kr/rss/30300018/",
     "https://www.hankyung.com/feed/international",
     "https://www.hankyung.com/feed/all-news",
+    "https://www.chosun.com/arc/outboundfeeds/rss/category/international/?outputType=xml",
 ]
-# 한경 it + 매경 전체뉴스(403) — AI/IT 이슈 풀
+# ai_issue — CNBC Tech(19854910) search/combinedcms RSS
 RSS_FEEDS_NEWS_AI: list[str] = [
-    "https://www.hankyung.com/feed/it",
-    "https://www.mk.co.kr/rss/40300001/",
+    "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910",
 ]
 
 MK_ARTICLE_BODY_SELECTORS = (
@@ -922,6 +935,8 @@ def _rss_row_from_entry(
     title = (getattr(entry, "title", None) or "").strip()
     link = (getattr(entry, "link", None) or "").strip()
     if not title or not link:
+        return None
+    if _is_excluded_collected_title(title):
         return None
     pub_dt = _rss_entry_published_utc(entry)
     if pub_dt is None:
@@ -1082,14 +1097,12 @@ def crawl_rss_domestic_overseas() -> list[dict[str, Any]]:
 
 
 def crawl_rss_domestic_ai_issue() -> list[dict[str, Any]]:
-    """뉴스 탭 국내 — AI ISSUE(한경 IT + 매경 전체뉴스 풀)."""
-    rows = _crawl_rss_feed_urls(
+    """뉴스 탭 국내 — AI ISSUE (CNBC `19854910` combinedcms RSS, MK/한경 본문 fetch 없음)."""
+    return _crawl_rss_feed_urls(
         RSS_FEEDS_NEWS_AI,
         max_items=RSS_DOMESTIC_NEWS_MAX_ITEMS,
         allow_missing_published=True,
     )
-    _attach_mk_hankyung_bodies(rows)
-    return rows
 
 
 def crawl_rss_overseas_stocks() -> list[dict[str, Any]]:
@@ -1146,6 +1159,8 @@ def _parse_naver_press_newspaper_li(li, source_label: str) -> dict[str, Any] | N
     st = a.select_one("strong") or li.select_one("strong")
     title = (st.get_text(strip=True) if st else a.get_text(strip=True) or "").strip()
     if len(title) < 2:
+        return None
+    if _is_excluded_collected_title(title):
         return None
     img = li.select_one("img[src]")
     thumb = _absolutize_naver_newspaper_img((img.get("src") or "").strip()) if img else ""
@@ -1238,6 +1253,8 @@ def _crawl_naver_newspaper(press_code: str, source_label: str, max_n: int) -> li
                     continue
                 title = str(art.get("title") or "").strip()
                 if len(title) < 2:
+                    continue
+                if _is_excluded_collected_title(title):
                     continue
                 thumb_raw = str(
                     art.get("thumbnailImgUrl")
@@ -1857,6 +1874,7 @@ def dedupe_similar_titles_ordered(
     items: list[dict[str, Any]], min_ratio: float = 0.8
 ) -> list[dict[str, Any]]:
     """입력 순서를 유지하며, 이미 남긴 기사와 제목 유사도 min_ratio 이상이면 스킵."""
+    items = [it for it in items if not _is_excluded_collected_title(str(it.get("title") or ""))]
     kept: list[dict[str, Any]] = []
     for it in items:
         title = it.get("title") or ""
@@ -1875,7 +1893,8 @@ def dedupe_similar_titles_ordered(
 
 
 def dedupe_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """URL 기준 중복 제거 후, 제목 유사도 80% 이상 difflib 중복 제거."""
+    """URL 기준 중복 제거 후, 제목 유사도 80% 이상 difflib 중복 제거. [사설]/[포토]/[표] 제목은 제외."""
+    items = [it for it in items if not _is_excluded_collected_title(str(it.get("title") or ""))]
     by_url: dict[str, dict[str, Any]] = {}
     for it in items:
         u = (it.get("url") or "").strip()
@@ -1900,13 +1919,115 @@ def dedupe_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return kept
 
 
-def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
-    """뉴스 탭 국내 3분류: 매일경제·한국경제 RSS → dedupe·요약 전 키는 Firestore 문서 ID와 동일."""
-    return {
-        "domestic_market": crawl_rss_domestic_kr_market(),
-        "global_market": crawl_rss_domestic_overseas(),
-        "ai_issue": crawl_rss_domestic_ai_issue(),
+def _dedupe_domestic_pooled_preserve_order(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """3개 RSS 풀 합침 전용: 제목 [사설]/[포토]/[표] 제거 → URL 먼저(선행 유지) → 제목 유사 80% 제거(`dedupe_items`와 동일)."""
+    items = [it for it in items if not _is_excluded_collected_title(str(it.get("title") or ""))]
+    seen_url: set[str] = set()
+    by_url_order: list[dict[str, Any]] = []
+    for it in items:
+        u = (it.get("url") or "").strip()
+        if not u or u in seen_url:
+            continue
+        seen_url.add(u)
+        by_url_order.append(it)
+    kept: list[dict[str, Any]] = []
+    for it in by_url_order:
+        title = it.get("title") or ""
+        is_dup = False
+        for other in kept:
+            otitle = other.get("title") or ""
+            if not title or not otitle:
+                continue
+            ratio = difflib.SequenceMatcher(None, title.lower(), otitle.lower()).ratio()
+            if ratio >= 0.8:
+                is_dup = True
+                break
+        if not is_dup:
+            kept.append(it)
+    return kept
+
+
+def _sort_domestic_rows_by_published_desc(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """`published_at` ISO 문자열 내림(없는 항목은 뒤로)."""
+    with_ts: list[tuple[str, dict[str, Any]]] = []
+    without: list[dict[str, Any]] = []
+    for r in rows:
+        pa = str((r.get("published_at") or "")).strip()
+        if pa:
+            with_ts.append((pa, r))
+        else:
+            without.append(r)
+    with_ts.sort(key=lambda p: p[0], reverse=True)
+    return [p[1] for p in with_ts] + without
+
+
+def _llm_classify_pooled_to_domestic_tabs(
+    pool: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    """
+    `NEWS_TAB_CLASSIFICATION_INSTRUCTION_KO` + LLM으로 3 Firestore 키에 기사를 나눈다.
+    분류 실패·AI off 시 `feed_fallback`(kr/overseas/ai RSS 풀 출신)에 둔다.
+    """
+    import news_tab_classification as ntc
+
+    out: dict[str, list[dict[str, Any]]] = {
+        "domestic_market": [],
+        "global_market": [],
+        "ai_issue": [],
     }
+    n_label_ok = 0
+    n_fallback = 0
+    for row in pool:
+        fb = str(row.get("feed_fallback") or "domestic_market").strip()
+        if fb not in out:
+            fb = "domestic_market"
+        clean = {k: v for k, v in row.items() if k != "feed_fallback"}
+        t = str(row.get("title") or "")
+        s = str(row.get("summary") or "")
+        label = ntc.classify_article_domestic_tab(t, s)
+        doc = ntc.tab_to_firestore_document_id(label) if label else None
+        if doc and doc in out:
+            n_label_ok += 1
+        else:
+            doc = fb
+            n_fallback += 1
+        out[doc].append(clean)
+        time.sleep(0.1)
+    nmax = RSS_DOMESTIC_NEWS_MAX_ITEMS
+    for k in out:
+        out[k] = _sort_domestic_rows_by_published_desc(out[k])[:nmax]
+    logger.info(
+        "국내 3탭 LLM 분류: 총 %d건(탭 JSON 성공 %d, RSS 풀 폴백 %d) → D%d G%d A%d",
+        len(pool),
+        n_label_ok,
+        n_fallback,
+        len(out["domestic_market"]),
+        len(out["global_market"]),
+        len(out["ai_issue"]),
+    )
+    return out
+
+
+def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
+    """
+    3 RSS 풀(국내 증시/해외 증시/AI)을 합쳐 중복 제거 → LLM이 국내증시·해외증시·AI 이슈 규칙으로
+    `domestic_market` / `global_market` / `ai_issue` 에 배정. **반드시** `summarizer.configure_ai` 먼저.
+    """
+    merged: list[dict[str, Any]] = []
+    for r in crawl_rss_domestic_kr_market():
+        x = dict(r)
+        x["feed_fallback"] = "domestic_market"
+        merged.append(x)
+    for r in crawl_rss_domestic_overseas():
+        x = dict(r)
+        x["feed_fallback"] = "global_market"
+        merged.append(x)
+    for r in crawl_rss_domestic_ai_issue():
+        x = dict(r)
+        x["feed_fallback"] = "ai_issue"
+        merged.append(x)
+    pool = _dedupe_domestic_pooled_preserve_order(merged)
+    return _llm_classify_pooled_to_domestic_tabs(pool)
 
 
 def crawl_market_indicators() -> list[dict[str, Any]]:

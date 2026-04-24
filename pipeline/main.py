@@ -1,5 +1,5 @@
 """
-뉴스 크롤링 → Gemini 요약 → Firestore 저장.
+뉴스 크롤링 → LLM 요약 → Firestore 저장.
 
 PIPELINE_SECTION 환경변수:
   all (기본) | briefing | domestic_news | overseas_news | market | full
@@ -158,13 +158,13 @@ def _schedule_market_push(firebase_client: Any) -> None:
 
 
 def _run_domestic_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
+    ai_cfg = firebase_client.get_ai_config()
+    summarizer.configure_ai(selected_model=str(ai_cfg.get("selected_model", "gemini")))
+
     domestic = crawler.crawl_domestic()
     domestic["domestic_market"] = crawler.dedupe_items(domestic["domestic_market"])
     domestic["global_market"] = crawler.dedupe_items(domestic["global_market"])
     domestic["ai_issue"] = crawler.dedupe_items(domestic["ai_issue"])
-
-    ai_cfg = firebase_client.get_ai_config()
-    summarizer.configure_ai(selected_model=str(ai_cfg.get("selected_model", "gemini")))
 
     fs_domestic_market: list[dict] = []
     for row in summarizer.summarize_batch(domestic["domestic_market"]):
@@ -259,6 +259,9 @@ def _run_pipeline_full(crawler: Any, firebase_client: Any, summarizer: Any) -> N
     except Exception as e:
         logger.exception("뉴스·브리핑 피드 삭제 단계 실패, 크롤링 계속: %s", e)
 
+    ai_cfg = firebase_client.get_ai_config()
+    summarizer.configure_ai(selected_model=str(ai_cfg.get("selected_model", "gemini")))
+
     domestic = crawler.crawl_domestic()
     domestic["domestic_market"] = crawler.dedupe_items(domestic["domestic_market"])
     domestic["global_market"] = crawler.dedupe_items(domestic["global_market"])
@@ -290,9 +293,6 @@ def _run_pipeline_full(crawler: Any, firebase_client: Any, summarizer: Any) -> N
         "upjong_count": len(naver_upjong),
     }
     logger.info("크롤 완료: %s", counts)
-
-    ai_cfg = firebase_client.get_ai_config()
-    summarizer.configure_ai(selected_model=str(ai_cfg.get("selected_model", "gemini")))
 
     fs_domestic_market: list[dict] = []
     for row in summarizer.summarize_batch(domestic["domestic_market"]):
