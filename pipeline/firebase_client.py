@@ -335,10 +335,10 @@ def _normalize_ai_selected_model(raw: object | None) -> str | None:
 
 def get_ai_config() -> dict[str, str]:
     """
-    settings/ai_config — 파이프라인은 Claude Haiku(1차) 전용.
-    문서에 gemini·레거시 bool이 있어도 항상 selected_model=claude 로 정규화.
+    settings/ai_config — 파이프라인은 Gemini(`google-genai`) 전용.
+    문서에 claude·레거시 bool이 있어도 항상 selected_model=gemini 로 정규화.
     """
-    defaults: dict[str, str] = {"selected_model": _AI_MODEL_CLAUDE}
+    defaults: dict[str, str] = {"selected_model": _AI_MODEL_GEMINI}
     try:
         db = _get_db()
         snap = db.collection(_SETTINGS).document(_AI_CONFIG_DOC).get()
@@ -346,12 +346,12 @@ def get_ai_config() -> dict[str, str]:
             return dict(defaults)
         d = snap.to_dict() or {}
         sm = _normalize_ai_selected_model(d.get("selected_model"))
-        if sm == _AI_MODEL_GEMINI:
-            return {"selected_model": _AI_MODEL_CLAUDE}
         if sm == _AI_MODEL_CLAUDE:
-            return {"selected_model": _AI_MODEL_CLAUDE}
+            return {"selected_model": _AI_MODEL_GEMINI}
+        if sm == _AI_MODEL_GEMINI:
+            return {"selected_model": _AI_MODEL_GEMINI}
         if "claude_enabled" in d or "gemini_enabled" in d:
-            return {"selected_model": _AI_MODEL_CLAUDE}
+            return {"selected_model": _AI_MODEL_GEMINI}
         return dict(defaults)
     except Exception as e:
         logger.exception("get_ai_config 실패, 기본값 사용: %s", e)
@@ -430,10 +430,10 @@ def write_pipeline_log(
 
 
 def set_ai_config_selected_model(model: str) -> None:
-    """원격 selected_model 갱신(제품은 Claude Haiku 경로 = claude)."""
-    m = _normalize_ai_selected_model(model) or _AI_MODEL_CLAUDE
-    if m == _AI_MODEL_GEMINI:
-        m = _AI_MODEL_CLAUDE
+    """원격 selected_model 갱신(제품은 Gemini 경로 = gemini)."""
+    m = _normalize_ai_selected_model(model) or _AI_MODEL_GEMINI
+    if m == _AI_MODEL_CLAUDE:
+        m = _AI_MODEL_GEMINI
     try:
         db = _get_db()
         db.collection(_SETTINGS).document(_AI_CONFIG_DOC).set(

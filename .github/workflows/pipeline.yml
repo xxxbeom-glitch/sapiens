@@ -44,7 +44,7 @@ jobs:
           PIPELINE_SECTION: ${{ env.PIPELINE_SECTION }}
           PUSH_KST_HOUR: ${{ env.PUSH_KST_HOUR }}
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SAPIENS_ARTICLE_LLM_JUDGE: "1"
         run: python main.py
 
@@ -67,7 +67,7 @@ jobs:
           PIPELINE_SECTION: ${{ env.PIPELINE_SECTION }}
           PUSH_KST_HOUR: ${{ env.PUSH_KST_HOUR }}
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SAPIENS_ARTICLE_LLM_JUDGE: "1"
         run: python main.py
 
@@ -90,7 +90,7 @@ jobs:
           PIPELINE_SECTION: ${{ env.PIPELINE_SECTION }}
           PUSH_KST_HOUR: ${{ env.PUSH_KST_HOUR }}
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SAPIENS_ARTICLE_LLM_JUDGE: "1"
         run: python main.py
 
@@ -113,7 +113,7 @@ jobs:
           PIPELINE_SECTION: ${{ env.PIPELINE_SECTION }}
           PUSH_KST_HOUR: ${{ env.PUSH_KST_HOUR }}
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SAPIENS_ARTICLE_LLM_JUDGE: "1"
         run: python main.py
 
@@ -132,6 +132,6 @@ jobs:
         env:
           PIPELINE_SECTION: ${{ github.event.inputs.section }}
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SAPIENS_ARTICLE_LLM_JUDGE: "1"
         run: python main.py

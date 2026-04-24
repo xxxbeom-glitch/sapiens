@@ -1,5 +1,5 @@
 """
-기사 요약·시황·기업 분석: Anthropic Claude API 전용.
+기사 요약·시황·기업 분석: Google Gemini API 전용.
 """
 from __future__ import annotations
 
@@ -10,27 +10,28 @@ import re
 import time
 from typing import Any
 
-import anthropic
+from google import genai
 
 logger = logging.getLogger(__name__)
 
-CLAUDE_MODEL = "claude-haiku-4-5-20251001"
+GEMINI_MODEL = "gemini-2.5-flash"
 
-# SAPIENS_ARTICLE_LLM_JUDGE=1: 기사 JSON 요약을 [Claude 1경로(단일 호출, 재시도 2회)]만 사용.
-# 미설정·0이면 _call_news_llm 기반 2회 재시도 경로(동일 Claude).
+# SAPIENS_ARTICLE_LLM_JUDGE=1: 기사 JSON 요약을 [Gemini 1경로(단일 호출, 재시도 2회)]만 사용.
+# 미설정·0이면 _call_news_llm 기반 2회 재시도 경로(동일 Gemini).
 def _article_llm_judge_enabled() -> bool:
     v = (os.environ.get("SAPIENS_ARTICLE_LLM_JUDGE") or "").strip().lower()
     return v in ("1", "true", "yes", "on")
 
-SELECTED_MODEL_CLAUDE = "claude"
+SELECTED_MODEL_GEMINI = "gemini"
 
-_RUNTIME_SELECTED_MODEL = SELECTED_MODEL_CLAUDE
+# 파이프라인: 제품은 Gemini 전용(구성 값과 무관하게 [configure_ai]가 gemini로 고정).
+_RUNTIME_SELECTED_MODEL = SELECTED_MODEL_GEMINI
 
 _token_input_total: int = 0
 _token_output_total: int = 0
 _token_model: str = ""
 
-_claude_client: Any = None
+_gemini_client: Any = None
 SYSTEM = (
     "당신은 한국 투자자를 위한 금융 뉴스 에디터입니다.\n"
     "뉴스를 분석해서 핵심 내용을 명확하고 구체적으로 요약하세요.\n"
@@ -252,9 +253,14 @@ def _require_json_dict(text: str) -> dict[str, Any]:
 
 
 def configure_ai(*, selected_model: str) -> None:
-    """main.py에서 Firebase settings/ai_config 읽은 뒤 호출. 런타임은 항상 Claude."""
+    """main.py에서 Firebase settings/ai_config 읽은 뒤 호출. 런타임은 항상 Gemini."""
     global _RUNTIME_SELECTED_MODEL
-    _RUNTIME_SELECTED_MODEL = SELECTED_MODEL_CLAUDE
+    m = (selected_model or "").strip().lower()
+    if m == "claude":
+        logger.info(
+            "summarizer: Firestore selected_model=claude 였으나 제품은 Gemini 전용으로 실행합니다",
+        )
+    _RUNTIME_SELECTED_MODEL = SELECTED_MODEL_GEMINI
     logger.info("summarizer AI runtime: selected_model=%s", _RUNTIME_SELECTED_MODEL)
 
 
@@ -307,59 +313,60 @@ def _usage_meta_get_int(obj: Any, *names: str) -> int:
     return 0
 
 
-def _accumulate_claude_usage(response: Any) -> None:
+def _accumulate_gemini_usage(response: Any) -> None:
     global _token_input_total, _token_output_total
-    usage = getattr(response, "usage", None)
-    if usage is None:
+    um = getattr(response, "usage_metadata", None)
+    if um is None:
         return
-    inp = _usage_meta_get_int(usage, "input_tokens")
-    out = _usage_meta_get_int(usage, "output_tokens")
+    inp = _usage_meta_get_int(um, "prompt_token_count", "promptTokenCount")
+    out = _usage_meta_get_int(um, "candidates_token_count", "candidatesTokenCount")
     _token_input_total += max(0, inp)
     _token_output_total += max(0, out)
-    _append_model_label(CLAUDE_MODEL)
+    _append_model_label(GEMINI_MODEL)
 
 
 def _ai_any_news_enabled() -> bool:
     return True
 
 
-def _get_claude_client() -> Any:
-    global _claude_client
-    if _claude_client is not None:
-        return _claude_client
-    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not key:
-        raise RuntimeError("ANTHROPIC_API_KEY 가 설정되어 있어야 합니다.")
-    _claude_client = anthropic.Anthropic(api_key=key)
-    return _claude_client
-
-
-def _call_claude(user_content: str) -> str:
-    try:
-        client = _get_claude_client()
-        response = client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=4096,
-            system=SYSTEM,
-            messages=[{"role": "user", "content": user_content}],
-        )
-        try:
-            _accumulate_claude_usage(response)
-        except Exception as e:
-            logger.warning("Claude usage 집계 실패(무시): %s", e)
-        if not response.content:
-            return ""
-        return str(response.content[0].text).strip()
-    except Exception as e:
-        logger.exception("_call_claude 실패: %s", e)
-        return ""
-
-
 def _call_news_llm(user_content: str) -> str:
-    """뉴스/시황/큐레이션 — Claude."""
+    """뉴스/시황/큐레이션 — Gemini."""
     if not _ai_any_news_enabled():
         return ""
-    return str(_call_claude(user_content) or "").strip()
+    return str(_call_gemini(user_content) or "").strip()
+
+
+def _get_gemini_client() -> Any:
+    global _gemini_client
+    if _gemini_client is not None:
+        return _gemini_client
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not key:
+        raise RuntimeError("GEMINI_API_KEY 가 설정되어 있어야 합니다.")
+    _gemini_client = genai.Client(api_key=key)
+    return _gemini_client
+
+
+def _call_gemini(user_content: str) -> str:
+    try:
+        client = _get_gemini_client()
+        prompt = f"{SYSTEM}\n\n{user_content}"
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config={"max_output_tokens": 4096},
+        )
+        try:
+            _accumulate_gemini_usage(response)
+        except Exception as e:
+            logger.warning("Gemini usage 집계 실패(무시): %s", e)
+        raw = getattr(response, "text", None)
+        if raw is None:
+            return ""
+        return str(raw).strip()
+    except Exception as e:
+        logger.exception("_call_gemini 실패: %s", e)
+        return ""
 
 
 def _validate_summarize_article_shape(data: dict[str, Any]) -> None:
@@ -397,7 +404,7 @@ def _postprocess_summarize_article_dict(
     return out
 
 
-def _summarize_article_claude_judge_once(
+def _summarize_article_gemini_judge_once(
     user: str,
     *,
     title: str,
@@ -407,28 +414,28 @@ def _summarize_article_claude_judge_once(
     max_points_keep: int,
 ) -> dict[str, Any]:
     """
-    SAPIENS_ARTICLE_LLM_JUDGE=1: Claude 1호출·JSON 파싱 후 반환(일반 2회 재시도 루프는 생략).
+    SAPIENS_ARTICLE_LLM_JUDGE=1: Gemini 1호출·JSON 파싱 후 반환(일반 2회 재시도 루프는 생략).
     JSON·스키마 오류 시 최대 2회까지 동일 프롬프트로 재시도.
     """
     last_err: Exception | None = None
     for attempt in range(2):
         try:
-            raw = _call_claude(user)
+            raw = _call_gemini(user)
             if not (raw or "").strip():
-                raise ValueError("empty Claude response")
+                raise ValueError("empty Gemini response")
             data = _require_json_dict(raw)
             _validate_summarize_article_shape(data)
             out = _postprocess_summarize_article_dict(
                 data, max_points_keep, title, source, summary, body_stripped
             )
-            out["_quality"] = {"path": "claude_judge_once", "attempts": attempt + 1}
+            out["_quality"] = {"path": "gemini_judge_once", "attempts": attempt + 1}
             return out
         except Exception as e:
             last_err = e
-            logger.warning("Claude(저지 1경로) 요약 재시도 (%s/2): %s", attempt + 1, e)
+            logger.warning("Gemini(저지 1경로) 요약 재시도 (%s/2): %s", attempt + 1, e)
             if attempt == 0:
                 time.sleep(0.5)
-    raise last_err or RuntimeError("claude_judge_once summarize failed")
+    raise last_err or RuntimeError("gemini_judge_once summarize failed")
 
 
 def summarize_article(
@@ -467,7 +474,7 @@ def summarize_article(
         f"headline은 반드시 한국어로 작성하세요. 원문이 영어면 자연스러운 한국어 제목으로 번역하세요.\n"
         f"{_SUMMARIZE_ARTICLE_CATEGORY_BLOCK}"
         f"summary_points는 기사 핵심을 빠짐없이 담은 문자열 배열로 작성하세요.\n"
-        f"반드시 2개 이상 4개 이하로 작성하세요. 각 포인트는 1~2문장으로 제한하세요.\n"
+        f"반드시 2개 이상 4개 이하로 작성하세요. 각 포인트는 30자 이상 70자 이내로 작성하세요.\n"
         f"중요한 사실·수치·배경·영향을 누락하지 말고, 내용을 함축하거나 생략하지 마세요.\n"
         f"구체성 규칙(headline·summary_points 모두 적용):\n"
         f"- 기업명, 종목명, 브랜드명, 인물명은 원문에 나온 표기를 그대로 포함할 것.\n"
@@ -482,7 +489,7 @@ def summarize_article(
 
     if _article_llm_judge_enabled():
         try:
-            return _summarize_article_claude_judge_once(
+            return _summarize_article_gemini_judge_once(
                 user,
                 title=title,
                 source=source,
@@ -492,7 +499,7 @@ def summarize_article(
             )
         except Exception as e:
             logger.exception(
-                "SAPIENS_ARTICLE_LLM_JUDGE(Claude 1경로) 실패, _call_news_llm 경로로 폴백: %s",
+                "SAPIENS_ARTICLE_LLM_JUDGE(Gemini 1경로) 실패, _call_news_llm 경로로 폴백: %s",
                 e,
             )
 
