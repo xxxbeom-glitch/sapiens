@@ -816,9 +816,11 @@ def crawl_tossinvest_news() -> dict[str, list[dict[str, Any]]]:
 RSS_OVERSEAS_MAX_AGE_HOURS = 48.0
 # `ai_issue`(CNBC): 앱에 **3일치**까지 쓰고 싶다는 요구 — RSS는 이 시간 창 + 피드당 상한(기타 탭은 48h)
 RSS_AI_ISSUE_MAX_AGE_HOURS = 72.0
-# `global_market`(미국증시): 3일치 허용
+# `crawl_rss_domestic_overseas` 등: 3일치
 RSS_GLOBAL_MARKET_MAX_AGE_HOURS = 72.0
-# 뉴스 탭: 국내(KR) RSS 풀은 **피드당** 최대 N건, 해외(국제) 풀은 M건, CNBC 단일 피드는 별도 상한
+# 미국증시 탭 전용 RSS(WSJ·MarketWatch) 수집 창 — CNBC Economy 단일 피드 대비 넉넉히
+RSS_CNBC_MARKETS_MAX_AGE_HOURS = 168.0
+# 뉴스 탭: 국내(KR) RSS 풀은 **피드당** 최대 N건, 해외(국제) 풀은 M건, 미국증시 탭 피드는 별도 상한
 RSS_DOMESTIC_KR_MARKET_ITEMS_PER_FEED = 15
 RSS_DOMESTIC_ITEMS_PER_FEED = 10
 RSS_DOMESTIC_CNBC_MAX_ITEMS = 45
@@ -842,9 +844,10 @@ RSS_FEEDS_NEWS_OVERSEAS: list[str] = [
 RSS_FEEDS_NEWS_AI: list[str] = [
     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910",
 ]
-# global_market 전용 — CNBC Markets(20910258) RSS
+# global_market 전용 — WSJ Markets + MarketWatch Top Stories (`crawl_domestic`에서 URL 도메인 필터와 함께 사용)
 RSS_FEEDS_NEWS_CNBC_MARKETS: list[str] = [
-    "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258",
+    "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+    "http://feeds.marketwatch.com/marketwatch/topstories/",
 ]
 
 _RSS_SOURCE_LABEL_MAP: dict[str, str] = {
@@ -854,7 +857,8 @@ _RSS_SOURCE_LABEL_MAP: dict[str, str] = {
     "https://www.hankyung.com/feed/international": "한국경제",
     "https://www.chosun.com/arc/outboundfeeds/rss/category/international/?outputType=xml": "조선일보",
     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910": "CNBC",
-    "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258": "CNBC",
+    "https://feeds.a.dj.com/rss/RSSMarketsMain.xml": "WSJ",
+    "http://feeds.marketwatch.com/marketwatch/topstories/": "MarketWatch",
 }
 MK_ARTICLE_BODY_SELECTORS = (
     "div.news_cnt_detail",
@@ -1098,12 +1102,12 @@ def crawl_rss_domestic_ai_issue() -> list[dict[str, Any]]:
 
 
 def crawl_rss_cnbc_markets() -> list[dict[str, Any]]:
-    """미국증시 탭 전용 — CNBC Markets(`20910258`) RSS (3일치, 본문 fetch 없음)."""
+    """미국증시 탭 전용 — WSJ Markets + MarketWatch Top Stories RSS (7일치, 본문 fetch 없음)."""
     return _crawl_rss_feed_urls(
         RSS_FEEDS_NEWS_CNBC_MARKETS,
         max_items_per_feed=RSS_CNBC_MARKETS_MAX_ITEMS,
         allow_missing_published=True,
-        max_age_hours=RSS_GLOBAL_MARKET_MAX_AGE_HOURS,
+        max_age_hours=RSS_CNBC_MARKETS_MAX_AGE_HOURS,
     )
 
 
@@ -1692,12 +1696,18 @@ def _llm_select_cnbc_pool_for_ai_issue_tab(
     return kept
 
 
+def _global_market_rss_article_url_allowed(url: str) -> bool:
+    """미국증시 탭에 올릴 RSS 기사 링크 도메인(WSJ·MarketWatch)."""
+    u = (url or "").lower()
+    return "wsj.com" in u or "marketwatch.com" in u
+
+
 def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
     """
     탭별 **지정 RSS만** 읽어 Firestore 3문서에 맞춘다. 한 풀을 합쳐 LLM으로 탭 분배하지 않는다.
 
     - `domestic_market`: [RSS_FEEDS_NEWS_KR_MARKET] 만 (매경 증권·한경 finance).
-    - `global_market`: [RSS_FEEDS_NEWS_CNBC_MARKETS] 만, URL에 cnbc.com 포함 건만.
+    - `global_market`: [RSS_FEEDS_NEWS_CNBC_MARKETS] 만, 기사 URL에 `wsj.com` 또는 `marketwatch.com` 포함 건만.
     - `ai_issue`: CNBC Tech RSS([RSS_FEEDS_NEWS_AI]) 전량.
 
     `RSS_FEEDS_NEWS_OVERSEAS` 등은 이 경로에서 **사용하지 않음**(별도 탭·브리핑에 쓸 때만 호출).
@@ -1713,13 +1723,13 @@ def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
     ai_issue = _sort_domestic_rows_by_published_desc(cnbc_ai)[:nmax]
 
     pool_mkts = _dedupe_domestic_pooled_preserve_order([dict(r) for r in crawl_rss_cnbc_markets()])
-    cnbc_only = [r for r in pool_mkts if "cnbc.com" in str(r.get("url") or "").lower()]
-    if len(cnbc_only) != len(pool_mkts):
+    global_pool = [r for r in pool_mkts if _global_market_rss_article_url_allowed(str(r.get("url") or ""))]
+    if len(global_pool) != len(pool_mkts):
         logger.warning(
-            "CNBC Markets 풀 중 cnbc.com 이 아닌 URL %d건 제외",
-            len(pool_mkts) - len(cnbc_only),
+            "global_market 풀 중 wsj.com·marketwatch.com 이 아닌 URL %d건 제외",
+            len(pool_mkts) - len(global_pool),
         )
-    global_market = _sort_domestic_rows_by_published_desc(cnbc_only)[:nmax]
+    global_market = _sort_domestic_rows_by_published_desc(global_pool)[:nmax]
 
     logger.info(
         "crawl_domestic(탭별 RSS 전용): domestic_market=%d global_market=%d ai_issue=%d",
