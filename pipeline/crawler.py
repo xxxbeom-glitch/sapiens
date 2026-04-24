@@ -848,7 +848,10 @@ def crawl_tossinvest_news() -> dict[str, list[dict[str, Any]]]:
 # --- 해외 뉴스: CNBC / Guardian / Verge / Ars RSS (48h, URL 중복 제거, 카테고리당 합산 15건) ---
 RSS_OVERSEAS_MAX_AGE_HOURS = 48.0
 RSS_OVERSEAS_TARGET_ITEMS = 15
-# 뉴스 탭 국내 3분류(실시간·해외·AI) — 피드당 합산 상한(건)
+# 뉴스 탭 국내: MK·한경·조선 RSS는 **주소(피드)당** 최대 N건, CNBC 단일 피드는 M건까지 수집
+RSS_DOMESTIC_ITEMS_PER_FEED = 10
+RSS_DOMESTIC_CNBC_MAX_ITEMS = 30
+# LLM 분류 후 Firestore `articles` 배열당 상한(탭별)
 RSS_DOMESTIC_NEWS_MAX_ITEMS = 20
 
 RSS_FEEDS_BRIEFING_OVERSEAS: list[str] = [
@@ -971,14 +974,23 @@ def _rss_row_from_entry(
 def _crawl_rss_feed_urls(
     urls: list[str],
     *,
-    max_items: int,
+    max_items: int | None = None,
+    max_items_per_feed: int | None = None,
     allow_missing_published: bool = False,
     max_age_hours: float = RSS_OVERSEAS_MAX_AGE_HOURS,
 ) -> list[dict[str, Any]]:
-    """여러 RSS URL 순회 → max_age_hours 이내 항목만, URL 기준 중복 제거 후 최대 max_items."""
+    """
+    여러 RSS URL 순회, max_age_hours 이내·URL 전역 중복 제거.
+
+    - `max_items`: 모든 피드 **합산** 최대 건수(해외 탭·브리핑 등).
+    - `max_items_per_feed`: **피드 URL마다** 최대 건수(국내 MK·한경·조선 등). 둘 중 하나만 지정.
+    """
+    if (max_items is None) == (max_items_per_feed is None):
+        raise ValueError("_crawl_rss_feed_urls: max_items XOR max_items_per_feed 중 하나만 지정하세요.")
     rows: list[dict[str, Any]] = []
     seen_url: set[str] = set()
     now = datetime.now(timezone.utc)
+    per_feed_mode = max_items_per_feed is not None
     for feed_url in urls:
         try:
             text, status, err = _fetch_http_debug(feed_url, log_label="RSS")
@@ -991,7 +1003,10 @@ def _crawl_rss_feed_urls(
             if fd is not None and getattr(fd, "title", None):
                 feed_title = str(fd.title).strip()
             source_label = feed_title or urlparse(feed_url).netloc or "RSS"
+            taken_this_feed = 0
             for entry in getattr(parsed, "entries", None) or []:
+                if per_feed_mode and taken_this_feed >= max_items_per_feed:
+                    break
                 row = _rss_row_from_entry(
                     entry,
                     source_label,
@@ -1006,9 +1021,10 @@ def _crawl_rss_feed_urls(
                     continue
                 seen_url.add(u)
                 rows.append(row)
-                if len(rows) >= max_items:
+                taken_this_feed += 1
+                if not per_feed_mode and max_items is not None and len(rows) >= max_items:
                     logger.info(
-                        "RSS 수집 완료: %d건 (상한 %d) feeds_scanned=%s",
+                        "RSS 수집 완료: %d건 (합산 상한 %d) feeds_scanned=%s",
                         len(rows),
                         max_items,
                         urls,
@@ -1021,8 +1037,16 @@ def _crawl_rss_feed_urls(
             "RSS 수집 0건 (시간·파싱·필터) feeds=%s",
             urls,
         )
+    elif per_feed_mode:
+        logger.info(
+            "RSS 수집: 피드당 최대 %d건, 합계 %d건 (피드 %d개) urls=%s",
+            max_items_per_feed,
+            len(rows),
+            len(urls),
+            urls,
+        )
     else:
-        logger.info("RSS 수집: %d건 (상한 %d)", len(rows), max_items)
+        logger.info("RSS 수집: %d건 (합산 상한 %s)", len(rows), max_items)
     return rows
 
 
@@ -1078,7 +1102,7 @@ def crawl_rss_domestic_kr_market() -> list[dict[str, Any]]:
     """뉴스 탭 국내 — 국내 증시(실시간 RSS 풀)."""
     rows = _crawl_rss_feed_urls(
         RSS_FEEDS_NEWS_KR_MARKET,
-        max_items=RSS_DOMESTIC_NEWS_MAX_ITEMS,
+        max_items_per_feed=RSS_DOMESTIC_ITEMS_PER_FEED,
         allow_missing_published=True,
     )
     _attach_mk_hankyung_bodies(rows)
@@ -1089,7 +1113,7 @@ def crawl_rss_domestic_overseas() -> list[dict[str, Any]]:
     """뉴스 탭 국내 — 해외 증시(국제·해외취재)."""
     rows = _crawl_rss_feed_urls(
         RSS_FEEDS_NEWS_OVERSEAS,
-        max_items=RSS_DOMESTIC_NEWS_MAX_ITEMS,
+        max_items_per_feed=RSS_DOMESTIC_ITEMS_PER_FEED,
         allow_missing_published=True,
     )
     _attach_mk_hankyung_bodies(rows)
@@ -1100,7 +1124,7 @@ def crawl_rss_domestic_ai_issue() -> list[dict[str, Any]]:
     """뉴스 탭 국내 — AI ISSUE (CNBC `19854910` combinedcms RSS, MK/한경 본문 fetch 없음)."""
     return _crawl_rss_feed_urls(
         RSS_FEEDS_NEWS_AI,
-        max_items=RSS_DOMESTIC_NEWS_MAX_ITEMS,
+        max_items_per_feed=RSS_DOMESTIC_CNBC_MAX_ITEMS,
         allow_missing_published=True,
     )
 
