@@ -408,15 +408,20 @@ def _postprocess_summarize_article_dict(
     source: str,
     summary: str,
     body_stripped: str,
+    *,
+    news_feed: str | None = None,
 ) -> dict[str, Any]:
     out = dict(data)
     out["headline"] = str(out.get("headline", "")).strip()
-    if _looks_english_headline(out["headline"]):
+    foreign = news_feed in _FOREIGN_RSS_NEWS_FEEDS
+    headline_has_latin = bool(_LATIN_RE.search(out["headline"]))
+    if _looks_english_headline(out["headline"]) or (foreign and headline_has_latin):
         out["headline"] = translate_headline_to_korean(
             headline=out["headline"],
             source=source,
             summary=summary,
             body=body_stripped,
+            formal_korean_names=foreign,
         )
     out["category"] = _normalize_article_category(str(out.get("category", "")))
     pts = out["summary_points"]
@@ -436,6 +441,7 @@ def _summarize_article_claude_judge_once(
     summary: str,
     body_stripped: str,
     max_points_keep: int,
+    news_feed: str | None = None,
 ) -> dict[str, Any]:
     """
     SAPIENS_ARTICLE_LLM_JUDGE=1: 단일 LLM 호출·JSON 파싱 후 반환(일반 2회 재시도 루프는 생략).
@@ -450,7 +456,13 @@ def _summarize_article_claude_judge_once(
             data = _require_json_dict(raw)
             _validate_summarize_article_shape(data)
             out = _postprocess_summarize_article_dict(
-                data, max_points_keep, title, source, summary, body_stripped
+                data,
+                max_points_keep,
+                title,
+                source,
+                summary,
+                body_stripped,
+                news_feed=news_feed,
             )
             out["_quality"] = {"path": "gemini_judge_once", "attempts": attempt + 1}
             return out
@@ -495,8 +507,19 @@ def summarize_article(
         article_block = f"제목: {title}\n목록/리드 요약문:\n{summary_stripped}\n"
 
     max_points_keep = 10
-    foreign_rss_extra = (
-        _FOREIGN_RSS_KO_FORMAL_BLOCK if (news_feed in _FOREIGN_RSS_NEWS_FEEDS) else ""
+    foreign = news_feed in _FOREIGN_RSS_NEWS_FEEDS
+    foreign_rss_extra = _FOREIGN_RSS_KO_FORMAL_BLOCK if foreign else ""
+    proper_noun_rule = (
+        "- 기업명·종목·브랜드·인물·매체명은 **한국어 정식 명칭** 또는 국내 금융·테크 뉴스 관례적 한글 표기로 쓸 것. "
+        "원문 영문 표기를 그대로 베끼지 말 것.\n"
+        if foreign
+        else "- 기업명, 종목명, 브랜드명, 인물명은 원문에 나온 표기를 그대로 포함할 것.\n"
+    )
+    closing_foreign = (
+        "**최종 확인(해외 RSS):** headline·summary_points 안의 고유명은 한글(정식·통용)만 쓰세요. "
+        "영문 회사·제품명만 남기지 마세요.\n\n"
+        if foreign
+        else ""
     )
     user = (
         f"다음 뉴스를 분석해 JSON만 출력하세요.\n"
@@ -510,12 +533,13 @@ def summarize_article(
         f"반드시 2개 이상 4개 이하로 작성하세요. 각 포인트는 30자 이상 70자 이내로 작성하세요.\n"
         f"중요한 사실·수치·배경·영향을 누락하지 말고, 내용을 함축하거나 생략하지 마세요.\n"
         f"구체성 규칙(headline·summary_points 모두 적용):\n"
-        f"- 기업명, 종목명, 브랜드명, 인물명은 원문에 나온 표기를 그대로 포함할 것.\n"
+        f"{proper_noun_rule}"
         f"- 주가, 등락률·퍼센트, 금액 등 구체적 수치가 원문에 있으면 반드시 요약에 포함할 것.\n"
         f"- 「특정 종목」「해당 기업」「관련 주」처럼 추상적으로 바꾸어 고유명·수치를 대체하거나 감추지 말 것.\n"
         f"- 핵심 정보(누가·무엇을·얼마나)를 빠뜨리지 말고 구체적으로 서술할 것.\n"
         f"어려운 경제/금융/전문 용어는 뜻을 유지하되 쉬운 일상 언어로 풀어쓰세요.\n"
         f"문장은 짧고 자연스럽게 쓰고, 뉴스식 딱딱한 문체는 피하세요.\n\n"
+        f"{closing_foreign}"
         f"{article_block}"
         f"출처: {source}\n"
     )
@@ -529,6 +553,7 @@ def summarize_article(
                 summary=summary,
                 body_stripped=body_stripped,
                 max_points_keep=max_points_keep,
+                news_feed=news_feed,
             )
         except Exception as e:
             logger.exception(
@@ -543,7 +568,13 @@ def summarize_article(
             data = _require_json_dict(raw)
             _validate_summarize_article_shape(data)
             return _postprocess_summarize_article_dict(
-                data, max_points_keep, title, source, summary, body_stripped
+                data,
+                max_points_keep,
+                title,
+                source,
+                summary,
+                body_stripped,
+                news_feed=news_feed,
             )
         except Exception as e:
             last_err = e
@@ -558,19 +589,28 @@ def translate_headline_to_korean(
     source: str,
     summary: str = "",
     body: str = "",
+    *,
+    formal_korean_names: bool = False,
 ) -> str:
-    """영문 헤드라인을 한국어 투자 뉴스 제목으로 번역."""
+    """헤드라인을 한국어 투자 뉴스 제목으로 정리·번역."""
     src = (headline or "").strip()
     if not src:
         return src
     ctx = (body or "").strip() or (summary or "")
+    if formal_korean_names:
+        proper = (
+            "기업·브랜드·인물·매체·상품명은 국내 금융·테크 뉴스에 맞는 **한글 정식·통용 표기**로 쓰세요. "
+            "원문 영어 철자만 남기지 마세요. 필요하면 한글명 뒤 괄호에 티커·약어만 병기할 수 있습니다."
+        )
+    else:
+        proper = "브랜드명, 기업명, 인물명 등 고유명사는 원문 그대로 유지하세요."
     user = (
-        "다음 뉴스 헤드라인을 한국어로 번역하세요.\n"
+        "다음 뉴스 헤드라인을 한국어로 번역하거나 다듬으세요.\n"
         "의미를 보존하되 과장 없이 간결한 뉴스 제목 톤으로 작성하세요.\n"
-        "브랜드명, 기업명, 인물명 등 고유명사는 원문 그대로 유지하세요.\n"
+        f"{proper}\n"
         '반드시 JSON 한 개만 출력: {"headline_ko":"..."}\n\n'
         f"source: {source}\n"
-        f"headline_en: {src}\n"
+        f"headline_src: {src}\n"
         f"context: {ctx[:400]}\n"
     )
     if not _ai_any_news_enabled():
