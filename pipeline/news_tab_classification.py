@@ -98,7 +98,11 @@ def classify_article_domestic_tab(
     제목+요약만으로 국내 탭 3분류. 반환: '국내증시' | '해외증시' | 'AI 이슈' | None
     (`crawl_domestic` 3탭 배정. `configure_ai` 이후·요약 이전에 호출.)
     """
-    from pipeline.summarizer import _ai_any_news_enabled, _call_news_llm, _require_json_dict
+    # GitHub Actions 등: `cd pipeline && python main.py` → 패키지 루트가 `pipeline`이라 `summarizer`만 씀.
+    try:
+        from summarizer import _ai_any_news_enabled, _call_news_llm, _require_json_dict
+    except ImportError:
+        from pipeline.summarizer import _ai_any_news_enabled, _call_news_llm, _require_json_dict
 
     if not _ai_any_news_enabled():
         return None
