@@ -49,7 +49,7 @@ Sapiens/
 ### 4.2 뉴스 탭
 
 - Firestore `news` 컬렉션 문서 **`domestic_market`**, **`global_market`**, **`ai_issue`** 구독.
-- 탭당 표시 기사 상한: **`NEWS_FEED_MAX_ARTICLES = 9`** (`NewsRepositoryImpl.kt`). 스냅샷의 `articles` 배열 앞에서 9건만 사용.
+- 탭당 표시 기사 상한: **`NEWS_FEED_MAX_ARTICLES = 15`** (`NewsRepositoryImpl.kt`). 스냅샷의 `articles` 배열 앞에서 15건만 사용.
 - 기사 행 탭 시 **`ArticleBottomSheet`**: 제목, 시간, 요약 포인트(최대 4블릿·`summaryPoints` 없으면 `summary`에서 파생), **기사 원문 보기**(URL 있을 때).
 - **한자 표기 → 한글 표기**: Firestore에서 `Article`로 매핑할 때 및 북마크 JSON 복원 시 `normalizeNewsTextForDisplay()` 적용 (`koalanlp-core` + Java 브리지 `HanjaExt`, Kotlin 2.x와 구 라이브러리 메타데이터 이슈 회피).
 
@@ -98,11 +98,11 @@ Sapiens/
 
 - **`crawl_domestic`**: 탭마다 **지정 RSS만** 읽어 `domestic_market` / `global_market` / `ai_issue` 문서에 넣는다. 풀을 합쳐 LLM으로 탭을 나누지 않는다.
   - **국내증시**: `RSS_FEEDS_NEWS_KR_MARKET`(매경 증권·한경 finance).
-  - **미국증시**: `RSS_FEEDS_NEWS_CNBC_MARKETS`(WSJ Markets RSS + MarketWatch Top Stories; 기사 URL은 `wsj.com`·`marketwatch.com`만).
+  - **미국증시**: `RSS_FEEDS_NEWS_CNBC_MARKETS`(Yahoo Finance `https://finance.yahoo.com/news/rssindex` + FT `https://www.ft.com/companies?format=rss`; 기사 URL은 `yahoo.com`·`ft.com`).
   - **AI 이슈**: `RSS_FEEDS_NEWS_AI`(CNBC Tech).
 - `RSS_FEEDS_NEWS_OVERSEAS` 등은 이 경로에서 사용하지 않는다(필요 시 별도 호출·기능에 연결).
 - 레거시 LLM 탭 분류 프롬프트는 `news_tab_classification.py`에 남아 있으나 `crawl_domestic`에서는 호출하지 않는다.
-- 탭별 기사 상한(크롤 후 슬라이스): **`RSS_DOMESTIC_NEWS_MAX_ITEMS = 9`** (`crawler.py`) — Firestore `articles` 길이와 앱 `take(9)`와 맞춤.
+- 탭별 기사 상한(크롤 후 슬라이스): **`RSS_DOMESTIC_NEWS_MAX_ITEMS = 15`** (`crawler.py`) — Firestore `articles` 길이와 앱 `take(15)`와 맞춤.
 
 ### 6.3 제거된 파이프라인 기능
 
@@ -135,14 +135,14 @@ Sapiens/
 
 | 주제 | 위치 |
 |------|------|
-| 뉴스 피드 구독·9건 자르기 | `app/.../NewsRepositoryImpl.kt` |
+| 뉴스 피드 구독·15건 자르기 | `app/.../NewsRepositoryImpl.kt` |
 | Firestore → Article 매핑·한자 치환 | `app/.../FirestoreMappers.kt` |
 | 기사 바텀시트 UI | `app/.../ArticleBottomSheet.kt` |
 | 마켓 화면(종목 클릭 없음) | `app/.../market/MarketScreen.kt` |
 | 메인 탭 셸 | `app/.../main/MainScreen.kt` |
 | 네이버 테마 API만 Retrofit | `app/.../stock/StockRetrofitProvider.kt` |
 | 파이프라인 실행·섹션 | `pipeline/main.py` |
-| 크롤·탭 상한 9 | `pipeline/crawler.py` (`RSS_DOMESTIC_NEWS_MAX_ITEMS`) |
+| 크롤·탭 상한 15 | `pipeline/crawler.py` (`RSS_DOMESTIC_NEWS_MAX_ITEMS`) |
 | 요약·Claude | `pipeline/summarizer.py` |
 | Firestore 쓰기 | `pipeline/firebase_client.py` |
 

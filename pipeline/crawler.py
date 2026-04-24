@@ -818,7 +818,7 @@ RSS_OVERSEAS_MAX_AGE_HOURS = 48.0
 RSS_AI_ISSUE_MAX_AGE_HOURS = 72.0
 # `crawl_rss_domestic_overseas` 등: 3일치
 RSS_GLOBAL_MARKET_MAX_AGE_HOURS = 72.0
-# 미국증시 탭 전용 RSS(WSJ·MarketWatch) 수집 창 — CNBC Economy 단일 피드 대비 넉넉히
+# 미국증시 탭 전용 RSS(Yahoo Finance + FT Companies 등) 수집 창
 RSS_CNBC_MARKETS_MAX_AGE_HOURS = 168.0
 # 뉴스 탭: 국내(KR) RSS 풀은 **피드당** 최대 N건, 해외(국제) 풀은 M건, 미국증시 탭 피드는 별도 상한
 RSS_DOMESTIC_KR_MARKET_ITEMS_PER_FEED = 15
@@ -826,7 +826,7 @@ RSS_DOMESTIC_ITEMS_PER_FEED = 10
 RSS_DOMESTIC_CNBC_MAX_ITEMS = 45
 RSS_CNBC_MARKETS_MAX_ITEMS = 45
 # LLM 분류 후 Firestore `articles` 배열당 상한(탭별) — 앱은 동일 수로 표시
-RSS_DOMESTIC_NEWS_MAX_ITEMS = 9
+RSS_DOMESTIC_NEWS_MAX_ITEMS = 15
 
 # --- 뉴스 탭: 탭마다 지정 RSS만 사용 (`crawl_domestic`). 합쳐 LLM으로 탭 분배하지 않음. ---
 # 매경 50200011=증권 / 한경 finance
@@ -844,10 +844,10 @@ RSS_FEEDS_NEWS_OVERSEAS: list[str] = [
 RSS_FEEDS_NEWS_AI: list[str] = [
     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910",
 ]
-# global_market 전용 — WSJ Markets + MarketWatch Top Stories (`crawl_domestic`에서 URL 도메인 필터와 함께 사용)
+# global_market 전용 — Yahoo Finance + FT Companies (`crawl_domestic`에서 URL 도메인 필터와 함께 사용)
 RSS_FEEDS_NEWS_CNBC_MARKETS: list[str] = [
-    "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
-    "http://feeds.marketwatch.com/marketwatch/topstories/",
+    "https://finance.yahoo.com/news/rssindex",
+    "https://www.ft.com/companies?format=rss",
 ]
 
 _RSS_SOURCE_LABEL_MAP: dict[str, str] = {
@@ -857,8 +857,8 @@ _RSS_SOURCE_LABEL_MAP: dict[str, str] = {
     "https://www.hankyung.com/feed/international": "한국경제",
     "https://www.chosun.com/arc/outboundfeeds/rss/category/international/?outputType=xml": "조선일보",
     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910": "CNBC",
-    "https://feeds.a.dj.com/rss/RSSMarketsMain.xml": "WSJ",
-    "http://feeds.marketwatch.com/marketwatch/topstories/": "MarketWatch",
+    "https://finance.yahoo.com/news/rssindex": "Yahoo Finance",
+    "https://www.ft.com/companies?format=rss": "FT",
 }
 MK_ARTICLE_BODY_SELECTORS = (
     "div.news_cnt_detail",
@@ -1102,7 +1102,7 @@ def crawl_rss_domestic_ai_issue() -> list[dict[str, Any]]:
 
 
 def crawl_rss_cnbc_markets() -> list[dict[str, Any]]:
-    """미국증시 탭 전용 — WSJ Markets + MarketWatch Top Stories RSS (7일치, 본문 fetch 없음)."""
+    """미국증시 탭 전용 — Yahoo Finance rssindex + FT Companies RSS (7일치, 본문 fetch 없음)."""
     return _crawl_rss_feed_urls(
         RSS_FEEDS_NEWS_CNBC_MARKETS,
         max_items_per_feed=RSS_CNBC_MARKETS_MAX_ITEMS,
@@ -1697,9 +1697,9 @@ def _llm_select_cnbc_pool_for_ai_issue_tab(
 
 
 def _global_market_rss_article_url_allowed(url: str) -> bool:
-    """미국증시 탭에 올릴 RSS 기사 링크 도메인(WSJ·MarketWatch)."""
+    """미국증시 탭에 올릴 RSS 기사 링크 도메인(Yahoo·FT)."""
     u = (url or "").lower()
-    return "wsj.com" in u or "marketwatch.com" in u
+    return "yahoo.com" in u or "ft.com" in u
 
 
 def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
@@ -1707,7 +1707,7 @@ def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
     탭별 **지정 RSS만** 읽어 Firestore 3문서에 맞춘다. 한 풀을 합쳐 LLM으로 탭 분배하지 않는다.
 
     - `domestic_market`: [RSS_FEEDS_NEWS_KR_MARKET] 만 (매경 증권·한경 finance).
-    - `global_market`: [RSS_FEEDS_NEWS_CNBC_MARKETS] 만, 기사 URL에 `wsj.com` 또는 `marketwatch.com` 포함 건만.
+    - `global_market`: [RSS_FEEDS_NEWS_CNBC_MARKETS] 만, 기사 URL에 `yahoo.com` 또는 `ft.com` 포함 건만.
     - `ai_issue`: CNBC Tech RSS([RSS_FEEDS_NEWS_AI]) 전량.
 
     `RSS_FEEDS_NEWS_OVERSEAS` 등은 이 경로에서 **사용하지 않음**(별도 탭·브리핑에 쓸 때만 호출).
@@ -1726,7 +1726,7 @@ def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
     global_pool = [r for r in pool_mkts if _global_market_rss_article_url_allowed(str(r.get("url") or ""))]
     if len(global_pool) != len(pool_mkts):
         logger.warning(
-            "global_market 풀 중 wsj.com·marketwatch.com 이 아닌 URL %d건 제외",
+            "global_market 풀 중 yahoo.com·ft.com 이 아닌 URL %d건 제외",
             len(pool_mkts) - len(global_pool),
         )
     global_market = _sort_domestic_rows_by_published_desc(global_pool)[:nmax]
