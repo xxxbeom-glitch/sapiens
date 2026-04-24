@@ -1961,12 +1961,12 @@ def _sort_domestic_rows_by_published_desc(rows: list[dict[str, Any]]) -> list[di
     return [p[1] for p in with_ts] + without
 
 
-def _llm_classify_pooled_to_domestic_tabs(
+def _llm_classify_kr_overseas_pool_to_domestic_tabs(
     pool: list[dict[str, Any]],
 ) -> dict[str, list[dict[str, Any]]]:
     """
-    `NEWS_TAB_CLASSIFICATION_INSTRUCTION_KO` + LLM으로 3 Firestore 키에 기사를 나눈다.
-    분류 실패·AI off 시 `feed_fallback`(kr/overseas/ai RSS 풀 출신)에 둔다.
+    매경·한경·조선 RSS 풀만: `NEWS_TAB_CLASSIFICATION_INSTRUCTION_KO` + LLM으로 3탭 배정.
+    분류 실패·AI off 시 `feed_fallback`(국내/해외 RSS 출신)에 둔다. CNBC는 여기 포함하지 않음.
     """
     import news_tab_classification as ntc
 
@@ -1997,7 +1997,7 @@ def _llm_classify_pooled_to_domestic_tabs(
     for k in out:
         out[k] = _sort_domestic_rows_by_published_desc(out[k])[:nmax]
     logger.info(
-        "국내 3탭 LLM 분류: 총 %d건(탭 JSON 성공 %d, RSS 풀 폴백 %d) → D%d G%d A%d",
+        "국내 3탭 LLM(한국·조선 풀만): %d건 → JSON성공 %d 폴백 %d → D%d G%d A%d",
         len(pool),
         n_label_ok,
         n_fallback,
@@ -2008,26 +2008,84 @@ def _llm_classify_pooled_to_domestic_tabs(
     return out
 
 
+def _llm_select_cnbc_pool_for_ai_issue_tab(
+    pool_cnbc: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    CNBC RSS 풀은 **항상 `ai_issue` 탭 전용**. 동일 분류 규칙으로 LLM에 물어
+    `AI 이슈`로 판정된 기사만 남긴다(국내증시·해외증시로 나오면 제외).
+    분류 실패(None)·AI off 시 해당 건은 보수적으로 **유지**(빈 탭 방지).
+    """
+    import news_tab_classification as ntc
+
+    kept: list[dict[str, Any]] = []
+    n_keep = n_drop = n_fallback_keep = 0
+    for row in pool_cnbc:
+        clean = {k: v for k, v in row.items() if k != "feed_fallback"}
+        t = str(row.get("title") or "")
+        s = str(row.get("summary") or "")
+        label = ntc.classify_article_domestic_tab(t, s)
+        doc = ntc.tab_to_firestore_document_id(label) if label else None
+        if doc == "ai_issue":
+            kept.append(clean)
+            n_keep += 1
+        elif not label or doc is None:
+            kept.append(clean)
+            n_fallback_keep += 1
+        else:
+            n_drop += 1
+        time.sleep(0.1)
+    logger.info(
+        "CNBC→ai_issue 선별: 입력 %d건 → 유지 %d(AI이슈판정 %d, 분류실패보존 %d), 제외 %d",
+        len(pool_cnbc),
+        len(kept),
+        n_keep,
+        n_fallback_keep,
+        n_drop,
+    )
+    return kept
+
+
+def _merge_ai_issue_by_url(
+    from_kr_os_router: list[dict[str, Any]],
+    from_cnbc: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """URL 기준 합침(선행 순서: 라우터 쪽 먼저, 이어 CNBC)."""
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for r in from_kr_os_router + from_cnbc:
+        u = (r.get("url") or "").strip()
+        if not u or u in seen:
+            continue
+        seen.add(u)
+        out.append(r)
+    return out
+
+
 def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
     """
-    3 RSS 풀(국내 증시/해외 증시/AI)을 합쳐 중복 제거 → LLM이 국내증시·해외증시·AI 이슈 규칙으로
-    `domestic_market` / `global_market` / `ai_issue` 에 배정. **반드시** `summarizer.configure_ai` 먼저.
+    - 매경·한경·조선(국내/해외 RSS): 합쳐 dedupe → LLM 3탭(국내증시/해외증시/AI 이슈) 배정.
+    - CNBC RSS: **ai_issue 고정** → 같은 규칙으로 LLM 선별(「AI 이슈」만 유지, 국내/해외 판정은 탭에서 제외).
+    `summarizer.configure_ai` 먼저 호출할 것.
     """
-    merged: list[dict[str, Any]] = []
+    merged_kr_os: list[dict[str, Any]] = []
     for r in crawl_rss_domestic_kr_market():
         x = dict(r)
         x["feed_fallback"] = "domestic_market"
-        merged.append(x)
+        merged_kr_os.append(x)
     for r in crawl_rss_domestic_overseas():
         x = dict(r)
         x["feed_fallback"] = "global_market"
-        merged.append(x)
-    for r in crawl_rss_domestic_ai_issue():
-        x = dict(r)
-        x["feed_fallback"] = "ai_issue"
-        merged.append(x)
-    pool = _dedupe_domestic_pooled_preserve_order(merged)
-    return _llm_classify_pooled_to_domestic_tabs(pool)
+        merged_kr_os.append(x)
+    pool_kr_os = _dedupe_domestic_pooled_preserve_order(merged_kr_os)
+
+    pool_cnbc = _dedupe_domestic_pooled_preserve_order([dict(r) for r in crawl_rss_domestic_ai_issue()])
+
+    out = _llm_classify_kr_overseas_pool_to_domestic_tabs(pool_kr_os)
+    cnbc_ai = _llm_select_cnbc_pool_for_ai_issue_tab(pool_cnbc)
+    merged_ai = _merge_ai_issue_by_url(out["ai_issue"], cnbc_ai)
+    out["ai_issue"] = _sort_domestic_rows_by_published_desc(merged_ai)[: RSS_DOMESTIC_NEWS_MAX_ITEMS]
+    return out
 
 
 def crawl_market_indicators() -> list[dict[str, Any]]:

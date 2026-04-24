@@ -2,7 +2,8 @@
 뉴스 **국내 탭** 3분류용 LLM 지시문 및 도우미.
 
 - 앱 / Firestore: `domestic_market` · `global_market` · `ai_issue` ( `NewsRepository.kt` 의 `NewsFeedType` 과 동일 )
-- 3 RSS 풀(국내 증시/해외 증시/AI)을 합친 뒤, 아래 `NEWS_TAB_CLASSIFICATION_INSTRUCTION_KO` + `classify_article_domestic_tab` 으로 Firestore 3탭(`domestic_market` / `global_market` / `ai_issue`)에 **라우팅** (`crawler.crawl_domestic`). 실패·AI off 시 `feed_fallback`(어느 RSS 풀에서 왔는지)으로 둡니다.
+- 매경·한경·조선 풀: `NEWS_TAB_CLASSIFICATION_INSTRUCTION_KO` + `classify_article_domestic_tab` 으로 3탭 라우팅 (`crawler.crawl_domestic`). 실패·AI off 시 `feed_fallback`.
+- CNBC 풀: **항상 `ai_issue` 전용**; 동일 규칙으로 **「AI 이슈」만** 남기고 국내증시·해외증시 판정은 제외(실패 시 해당 건은 유지).
 """
 
 from __future__ import annotations
