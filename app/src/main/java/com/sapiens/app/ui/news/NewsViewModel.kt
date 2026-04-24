@@ -31,14 +31,14 @@ class NewsViewModel(
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    private val _realtimeNews = MutableStateFlow(MockData.NEWS_REALTIME)
-    val realtimeNews: StateFlow<List<Article>> = _realtimeNews.asStateFlow()
+    private val _domesticMarketNews = MutableStateFlow(MockData.NEWS_DOMESTIC_MARKET)
+    val domesticMarketNews: StateFlow<List<Article>> = _domesticMarketNews.asStateFlow()
 
-    private val _popularNews = MutableStateFlow(MockData.NEWS_POPULAR)
-    val popularNews: StateFlow<List<Article>> = _popularNews.asStateFlow()
+    private val _globalMarketNews = MutableStateFlow(MockData.NEWS_GLOBAL_MARKET)
+    val globalMarketNews: StateFlow<List<Article>> = _globalMarketNews.asStateFlow()
 
-    private val _mainNews = MutableStateFlow(MockData.NEWS_MAIN)
-    val mainNews: StateFlow<List<Article>> = _mainNews.asStateFlow()
+    private val _aiIssueNews = MutableStateFlow(MockData.NEWS_AI_ISSUE)
+    val aiIssueNews: StateFlow<List<Article>> = _aiIssueNews.asStateFlow()
 
     private val _overseasStocks = MutableStateFlow(emptyList<Article>())
     val overseasStocks: StateFlow<List<Article>> = _overseasStocks.asStateFlow()
@@ -53,20 +53,21 @@ class NewsViewModel(
     init {
         viewModelScope.launch {
             combine(
-                repository.getNewsFeed(NewsFeedType.REALTIME),
-                repository.getNewsFeed(NewsFeedType.POPULAR),
-                repository.getNewsFeed(NewsFeedType.MAIN)
-            ) { realtime, popular, main ->
-                Triple(realtime, popular, main)
+                repository.getNewsFeed(NewsFeedType.DOMESTIC_MARKET),
+                repository.getNewsFeed(NewsFeedType.GLOBAL_MARKET),
+                repository.getNewsFeed(NewsFeedType.AI_ISSUE)
+            ) { domesticMarket, globalMarket, aiIssue ->
+                Triple(domesticMarket, globalMarket, aiIssue)
             }
                 .catch { e ->
                     Log.w(TAG, "domestic feeds combine", e)
                     emit(Triple(emptyList(), emptyList(), emptyList()))
                 }
-                .collect { (realtime, popular, main) ->
-                    _realtimeNews.value = realtime.ifEmpty { MockData.NEWS_REALTIME }
-                    _popularNews.value = popular.ifEmpty { MockData.NEWS_POPULAR }
-                    _mainNews.value = main.ifEmpty { MockData.NEWS_MAIN }
+                .collect { (domesticMarket, globalMarket, aiIssue) ->
+                    _domesticMarketNews.value =
+                        domesticMarket.ifEmpty { MockData.NEWS_DOMESTIC_MARKET }
+                    _globalMarketNews.value = globalMarket.ifEmpty { MockData.NEWS_GLOBAL_MARKET }
+                    _aiIssueNews.value = aiIssue.ifEmpty { MockData.NEWS_AI_ISSUE }
                     _isLoading.value = false
                 }
         }

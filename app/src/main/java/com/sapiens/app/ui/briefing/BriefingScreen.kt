@@ -26,6 +26,7 @@ import com.sapiens.app.data.model.stableId
 import com.sapiens.app.data.store.ArticleBookmarksRepository
 import com.sapiens.app.ui.common.ArticleBottomSheet
 import com.sapiens.app.ui.common.ArticleBottomSheetKind
+import com.sapiens.app.ui.common.ArticleMixedFeedCard
 import com.sapiens.app.ui.common.transformNaverFinanceNewsReadUrlForMobile
 import kotlinx.coroutines.launch
 import com.sapiens.app.ui.theme.Accent
@@ -70,9 +71,11 @@ fun BriefingScreen(
                 }
 
                 item {
-                    DomesticBriefingMixedCard(
+                    ArticleMixedFeedCard(
                         articles = domesticBriefingArticles,
                         onClickArticle = { selectedArticle = it },
+                        topChipForArticle = { it.source.ifBlank { "국내" } },
+                        emptyStateText = null,
                         modifier = Modifier.padding(bottom = Spacing.space8)
                     )
                 }
@@ -83,9 +86,11 @@ fun BriefingScreen(
                 }
 
                 item {
-                    USMajorArticlesCard(
+                    ArticleMixedFeedCard(
                         articles = usArticles,
-                        onClickArticle = { selectedArticle = it }
+                        onClickArticle = { selectedArticle = it },
+                        topChipForArticle = { it.source.ifBlank { "해외" } },
+                        emptyStateText = "불러온 기사가 없습니다."
                     )
                 }
             }

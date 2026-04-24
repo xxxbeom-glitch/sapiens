@@ -159,32 +159,32 @@ def _schedule_market_push(firebase_client: Any) -> None:
 
 def _run_domestic_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
     domestic = crawler.crawl_domestic()
-    domestic["realtime"] = crawler.dedupe_items(domestic["realtime"])
-    domestic["popular"] = crawler.dedupe_items(domestic["popular"])
-    domestic["main"] = crawler.dedupe_items(domestic["main"])
+    domestic["domestic_market"] = crawler.dedupe_items(domestic["domestic_market"])
+    domestic["global_market"] = crawler.dedupe_items(domestic["global_market"])
+    domestic["ai_issue"] = crawler.dedupe_items(domestic["ai_issue"])
 
     ai_cfg = firebase_client.get_ai_config()
     summarizer.configure_ai(selected_model=str(ai_cfg.get("selected_model", "gemini")))
 
-    fs_realtime: list[dict] = []
-    for row in summarizer.summarize_batch(domestic["realtime"]):
+    fs_domestic_market: list[dict] = []
+    for row in summarizer.summarize_batch(domestic["domestic_market"]):
         ai = row.pop("_ai", None)
         if ai:
-            fs_realtime.append(summarizer.merge_to_firestore_article(row, ai))
-    fs_popular: list[dict] = []
-    for row in summarizer.summarize_batch(domestic["popular"]):
+            fs_domestic_market.append(summarizer.merge_to_firestore_article(row, ai))
+    fs_global_market: list[dict] = []
+    for row in summarizer.summarize_batch(domestic["global_market"]):
         ai = row.pop("_ai", None)
         if ai:
-            fs_popular.append(summarizer.merge_to_firestore_article(row, ai))
-    fs_main: list[dict] = []
-    for row in summarizer.summarize_batch(domestic["main"]):
+            fs_global_market.append(summarizer.merge_to_firestore_article(row, ai))
+    fs_ai_issue: list[dict] = []
+    for row in summarizer.summarize_batch(domestic["ai_issue"]):
         ai = row.pop("_ai", None)
         if ai:
-            fs_main.append(summarizer.merge_to_firestore_article(row, ai))
+            fs_ai_issue.append(summarizer.merge_to_firestore_article(row, ai))
 
-    firebase_client.save_news_feed(fs_realtime, "realtime")
-    firebase_client.save_news_feed(fs_popular, "popular")
-    firebase_client.save_news_feed(fs_main, "main")
+    firebase_client.save_news_feed(fs_domestic_market, "domestic_market")
+    firebase_client.save_news_feed(fs_global_market, "global_market")
+    firebase_client.save_news_feed(fs_ai_issue, "ai_issue")
     _schedule_domestic_news_push(firebase_client)
 
 
@@ -260,9 +260,9 @@ def _run_pipeline_full(crawler: Any, firebase_client: Any, summarizer: Any) -> N
         logger.exception("뉴스·브리핑 피드 삭제 단계 실패, 크롤링 계속: %s", e)
 
     domestic = crawler.crawl_domestic()
-    domestic["realtime"] = crawler.dedupe_items(domestic["realtime"])
-    domestic["popular"] = crawler.dedupe_items(domestic["popular"])
-    domestic["main"] = crawler.dedupe_items(domestic["main"])
+    domestic["domestic_market"] = crawler.dedupe_items(domestic["domestic_market"])
+    domestic["global_market"] = crawler.dedupe_items(domestic["global_market"])
+    domestic["ai_issue"] = crawler.dedupe_items(domestic["ai_issue"])
 
     overseas_stocks = crawler.crawl_rss_overseas_stocks()
     overseas_tech = crawler.crawl_rss_overseas_tech()
@@ -277,9 +277,9 @@ def _run_pipeline_full(crawler: Any, firebase_client: Any, summarizer: Any) -> N
     naver_upjong = crawler.crawl_naver_stock_upjong()
 
     counts = {
-        "realtime": len(domestic["realtime"]),
-        "popular": len(domestic["popular"]),
-        "main": len(domestic["main"]),
+        "domestic_market": len(domestic["domestic_market"]),
+        "global_market": len(domestic["global_market"]),
+        "ai_issue": len(domestic["ai_issue"]),
         "overseas_stocks": len(overseas_stocks),
         "overseas_tech": len(overseas_tech),
         "briefing_overseas_rss": len(briefing_overseas_raw),
@@ -294,23 +294,23 @@ def _run_pipeline_full(crawler: Any, firebase_client: Any, summarizer: Any) -> N
     ai_cfg = firebase_client.get_ai_config()
     summarizer.configure_ai(selected_model=str(ai_cfg.get("selected_model", "gemini")))
 
-    fs_realtime: list[dict] = []
-    for row in summarizer.summarize_batch(domestic["realtime"]):
+    fs_domestic_market: list[dict] = []
+    for row in summarizer.summarize_batch(domestic["domestic_market"]):
         ai = row.pop("_ai", None)
         if ai:
-            fs_realtime.append(summarizer.merge_to_firestore_article(row, ai))
+            fs_domestic_market.append(summarizer.merge_to_firestore_article(row, ai))
 
-    fs_popular: list[dict] = []
-    for row in summarizer.summarize_batch(domestic["popular"]):
+    fs_global_market: list[dict] = []
+    for row in summarizer.summarize_batch(domestic["global_market"]):
         ai = row.pop("_ai", None)
         if ai:
-            fs_popular.append(summarizer.merge_to_firestore_article(row, ai))
+            fs_global_market.append(summarizer.merge_to_firestore_article(row, ai))
 
-    fs_main: list[dict] = []
-    for row in summarizer.summarize_batch(domestic["main"]):
+    fs_ai_issue: list[dict] = []
+    for row in summarizer.summarize_batch(domestic["ai_issue"]):
         ai = row.pop("_ai", None)
         if ai:
-            fs_main.append(summarizer.merge_to_firestore_article(row, ai))
+            fs_ai_issue.append(summarizer.merge_to_firestore_article(row, ai))
 
     fs_hankyung = _summarize_newspaper_pool_for_briefing(summarizer, pool_hankyung)
     fs_maeil = _summarize_newspaper_pool_for_briefing(summarizer, pool_maeil)
@@ -355,9 +355,9 @@ def _run_pipeline_full(crawler: Any, firebase_client: Any, summarizer: Any) -> N
     firebase_client.save_market_indicators(indicators)
     firebase_client.save_market_themes(naver_themes)
     firebase_client.save_market_industries(naver_upjong)
-    firebase_client.save_news_feed(fs_realtime, "realtime")
-    firebase_client.save_news_feed(fs_popular, "popular")
-    firebase_client.save_news_feed(fs_main, "main")
+    firebase_client.save_news_feed(fs_domestic_market, "domestic_market")
+    firebase_client.save_news_feed(fs_global_market, "global_market")
+    firebase_client.save_news_feed(fs_ai_issue, "ai_issue")
 
     _schedule_domestic_news_push(firebase_client)
     _schedule_briefing_push(firebase_client)
@@ -391,9 +391,9 @@ def _run_pipeline_full(crawler: Any, firebase_client: Any, summarizer: Any) -> N
         time.sleep(0.5)
 
     total_fs = (
-        len(fs_realtime)
-        + len(fs_popular)
-        + len(fs_main)
+        len(fs_domestic_market)
+        + len(fs_global_market)
+        + len(fs_ai_issue)
         + len(fs_hankyung)
         + len(fs_maeil)
         + len(fs_overseas_stocks)

@@ -1,6 +1,6 @@
 ﻿"""
-네이버 금융 / 해외 RSS(CNBC·The Guardian·The Verge·Ars Technica 등) 뉴스 + 종목 재무(Yahoo API)·증권가 크롤링.
-(토스증권 Playwright `crawl_tossinvest_news` 는 보존. `crawl_domestic` 에서는 미사용.)
+국내 뉴스 탭(3요약)은 매일경제·한국경제 RSS + 요약; 해외 뉴스 탭·브리핑은 해외 RSS(CNBC 등) + 네이버 금융(시장·테마) 등.
+(토스증권 Playwright `crawl_tossinvest_news` 는 보존. `crawl_domestic` 은 `crawl_naver_*` 를 쓰지 않는다.)
 """
 from __future__ import annotations
 
@@ -835,6 +835,8 @@ def crawl_tossinvest_news() -> dict[str, list[dict[str, Any]]]:
 # --- 해외 뉴스: CNBC / Guardian / Verge / Ars RSS (48h, URL 중복 제거, 카테고리당 합산 15건) ---
 RSS_OVERSEAS_MAX_AGE_HOURS = 48.0
 RSS_OVERSEAS_TARGET_ITEMS = 15
+# 뉴스 탭 국내 3분류(실시간·해외·AI) — 피드당 합산 상한(건)
+RSS_DOMESTIC_NEWS_MAX_ITEMS = 20
 
 RSS_FEEDS_BRIEFING_OVERSEAS: list[str] = [
     "https://www.cnbc.com/id/10000664/device/rss/rss.html",
@@ -850,6 +852,40 @@ RSS_FEEDS_OVERSEAS_TECH: list[str] = [
     "https://www.theverge.com/rss/index.xml",
     "https://feeds.arstechnica.com/arstechnica/index/",
 ]
+
+# --- 뉴스 탭 국내: 국내 증시 / 해외 증시 / AI ISSUE (Firestore: news/domestic_market, global_market, ai_issue) ---
+# 매경 30000001=헤드라인, 30100041=경제, 50200011=증권 / 한경 finance·economy
+RSS_FEEDS_NEWS_KR_MARKET: list[str] = [
+    "https://www.mk.co.kr/rss/30000001/",
+    "https://www.mk.co.kr/rss/30100041/",
+    "https://www.mk.co.kr/rss/50200011/",
+    "https://www.hankyung.com/feed/finance",
+    "https://www.hankyung.com/feed/economy",
+]
+# 매경 30300018=국제 / 한경 international·all-news
+RSS_FEEDS_NEWS_OVERSEAS: list[str] = [
+    "https://www.mk.co.kr/rss/30300018/",
+    "https://www.hankyung.com/feed/international",
+    "https://www.hankyung.com/feed/all-news",
+]
+# 한경 it + 매경 전체뉴스(403) — AI/IT 이슈 풀
+RSS_FEEDS_NEWS_AI: list[str] = [
+    "https://www.hankyung.com/feed/it",
+    "https://www.mk.co.kr/rss/40300001/",
+]
+
+MK_ARTICLE_BODY_SELECTORS = (
+    "div.news_cnt_detail",
+    "div#article",
+    "div.article",
+    "#content div.article",
+)
+HANKYUNG_ARTICLE_BODY_SELECTORS = (
+    "#articleBody",
+    "div#article",
+    "div.article-body",
+    "div.article-txt",
+)
 
 
 def _rss_entry_published_utc(entry: Any) -> datetime | None:
@@ -875,15 +911,25 @@ def _rss_entry_published_utc(entry: Any) -> datetime | None:
         return None
 
 
-def _rss_row_from_entry(entry: Any, source_label: str, now: datetime) -> dict[str, Any] | None:
+def _rss_row_from_entry(
+    entry: Any,
+    source_label: str,
+    now: datetime,
+    *,
+    max_age_hours: float = RSS_OVERSEAS_MAX_AGE_HOURS,
+    allow_missing_published: bool = False,
+) -> dict[str, Any] | None:
     title = (getattr(entry, "title", None) or "").strip()
     link = (getattr(entry, "link", None) or "").strip()
     if not title or not link:
         return None
     pub_dt = _rss_entry_published_utc(entry)
     if pub_dt is None:
-        return None
-    if now - pub_dt > timedelta(hours=RSS_OVERSEAS_MAX_AGE_HOURS):
+        if allow_missing_published:
+            pub_dt = now
+        else:
+            return None
+    if now - pub_dt > timedelta(hours=max_age_hours):
         return None
     raw_sum = getattr(entry, "summary", None) or getattr(entry, "description", None) or ""
     try:
@@ -907,8 +953,14 @@ def _rss_row_from_entry(entry: Any, source_label: str, now: datetime) -> dict[st
     }
 
 
-def _crawl_rss_feed_urls(urls: list[str], *, max_items: int) -> list[dict[str, Any]]:
-    """여러 RSS URL 순회 → 48h 이내 항목만, URL 기준 중복 제거 후 최대 max_items."""
+def _crawl_rss_feed_urls(
+    urls: list[str],
+    *,
+    max_items: int,
+    allow_missing_published: bool = False,
+    max_age_hours: float = RSS_OVERSEAS_MAX_AGE_HOURS,
+) -> list[dict[str, Any]]:
+    """여러 RSS URL 순회 → max_age_hours 이내 항목만, URL 기준 중복 제거 후 최대 max_items."""
     rows: list[dict[str, Any]] = []
     seen_url: set[str] = set()
     now = datetime.now(timezone.utc)
@@ -925,7 +977,13 @@ def _crawl_rss_feed_urls(urls: list[str], *, max_items: int) -> list[dict[str, A
                 feed_title = str(fd.title).strip()
             source_label = feed_title or urlparse(feed_url).netloc or "RSS"
             for entry in getattr(parsed, "entries", None) or []:
-                row = _rss_row_from_entry(entry, source_label, now)
+                row = _rss_row_from_entry(
+                    entry,
+                    source_label,
+                    now,
+                    max_age_hours=max_age_hours,
+                    allow_missing_published=allow_missing_published,
+                )
                 if not row:
                     continue
                 u = (row.get("url") or "").strip()
@@ -945,11 +1003,92 @@ def _crawl_rss_feed_urls(urls: list[str], *, max_items: int) -> list[dict[str, A
             logger.warning("RSS 피드 처리 실패(스킵, 파이프라인 계속) url=%s: %s", feed_url, e)
     if not rows:
         logger.warning(
-            "RSS 수집 0건 (48h·파싱·필터) feeds=%s",
+            "RSS 수집 0건 (시간·파싱·필터) feeds=%s",
             urls,
         )
     else:
         logger.info("RSS 수집: %d건 (상한 %d)", len(rows), max_items)
+    return rows
+
+
+def _article_plain_from_soup(soup: BeautifulSoup, selectors: tuple[str, ...]) -> str:
+    for sel in selectors:
+        node = soup.select_one(sel)
+        if node is not None:
+            for tag in node.select("script, style, nav, .ad, .advertisement, iframe"):
+                tag.decompose()
+            text = node.get_text(" ", strip=True)
+            text = re.sub(r"\s+", " ", text).strip()
+            if len(text) >= 80:
+                return text[:ARTICLE_BODY_MAX_CHARS]
+    return ""
+
+
+def _fetch_mk_hankyung_article_body(article_url: str) -> str:
+    u = (article_url or "").strip()
+    if not u or "mk.co.kr" not in u and "hankyung.com" not in u:
+        return ""
+    html = _fetch(u)
+    if not html:
+        return ""
+    try:
+        soup = BeautifulSoup(html, "lxml")
+    except Exception:
+        return ""
+    if "hankyung.com" in u.lower():
+        return _article_plain_from_soup(soup, HANKYUNG_ARTICLE_BODY_SELECTORS)
+    if "mk.co.kr" in u.lower():
+        return _article_plain_from_soup(soup, MK_ARTICLE_BODY_SELECTORS)
+    return ""
+
+
+def _attach_mk_hankyung_bodies(rows: list[dict[str, Any]], pause_sec: float = 0.06) -> None:
+    """MK·한경 기사 URL에서 본문을 채워 요약기에 전달(실패 시 RSS description만 사용)."""
+    for row in rows:
+        u = (row.get("url") or "").strip()
+        if not u:
+            continue
+        if "mk.co.kr" not in u and "hankyung.com" not in u:
+            continue
+        try:
+            body = _fetch_mk_hankyung_article_body(u)
+            if body:
+                row["body"] = body
+        except Exception as e:
+            logger.debug("기사 본문 수집 스킵: %s %s", u[:80], e)
+        time.sleep(pause_sec)
+
+
+def crawl_rss_domestic_kr_market() -> list[dict[str, Any]]:
+    """뉴스 탭 국내 — 국내 증시(실시간 RSS 풀)."""
+    rows = _crawl_rss_feed_urls(
+        RSS_FEEDS_NEWS_KR_MARKET,
+        max_items=RSS_DOMESTIC_NEWS_MAX_ITEMS,
+        allow_missing_published=True,
+    )
+    _attach_mk_hankyung_bodies(rows)
+    return rows
+
+
+def crawl_rss_domestic_overseas() -> list[dict[str, Any]]:
+    """뉴스 탭 국내 — 해외 증시(국제·해외취재)."""
+    rows = _crawl_rss_feed_urls(
+        RSS_FEEDS_NEWS_OVERSEAS,
+        max_items=RSS_DOMESTIC_NEWS_MAX_ITEMS,
+        allow_missing_published=True,
+    )
+    _attach_mk_hankyung_bodies(rows)
+    return rows
+
+
+def crawl_rss_domestic_ai_issue() -> list[dict[str, Any]]:
+    """뉴스 탭 국내 — AI ISSUE(한경 IT + 매경 전체뉴스 풀)."""
+    rows = _crawl_rss_feed_urls(
+        RSS_FEEDS_NEWS_AI,
+        max_items=RSS_DOMESTIC_NEWS_MAX_ITEMS,
+        allow_missing_published=True,
+    )
+    _attach_mk_hankyung_bodies(rows)
     return rows
 
 
@@ -1762,11 +1901,11 @@ def dedupe_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def crawl_domestic() -> dict[str, list[dict[str, Any]]]:
-    """실시간 / 많이 본 / 주요: 네이버 금융만 (토스증권 `crawl_tossinvest_news` 는 미사용)."""
+    """뉴스 탭 국내 3분류: 매일경제·한국경제 RSS → dedupe·요약 전 키는 Firestore 문서 ID와 동일."""
     return {
-        "realtime": crawl_naver_realtime(),
-        "popular": crawl_naver_ranked(),
-        "main": crawl_naver_main(),
+        "domestic_market": crawl_rss_domestic_kr_market(),
+        "global_market": crawl_rss_domestic_overseas(),
+        "ai_issue": crawl_rss_domestic_ai_issue(),
     }
 
 

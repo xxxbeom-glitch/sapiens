@@ -153,9 +153,9 @@ flowchart TB
     U["document: us_market\narticles[], indicators[], updated_at"]
   end
   subgraph news["collection: news"]
-    R["document: realtime\narticles[]"]
-    P["document: popular\narticles[]"]
-    MA["document: main\narticles[]"]
+    R["document: domestic_market\narticles[]"]
+    P["document: global_market\narticles[]"]
+    MA["document: ai_issue\narticles[]"]
     OS["document: overseas_stocks\narticles[]"]
     OT["document: overseas_tech\narticles[]"]
   end
@@ -172,7 +172,7 @@ flowchart TB
 | `briefing/hankyung` | `save_briefing_hankyung_articles` | `getBriefingHankyungArticles()` |
 | `briefing/maeil` | `save_briefing_maeil_articles` | `getBriefingMaeilArticles()` |
 | `briefing/us_market` | `save_us_market_articles`, `save_market_indicators` | `getUsArticles()`, `getMarketIndicators()` |
-| `news/realtime` 등 | `save_news_feed(type)` | `getNewsFeed(NewsFeedType.*)` |
+| `news/domestic_market` · `global_market` · `ai_issue` | `save_news_feed(type)` | `getNewsFeed(NewsFeedType.*)` |
 | `news/overseas_*` | `save_overseas_*` | 동일 enum |
 | `market/themes` | `save_market_themes` | **앱 Repository에 전용 Flow 없음** — 추후 UI 연동 시 추가 |
 | `companies/{ticker}` | `save_company_data` | 기업 화면/검색 데이터 소스 |

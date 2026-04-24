@@ -282,9 +282,9 @@ object MockData {
         )
     )
 
-    val NEWS_MAIN = newsFeed
+    val NEWS_AI_ISSUE = newsFeed
 
-    val NEWS_REALTIME = listOf(
+    val NEWS_DOMESTIC_MARKET = listOf(
         Article(
             source = "연합뉴스",
             headline = "코스피 장중 2860선 돌파, 외국인 순매수 확대 지속",
@@ -365,7 +365,7 @@ object MockData {
         )
     )
 
-    val NEWS_POPULAR = listOf(
+    val NEWS_GLOBAL_MARKET = listOf(
         Article(
             source = "한국경제",
             headline = "한은 기준금리 동결 유지, 연내 인하 시점 신중 검토",

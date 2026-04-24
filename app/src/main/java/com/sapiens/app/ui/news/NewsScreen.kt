@@ -6,16 +6,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -35,6 +32,7 @@ import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.stableId
 import com.sapiens.app.ui.common.ArticleBottomSheet
 import com.sapiens.app.ui.common.ArticleBottomSheetKind
+import com.sapiens.app.ui.common.ArticleMixedFeedCard
 import com.sapiens.app.ui.common.transformNaverFinanceNewsReadUrlForMobile
 import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.AppShapes
@@ -47,7 +45,7 @@ import com.sapiens.app.ui.theme.Spacing
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
 
-private val domesticTabLabels = listOf("실시간 속보", "많이 본 뉴스", "주요 뉴스")
+private val domesticTabLabels = listOf("국내 증시", "해외 증시", "AI ISSUE")
 private val overseasTabLabels = listOf("Stocks", "Technology")
 
 @Composable
@@ -105,16 +103,16 @@ fun NewsScreen(
     isOverseas: Boolean
 ) {
     val isLoading by viewModel.isLoading.collectAsState()
-    val realtimeNews by viewModel.realtimeNews.collectAsState()
-    val popularNews by viewModel.popularNews.collectAsState()
-    val mainNews by viewModel.mainNews.collectAsState()
+    val domesticMarketNews by viewModel.domesticMarketNews.collectAsState()
+    val globalMarketNews by viewModel.globalMarketNews.collectAsState()
+    val aiIssueNews by viewModel.aiIssueNews.collectAsState()
     val overseasStocks by viewModel.overseasStocks.collectAsState()
     val overseasTech by viewModel.overseasTech.collectAsState()
 
     var selectedArticle by remember { mutableStateOf<Article?>(null) }
     val bookmarkedIds by viewModel.bookmarkedArticleIds.collectAsState()
     val context = LocalContext.current
-    // 국내(3탭)·해외(2탭) 인덱스를 분리해 두지 않으면, 국내 3번째 탭에서 해외로 바꿀 때
+    // 국내(3탭: 국내 증시·해외 증시·AI ISSUE)·해외(2탭) 인덱스를 분리해 두지 않으면, 국내 3번째 탭에서 해외로 바꿀 때
     // 한 프레임이라도 selectedTabIndex(2) >= 해외 tabCount(2)가 되어 PrimaryTabRow가 크래시난다.
     var domesticTabIndex by remember { mutableIntStateOf(0) }
     var overseasTabIndex by remember { mutableIntStateOf(0) }
@@ -129,12 +127,11 @@ fun NewsScreen(
             else -> overseasStocks
         }
         else -> when (domesticTabIndex) {
-            0 -> realtimeNews
-            1 -> popularNews
-            else -> mainNews
+            0 -> domesticMarketNews
+            1 -> globalMarketNews
+            else -> aiIssueNews
         }
     }
-    val showRank = !isOverseas && domesticTabIndex == 1
     val displayItems = if (isOverseas) currentItems.map { it.withKoreanHeadlineFallback() } else currentItems
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -175,44 +172,24 @@ fun NewsScreen(
                     }
                 }
 
-                LazyColumn(
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = Spacing.space16, vertical = RowVertical)
-                        .clip(AppShapes.card)
-                        .background(Card),
-                    contentPadding = PaddingValues(Spacing.space0)
+                        .verticalScroll(rememberScrollState())
+                        .padding(vertical = RowVertical)
                 ) {
-                    itemsIndexed(
-                        items = displayItems,
-                        key = { index, article ->
-                            "${index}_${article.headline}_${article.time}_${article.source}"
-                        }
-                    ) { index, article ->
-                        NewsFeedRow(
-                            item = article,
-                            rank = if (showRank) index + 1 else null,
-                            onClick = { selectedArticle = article },
-                            timeDisplayOverride = if (isOverseas) {
-                                formatOverseasNewsTimeKst(article.time)
+                    ArticleMixedFeedCard(
+                        articles = displayItems,
+                        onClickArticle = { selectedArticle = it },
+                        topChipForArticle = { article ->
+                            if (isOverseas) {
+                                formatOverseasNewsSource(article.source).ifBlank { "해외" }
                             } else {
-                                null
-                            },
-                            sourceDisplayOverride = if (isOverseas) {
-                                formatOverseasNewsSource(article.source)
-                            } else {
-                                null
-                            },
-                        )
-                        if (index < displayItems.lastIndex) {
-                            HorizontalDivider(
-                                color = TextSecondary.copy(alpha = 0.2f),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(start = Spacing.space16)
-                            )
-                        }
-                    }
+                                article.source.ifBlank { "국내" }
+                            }
+                        },
+                        emptyStateText = "불러온 기사가 없습니다."
+                    )
                 }
             }
         }

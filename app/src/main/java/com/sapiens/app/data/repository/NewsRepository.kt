@@ -23,12 +23,13 @@ interface NewsRepository {
 
 /**
  * Firestore `news/{documentId}` 문서의 `articles` 필드와 1:1.
- * 국내: realtime / popular / main, 해외: overseas_stocks / overseas_tech
+ * 국내 탭: domestic_market=국내 증시, global_market=해외 증시, ai_issue=AI ISSUE.
+ * 해외 탭: overseas_stocks / overseas_tech
  */
 enum class NewsFeedType(val documentId: String) {
-    REALTIME("realtime"),
-    POPULAR("popular"),
-    MAIN("main"),
+    DOMESTIC_MARKET("domestic_market"),
+    GLOBAL_MARKET("global_market"),
+    AI_ISSUE("ai_issue"),
     OVERSEAS_STOCKS("overseas_stocks"),
     OVERSEAS_TECH("overseas_tech"),
 }

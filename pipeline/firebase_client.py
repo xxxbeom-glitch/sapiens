@@ -17,8 +17,16 @@ logger = logging.getLogger(__name__)
 
 _db: firestore.Client | None = None
 
-# 뉴스·브리핑 피드 문서(단일 문서 + articles 배열). briefing: 한경·매경 = 국내/해외 신문 브리핑 슬롯.
-_NEWS_FEED_DOC_IDS = ("realtime", "popular", "main", "overseas_stocks", "overseas_tech")
+# 뉴스·브리핑 피드 문서(단일 문서 + articles 배열). 국내 탭 3분류: domestic/global market + AI.
+_NEWS_FEED_DOC_IDS = (
+    "domestic_market",
+    "global_market",
+    "ai_issue",
+    "overseas_stocks",
+    "overseas_tech",
+)
+# 이전 ID(네이버 3탭) — `clear_news_and_briefing_feeds`에서 함께 제거해 마이그레이션 정리
+_LEGACY_NEWS_DOC_IDS = ("realtime", "popular", "main")
 _BRIEFING_FEED_DOC_IDS = ("hankyung", "maeil")  # 제품 상 domestic/overseas 신문 풀과 대응
 
 _SAVED_ARTICLES = "saved_articles"
@@ -155,6 +163,8 @@ def clear_news_and_briefing_feeds() -> None:
     db = _get_db()
     protected = _list_saved_article_ids(db)
     for doc_id in _NEWS_FEED_DOC_IDS:
+        _delete_feed_document(db, "news", doc_id, protected)
+    for doc_id in _LEGACY_NEWS_DOC_IDS:
         _delete_feed_document(db, "news", doc_id, protected)
     for doc_id in _BRIEFING_FEED_DOC_IDS:
         _delete_feed_document(db, "briefing", doc_id, protected)
@@ -348,9 +358,9 @@ def save_company_data(ticker: str, data: dict[str, Any]) -> None:
 def save_news_feed(articles: List[dict[str, Any]], feed_type: str) -> None:
     """
     news/{feed_type} 문서에 저장.
-    feed_type: realtime | popular | main
+    feed_type: domestic_market | global_market | ai_issue
     """
-    if feed_type not in ("realtime", "popular", "main"):
+    if feed_type not in ("domestic_market", "global_market", "ai_issue"):
         raise ValueError(f"Invalid feed_type: {feed_type}")
     try:
         db = _get_db()
