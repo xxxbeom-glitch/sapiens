@@ -1,7 +1,7 @@
 name: Sapiens Pipeline
 
-# ━ CI 시각(UTC) → KST(UTC+9) 20분 전 = 작업 시작, 정각 = 푸시( push_schedule, PUSH_KST_HOUR )
-#    뉴스 8·11·15·17 / 마켓 9·17  (뉴스는 월~일, 마켓은 main에서 월~금+공휴일 제외)
+# ━ 스케줄(UTC): KST 20분 전 작업 → 정각 푸시(PUSH_KST_HOUR는 워크플로에서 고정).
+# ━ 수동 실행: section(all|news|market)만 선택. 푸시 예약 시각은 파이썬이「다음 KST 정각」으로 둠(입력칸 없음).
 'on':
   schedule:
     - cron: "40 22 * * *"  # 07:40 KST 뉴스
@@ -12,7 +12,7 @@ name: Sapiens Pipeline
   workflow_dispatch:
     inputs:
       section:
-        description: "all | news | market"
+        description: "all = 뉴스+마켓, news = 뉴스만, market = 마켓만"
         required: false
         default: "all"
         type: choice
@@ -20,11 +20,6 @@ name: Sapiens Pipeline
           - all
           - news
           - market
-      push_kst_hour:
-        description: "수동 실행 시 푸시 정각(KST). news: 8|11|15|17, market: 9, all(저녁): 17. 비어 있으면 section 기본"
-        required: false
-        default: ""
-        type: string
 
 permissions:
   contents: read
@@ -32,9 +27,7 @@ permissions:
 jobs:
   news_07_40_kst:
     runs-on: ubuntu-latest
-    if: >-
-      (github.event_name == 'schedule' && github.event.schedule == '40 22 * * *') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.section == 'news' && (github.event.inputs.push_kst_hour == '8' || github.event.inputs.push_kst_hour == ''))
+    if: github.event_name == 'schedule' && github.event.schedule == '40 22 * * *'
     env:
       PIPELINE_SECTION: news
       PUSH_KST_HOUR: "8"
@@ -57,9 +50,7 @@ jobs:
 
   news_10_40_kst:
     runs-on: ubuntu-latest
-    if: >-
-      (github.event_name == 'schedule' && github.event.schedule == '40 1 * * *') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.section == 'news' && github.event.inputs.push_kst_hour == '11')
+    if: github.event_name == 'schedule' && github.event.schedule == '40 1 * * *'
     env:
       PIPELINE_SECTION: news
       PUSH_KST_HOUR: "11"
@@ -82,9 +73,7 @@ jobs:
 
   news_14_40_kst:
     runs-on: ubuntu-latest
-    if: >-
-      (github.event_name == 'schedule' && github.event.schedule == '40 5 * * *') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.section == 'news' && github.event.inputs.push_kst_hour == '15')
+    if: github.event_name == 'schedule' && github.event.schedule == '40 5 * * *'
     env:
       PIPELINE_SECTION: news
       PUSH_KST_HOUR: "15"
@@ -107,9 +96,7 @@ jobs:
 
   news_and_market_16_40_kst:
     runs-on: ubuntu-latest
-    if: >-
-      (github.event_name == 'schedule' && github.event.schedule == '40 7 * * *') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.section == 'all' && (github.event.inputs.push_kst_hour == '17' || github.event.inputs.push_kst_hour == ''))
+    if: github.event_name == 'schedule' && github.event.schedule == '40 7 * * *'
     env:
       PIPELINE_SECTION: all
       PUSH_KST_HOUR: "17"
@@ -132,9 +119,7 @@ jobs:
 
   market_08_40_kst:
     runs-on: ubuntu-latest
-    if: >-
-      (github.event_name == 'schedule' && github.event.schedule == '40 23 * * *') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.section == 'market' && (github.event.inputs.push_kst_hour == '9' || github.event.inputs.push_kst_hour == ''))
+    if: github.event_name == 'schedule' && github.event.schedule == '40 23 * * *'
     env:
       PIPELINE_SECTION: market
       PUSH_KST_HOUR: "9"
@@ -150,6 +135,69 @@ jobs:
         env:
           PIPELINE_SECTION: ${{ env.PIPELINE_SECTION }}
           PUSH_KST_HOUR: ${{ env.PUSH_KST_HOUR }}
+          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SAPIENS_ARTICLE_LLM_JUDGE: "1"
+        run: python main.py
+
+  manual_all:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.section == 'all'
+    env:
+      PIPELINE_SECTION: all
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r pipeline/requirements.txt
+      - name: Run pipeline
+        working-directory: pipeline
+        env:
+          PIPELINE_SECTION: ${{ env.PIPELINE_SECTION }}
+          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SAPIENS_ARTICLE_LLM_JUDGE: "1"
+        run: python main.py
+
+  manual_news:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.section == 'news'
+    env:
+      PIPELINE_SECTION: news
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r pipeline/requirements.txt
+      - name: Run pipeline
+        working-directory: pipeline
+        env:
+          PIPELINE_SECTION: ${{ env.PIPELINE_SECTION }}
+          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SAPIENS_ARTICLE_LLM_JUDGE: "1"
+        run: python main.py
+
+  manual_market:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.section == 'market'
+    env:
+      PIPELINE_SECTION: market
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r pipeline/requirements.txt
+      - name: Run pipeline
+        working-directory: pipeline
+        env:
+          PIPELINE_SECTION: ${{ env.PIPELINE_SECTION }}
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SAPIENS_ARTICLE_LLM_JUDGE: "1"
