@@ -407,7 +407,7 @@ def _summarize_article_claude_judge_once(
     max_points_keep: int,
 ) -> dict[str, Any]:
     """
-    SAPIENS_ARTICLE_LLM_JUDGE=1: Claude 1호출·JSON 파싱 후 반환(일반 2회 재시도 루프는 생략).
+    SAPIENS_ARTICLE_LLM_JUDGE=1: Gemini 1호출·JSON 파싱 후 반환(일반 2회 재시도 루프는 생략).
     JSON·스키마 오류 시 최대 2회까지 동일 프롬프트로 재시도.
     """
     last_err: Exception | None = None
