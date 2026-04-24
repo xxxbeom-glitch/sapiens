@@ -96,6 +96,12 @@ _US_CAPITAL_MARKET_SIGNALS = re.compile(
 )
 
 
+_GEOPOLITICAL_SIGNALS = re.compile(
+    r"전쟁|분쟁|전투|폭격|미사일|공습|침공|봉쇄|제재|호르무즈|이란|이스라엘|러시아|우크라이나|하마스|헤즈볼라|레바논|가자|중동|지정학|군사|나토|NATO",
+    re.IGNORECASE,
+)
+
+
 def _text_for_tab_signals(title: str, summary: str) -> str:
     t = f"{(title or '').strip()} {(summary or '').strip()}"
     t = re.sub(r"\s+", " ", t).strip()
@@ -135,7 +141,7 @@ def finalize_kr_overseas_tab_label(
     us = looks_us_capital_markets_centric(t_raw, s_raw)
     t_norm = _normalize_tab_label((label or "").strip()) if (label and str(label).strip()) else None
     if fb == "global_market":
-        if t_norm is None or t_norm == "제외":
+        if t_norm is None:
             return "해외증시"
         if t_norm == "해외증시":
             return "해외증시"
@@ -143,6 +149,12 @@ def finalize_kr_overseas_tab_label(
     # --- 아래는 국내 RSS 출신만 ---
     if t_norm is None:
         return "해외증시" if us else "국내증시"
+    if t_norm == "제외":
+        text = _text_for_tab_signals(t_raw, s_raw)
+        if _GEOPOLITICAL_SIGNALS.search(text):
+            logger.info("뉴스탭: 제외→해외증시(지정학 키워드·국내RSS) title=%.100s", t_raw)
+            return "해외증시"
+        return "제외"
     if t_norm == "해외증시" and not us:
         logger.info(
             "뉴스탭: 해외증시→국내증시(미시장 키워드 없음·국내RSS) title=%.100s",
