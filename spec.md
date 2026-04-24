@@ -11,7 +11,7 @@
 
 - **앱**: Kotlin + Jetpack Compose, Material 3. 하단 탭 **뉴스 / 마켓 / 마이**.
 - **데이터**: Firestore DB ID `sapiens`. 뉴스 피드·마켓 테마/업종·지표 등은 파이프라인이 적재하고 앱이 구독.
-- **파이프라인**: RSS·네이버 등 크롤 → Gemini로 기사 요약·탭 분류 → Firestore 저장. `PIPELINE_SECTION`으로 일부만 실행 가능.
+- **파이프라인**: RSS·네이버 등 크롤 → Claude(Haiku)로 기사 요약·탭 분류 → Firestore 저장. `PIPELINE_SECTION`으로 일부만 실행 가능.
 
 ---
 
@@ -21,8 +21,8 @@
 |------|------|
 | 앱 | Android (minSdk 26), Kotlin, Compose, Material3, Firebase Auth/Firestore/FCM, Coil, Retrofit/OkHttp, DataStore |
 | 백엔드(서버리스) | Firebase Firestore, FCM 토픽·예약 푸시(`push_schedule_util` 등) |
-| 파이프라인 | Python 3, `feedparser`, BeautifulSoup, Playwright(토스 등), Google Gemini(`google-genai`), `python-dotenv` |
-| LLM | 기사 요약·탭 분류·시황 리포트: **Gemini** (`pipeline/summarizer.py`의 `GEMINI_MODEL`, 기본 `gemini-2.5-flash`). `GEMINI_API_KEY` 필수. |
+| 파이프라인 | Python 3, `feedparser`, BeautifulSoup, Playwright(토스 등), Anthropic Claude(`anthropic`), `python-dotenv` |
+| LLM | 기사 요약·탭 분류·시황 리포트: **Claude Haiku** (`pipeline/summarizer.py`의 `CLAUDE_MODEL`, 기본 `claude-haiku-4-5-20251001`). `ANTHROPIC_API_KEY` 필수. |
 
 ---
 
@@ -106,11 +106,11 @@ Sapiens/
 
 ### 6.4 기사 요약 (규칙 요약)
 
-- **모델**: Gemini (`summarizer.py`, `GEMINI_MODEL`).
+- **모델**: Claude (`summarizer.py`, `CLAUDE_MODEL`).
 - **출력 JSON 키**: `headline`, `category`, `summary_points`.
 - **규칙**: 한국어 제목, 고정 카테고리 목록·가이드, 수치·고유명 유지, 추상 대체 금지, 쉬운 말 풀이 등(프롬프트 문자열 참고).
 - **후처리**: 영문 제목만 보이면 별도 호출로 한국어 헤드라인 번역, `summary_points` 최대 10개까지, 카테고리 별칭·미허용 시 `경제` 등.
-- **환경변수**: `SAPIENS_ARTICLE_LLM_JUDGE=1` 시 단일 Gemini judge 경로(재시도 2회) 우선 등.
+- **환경변수**: `SAPIENS_ARTICLE_LLM_JUDGE=1` 시 단일 Claude judge 경로(재시도 2회) 우선 등.
 
 ### 6.5 기타
 
@@ -139,7 +139,7 @@ Sapiens/
 | 네이버 테마 API만 Retrofit | `app/.../stock/StockRetrofitProvider.kt` |
 | 파이프라인 실행·섹션 | `pipeline/main.py` |
 | 크롤·탭 상한 9 | `pipeline/crawler.py` (`RSS_DOMESTIC_NEWS_MAX_ITEMS`) |
-| 요약·Gemini | `pipeline/summarizer.py` |
+| 요약·Claude | `pipeline/summarizer.py` |
 | Firestore 쓰기 | `pipeline/firebase_client.py` |
 
 ---

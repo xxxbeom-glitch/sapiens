@@ -33,7 +33,7 @@ class UserPreferencesRepository(
     val apiSelectedModelFlow: Flow<String> = context.dataStore.data
         .map { preferences ->
             preferences[apiSelectedModelKey]?.let { AiSelectedModel.normalize(it) }
-                ?: AiSelectedModel.GEMINI
+                ?: AiSelectedModel.CLAUDE
         }
 
     /** 푸시 알림 수신 여부(마이 탭 토글). 기본값 true — 기존 동작과 맞춤. */
@@ -88,7 +88,7 @@ class UserPreferencesRepository(
                 val legacyClaude = data["apiClaudeEnabled"] as? Boolean
                 val legacyGemini = data["apiGeminiEnabled"] as? Boolean
                 if (legacyClaude != null || legacyGemini != null) {
-                    preferences[apiSelectedModelKey] = AiSelectedModel.GEMINI
+                    preferences[apiSelectedModelKey] = AiSelectedModel.CLAUDE
                 }
             }
             (data["pushNotificationsEnabled"] as? Boolean)?.let {

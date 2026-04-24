@@ -79,7 +79,7 @@ def _schedule_unified_feed_push(firebase_client: Any) -> None:
 
 def _run_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
     ai_cfg = firebase_client.get_ai_config()
-    summarizer.configure_ai(selected_model=str(ai_cfg.get("selected_model", "gemini")))
+    summarizer.configure_ai(selected_model=str(ai_cfg.get("selected_model", "claude")))
 
     domestic = crawler.crawl_domestic()
     domestic["domestic_market"] = crawler.dedupe_items(domestic["domestic_market"])
@@ -121,7 +121,7 @@ def _run_pipeline_full(crawler: Any, firebase_client: Any, summarizer: Any) -> N
         logger.exception("뉴스 피드 삭제 단계 실패, 크롤링 계속: %s", e)
 
     ai_cfg = firebase_client.get_ai_config()
-    summarizer.configure_ai(selected_model=str(ai_cfg.get("selected_model", "gemini")))
+    summarizer.configure_ai(selected_model=str(ai_cfg.get("selected_model", "claude")))
 
     domestic = crawler.crawl_domestic()
     domestic["domestic_market"] = crawler.dedupe_items(domestic["domestic_market"])
