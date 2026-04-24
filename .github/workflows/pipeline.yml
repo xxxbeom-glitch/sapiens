@@ -24,6 +24,10 @@ name: Sapiens Pipeline
 permissions:
   contents: read
 
+# Actions UI에 로그가 바로 보이게 (Python stdout 버퍼링 완화)
+env:
+  PYTHONUNBUFFERED: "1"
+
 jobs:
   news_07_40_kst:
     runs-on: ubuntu-latest
@@ -37,7 +41,11 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install -r pipeline/requirements.txt
+        run: |
+          echo "pip install 시작…"
+          python -m pip install --upgrade pip
+          pip install -r pipeline/requirements.txt
+          echo "pip install 완료"
       - name: Run pipeline
         working-directory: pipeline
         env:
@@ -46,7 +54,9 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SAPIENS_ARTICLE_LLM_JUDGE: "1"
-        run: python main.py
+        run: |
+          echo "파이프라인 시작 PIPELINE_SECTION=$PIPELINE_SECTION PUSH_KST_HOUR=$PUSH_KST_HOUR"
+          python -u main.py
 
   news_10_40_kst:
     runs-on: ubuntu-latest
@@ -60,7 +70,11 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install -r pipeline/requirements.txt
+        run: |
+          echo "pip install 시작…"
+          python -m pip install --upgrade pip
+          pip install -r pipeline/requirements.txt
+          echo "pip install 완료"
       - name: Run pipeline
         working-directory: pipeline
         env:
@@ -69,7 +83,9 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SAPIENS_ARTICLE_LLM_JUDGE: "1"
-        run: python main.py
+        run: |
+          echo "파이프라인 시작 PIPELINE_SECTION=$PIPELINE_SECTION PUSH_KST_HOUR=$PUSH_KST_HOUR"
+          python -u main.py
 
   news_14_40_kst:
     runs-on: ubuntu-latest
@@ -83,7 +99,11 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install -r pipeline/requirements.txt
+        run: |
+          echo "pip install 시작…"
+          python -m pip install --upgrade pip
+          pip install -r pipeline/requirements.txt
+          echo "pip install 완료"
       - name: Run pipeline
         working-directory: pipeline
         env:
@@ -92,7 +112,9 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SAPIENS_ARTICLE_LLM_JUDGE: "1"
-        run: python main.py
+        run: |
+          echo "파이프라인 시작 PIPELINE_SECTION=$PIPELINE_SECTION PUSH_KST_HOUR=$PUSH_KST_HOUR"
+          python -u main.py
 
   news_and_market_16_40_kst:
     runs-on: ubuntu-latest
@@ -106,7 +128,11 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install -r pipeline/requirements.txt
+        run: |
+          echo "pip install 시작…"
+          python -m pip install --upgrade pip
+          pip install -r pipeline/requirements.txt
+          echo "pip install 완료"
       - name: Run pipeline
         working-directory: pipeline
         env:
@@ -115,7 +141,9 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SAPIENS_ARTICLE_LLM_JUDGE: "1"
-        run: python main.py
+        run: |
+          echo "파이프라인 시작 PIPELINE_SECTION=$PIPELINE_SECTION PUSH_KST_HOUR=$PUSH_KST_HOUR"
+          python -u main.py
 
   manual:
     runs-on: ubuntu-latest
@@ -126,7 +154,11 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install -r pipeline/requirements.txt
+        run: |
+          echo "pip install 시작…"
+          python -m pip install --upgrade pip
+          pip install -r pipeline/requirements.txt
+          echo "pip install 완료"
       - name: Run pipeline
         working-directory: pipeline
         env:
@@ -134,4 +166,6 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SAPIENS_ARTICLE_LLM_JUDGE: "1"
-        run: python main.py
+        run: |
+          echo "파이프라인 시작 PIPELINE_SECTION=$PIPELINE_SECTION"
+          python -u main.py
