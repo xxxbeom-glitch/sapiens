@@ -1,5 +1,5 @@
 """
-기사 요약·시황·기업 분석: Anthropic Claude API 전용.
+기사 요약·시황·기업 분석: Google Gemini API (google-genai).
 """
 from __future__ import annotations
 
@@ -10,27 +10,36 @@ import re
 import time
 from typing import Any, Literal
 
-import anthropic
+from google import genai
+from google.genai import types
 
 logger = logging.getLogger(__name__)
 
-CLAUDE_MODEL = "claude-haiku-4-5-20251001"
+# 제품 기본: Gemini 3.1 Flash-Lite (`generateContent`·텍스트/JSON 요약).
+# 다른 모델: 환경변수 GEMINI_MODEL.
+_DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
 
-# SAPIENS_ARTICLE_LLM_JUDGE=1: 기사 JSON 요약을 [Claude 1경로(단일 호출, 재시도 2회)]만 사용.
-# 미설정·0이면 _call_news_llm 기반 2회 재시도 경로(동일 Claude).
+# SAPIENS_ARTICLE_LLM_JUDGE=1: 기사 JSON 요약을 [단일 LLM 호출·재시도 2회]만 사용.
+# 미설정·0이면 _call_news_llm 기반 2회 재시도 경로.
 def _article_llm_judge_enabled() -> bool:
     v = (os.environ.get("SAPIENS_ARTICLE_LLM_JUDGE") or "").strip().lower()
     return v in ("1", "true", "yes", "on")
 
-SELECTED_MODEL_CLAUDE = "claude"
 
-_RUNTIME_SELECTED_MODEL = SELECTED_MODEL_CLAUDE
+def _gemini_model_id() -> str:
+    return (os.environ.get("GEMINI_MODEL") or _DEFAULT_GEMINI_MODEL).strip() or _DEFAULT_GEMINI_MODEL
+
+
+SELECTED_MODEL_CLAUDE = "claude"
+SELECTED_MODEL_GEMINI = "gemini"
+
+_RUNTIME_SELECTED_MODEL = SELECTED_MODEL_GEMINI
 
 _token_input_total: int = 0
 _token_output_total: int = 0
 _token_model: str = ""
 
-_claude_client: Any = None
+_gemini_client: Any = None
 SYSTEM = (
     "당신은 한국 투자자를 위한 금융 뉴스 에디터입니다.\n"
     "뉴스를 분석해서 핵심 내용을 명확하고 구체적으로 요약하세요.\n"
@@ -262,10 +271,18 @@ def _require_json_dict(text: str) -> dict[str, Any]:
 
 
 def configure_ai(*, selected_model: str) -> None:
-    """main.py에서 Firebase settings/ai_config 읽은 뒤 호출. 런타임은 항상 Claude."""
+    """main.py에서 Firebase settings/ai_config 읽은 뒤 호출."""
     global _RUNTIME_SELECTED_MODEL
-    _RUNTIME_SELECTED_MODEL = SELECTED_MODEL_CLAUDE
-    logger.info("summarizer AI runtime: selected_model=%s", _RUNTIME_SELECTED_MODEL)
+    s = (selected_model or "").strip().lower()
+    if s == SELECTED_MODEL_CLAUDE:
+        _RUNTIME_SELECTED_MODEL = SELECTED_MODEL_CLAUDE
+    else:
+        _RUNTIME_SELECTED_MODEL = SELECTED_MODEL_GEMINI
+    logger.info(
+        "summarizer AI runtime: selected_model=%s gemini_model=%s",
+        _RUNTIME_SELECTED_MODEL,
+        _gemini_model_id(),
+    )
 
 
 def reset_token_counters() -> None:
@@ -317,16 +334,16 @@ def _usage_meta_get_int(obj: Any, *names: str) -> int:
     return 0
 
 
-def _accumulate_claude_usage(response: Any) -> None:
+def _accumulate_gemini_usage(response: Any) -> None:
     global _token_input_total, _token_output_total
-    usage = getattr(response, "usage", None)
-    if usage is None:
+    um = getattr(response, "usage_metadata", None)
+    if um is None:
         return
-    inp = _usage_meta_get_int(usage, "input_tokens")
-    out = _usage_meta_get_int(usage, "output_tokens")
+    inp = _usage_meta_get_int(um, "prompt_token_count", "prompt_tokens")
+    out = _usage_meta_get_int(um, "candidates_token_count", "candidates_tokens", "output_token_count")
     _token_input_total += max(0, inp)
     _token_output_total += max(0, out)
-    _append_model_label(CLAUDE_MODEL)
+    _append_model_label(_gemini_model_id())
 
 
 def _ai_any_news_enabled() -> bool:
@@ -334,41 +351,44 @@ def _ai_any_news_enabled() -> bool:
 
 
 def _call_news_llm(user_content: str) -> str:
-    """뉴스/시황/큐레이션 — Claude."""
+    """뉴스/시황/큐레이션 — Gemini."""
     if not _ai_any_news_enabled():
         return ""
-    return str(_call_claude(user_content) or "").strip()
+    return str(_call_gemini(user_content) or "").strip()
 
 
-def _get_claude_client() -> Any:
-    global _claude_client
-    if _claude_client is not None:
-        return _claude_client
-    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+def _get_gemini_client() -> Any:
+    global _gemini_client
+    if _gemini_client is not None:
+        return _gemini_client
+    key = (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
     if not key:
-        raise RuntimeError("ANTHROPIC_API_KEY 가 설정되어 있어야 합니다.")
-    _claude_client = anthropic.Anthropic(api_key=key)
-    return _claude_client
+        raise RuntimeError("GEMINI_API_KEY 또는 GOOGLE_API_KEY 가 설정되어 있어야 합니다.")
+    _gemini_client = genai.Client(api_key=key)
+    return _gemini_client
 
 
-def _call_claude(user_content: str) -> str:
+def _call_gemini(user_content: str) -> str:
     try:
-        client = _get_claude_client()
-        response = client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=4096,
-            system=SYSTEM,
-            messages=[{"role": "user", "content": user_content}],
+        client = _get_gemini_client()
+        model_id = _gemini_model_id()
+        response = client.models.generate_content(
+            model=model_id,
+            contents=user_content,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM,
+                max_output_tokens=8192,
+                temperature=0.35,
+            ),
         )
         try:
-            _accumulate_claude_usage(response)
+            _accumulate_gemini_usage(response)
         except Exception as e:
-            logger.warning("Claude usage 집계 실패(무시): %s", e)
-        if not response.content:
-            return ""
-        return str(response.content[0].text).strip()
+            logger.warning("Gemini usage 집계 실패(무시): %s", e)
+        text = (getattr(response, "text", None) or "").strip()
+        return text
     except Exception as e:
-        logger.exception("_call_claude 실패: %s", e)
+        logger.exception("_call_gemini 실패: %s", e)
         return ""
 
 
@@ -417,28 +437,28 @@ def _summarize_article_claude_judge_once(
     max_points_keep: int,
 ) -> dict[str, Any]:
     """
-    SAPIENS_ARTICLE_LLM_JUDGE=1: Gemini 1호출·JSON 파싱 후 반환(일반 2회 재시도 루프는 생략).
+    SAPIENS_ARTICLE_LLM_JUDGE=1: 단일 LLM 호출·JSON 파싱 후 반환(일반 2회 재시도 루프는 생략).
     JSON·스키마 오류 시 최대 2회까지 동일 프롬프트로 재시도.
     """
     last_err: Exception | None = None
     for attempt in range(2):
         try:
-            raw = _call_claude(user)
+            raw = _call_gemini(user)
             if not (raw or "").strip():
-                raise ValueError("empty Claude response")
+                raise ValueError("empty Gemini response")
             data = _require_json_dict(raw)
             _validate_summarize_article_shape(data)
             out = _postprocess_summarize_article_dict(
                 data, max_points_keep, title, source, summary, body_stripped
             )
-            out["_quality"] = {"path": "claude_judge_once", "attempts": attempt + 1}
+            out["_quality"] = {"path": "gemini_judge_once", "attempts": attempt + 1}
             return out
         except Exception as e:
             last_err = e
-            logger.warning("Claude(저지 1경로) 요약 재시도 (%s/2): %s", attempt + 1, e)
+            logger.warning("Gemini(저지 1경로) 요약 재시도 (%s/2): %s", attempt + 1, e)
             if attempt == 0:
                 time.sleep(0.5)
-    raise last_err or RuntimeError("claude_judge_once summarize failed")
+    raise last_err or RuntimeError("gemini_judge_once summarize failed")
 
 
 NewsFeedId = Literal["domestic_market", "global_market", "ai_issue"]
@@ -511,7 +531,7 @@ def summarize_article(
             )
         except Exception as e:
             logger.exception(
-                "SAPIENS_ARTICLE_LLM_JUDGE(Claude 1경로) 실패, _call_news_llm 경로로 폴백: %s",
+                "SAPIENS_ARTICLE_LLM_JUDGE(단일 경로) 실패, 일반 2회 재시도 경로로 폴백: %s",
                 e,
             )
 

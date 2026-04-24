@@ -49,7 +49,7 @@ fun NewsScreen(
     val globalMarketNews by viewModel.globalMarketNews.collectAsState()
     val aiIssueNews by viewModel.aiIssueNews.collectAsState()
 
-    /** (기사, 뉴스 탭 페이지 0·1·2) — 바텀시트 칩(예: AI 탭=CNBC)에 사용 */
+    /** (기사, 뉴스 탭 페이지 0·1·2) — 바텀시트 등에서 탭 컨텍스트가 필요할 때 사용 */
     var sheetArticleAndPage by remember { mutableStateOf<Pair<Article, Int>?>(null) }
     val context = LocalContext.current
     val pagerState = rememberPagerState(pageCount = { tabLabels.size })
@@ -116,16 +116,11 @@ fun NewsScreen(
                                 articles = pageItems,
                                 onClickArticle = { sheetArticleAndPage = it to page },
                                 topChipForArticle = { article ->
+                                    val chip = newsPublisherChipText(article.source)
                                     when {
-                                        page == 2 -> "CNBC"
-                                        else -> {
-                                            val chip = newsPublisherChipText(article.source)
-                                            when {
-                                                chip.isNotBlank() -> chip
-                                                page == 1 -> "해외"
-                                                else -> "국내"
-                                            }
-                                        }
+                                        chip.isNotBlank() -> chip
+                                        page == 1 || page == 2 -> "해외"
+                                        else -> "국내"
                                     }
                                 },
                                 emptyStateText = "불러온 기사가 없습니다."
@@ -136,11 +131,10 @@ fun NewsScreen(
             }
         }
 
-        sheetArticleAndPage?.let { (article, fromPage) ->
+        sheetArticleAndPage?.let { (article, _) ->
             ArticleBottomSheet(
                 article = article,
                 onDismissRequest = { sheetArticleAndPage = null },
-                publisherChipDisplayOverride = if (fromPage == 2) "CNBC" else null,
                 onOpenOriginalArticle = {
                     val url = article.url.trim()
                     if (url.isNotBlank()) {

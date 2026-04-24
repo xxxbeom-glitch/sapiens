@@ -45,7 +45,7 @@ fun ArticleBottomSheet(
     article: Article,
     onDismissRequest: () -> Unit,
     onOpenOriginalArticle: (() -> Unit)? = null,
-    /** null이면 [newsPublisherChipText]·출처 문자열로 칩(색·문구). AI 이슈 탭 등에서 `"CNBC"` 고정 시 전달. */
+    /** null이면 [newsPublisherChipText]·[Article.source]로 칩(색·문구). 특정 화면만 문구를 덮어쓸 때 전달. */
     publisherChipDisplayOverride: String? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)

@@ -54,11 +54,22 @@ private data class BottomTab(
     val iconResId: Int
 )
 
-private val tabs = listOf(
-    BottomTab(label = "뉴스", iconResId = R.drawable.ico_news),
-    BottomTab(label = "마켓", iconResId = R.drawable.ico_market),
-    BottomTab(label = "마이", iconResId = R.drawable.ico_my)
-)
+/** false: 하단 마켓 탭·[MarketViewModel] 비활성. 뉴스(국내/미국 증시 기사)는 유지. */
+private const val MARKET_TAB_ENABLED = false
+
+private fun mainBottomTabs(): List<BottomTab> =
+    if (MARKET_TAB_ENABLED) {
+        listOf(
+            BottomTab(label = "뉴스", iconResId = R.drawable.ico_news),
+            BottomTab(label = "마켓", iconResId = R.drawable.ico_market),
+            BottomTab(label = "마이", iconResId = R.drawable.ico_my),
+        )
+    } else {
+        listOf(
+            BottomTab(label = "뉴스", iconResId = R.drawable.ico_news),
+            BottomTab(label = "마이", iconResId = R.drawable.ico_my),
+        )
+    }
 
 @Composable
 fun MainScreen(
@@ -66,13 +77,19 @@ fun MainScreen(
     onNavigateToSectionConsumed: () -> Unit = {},
 ) {
     var selectedTabIndex by remember { mutableIntStateOf(0) }
+    val tabs = remember { mainBottomTabs() }
 
     val context = LocalContext.current
     val newsRepository = remember { NewsRepositoryImpl() }
     val newsViewModel: NewsViewModel = viewModel(
         factory = NewsViewModel.factory(newsRepository)
     )
-    val marketViewModel: MarketViewModel = viewModel(factory = MarketViewModel.factory(newsRepository))
+    val marketViewModel: MarketViewModel? =
+        if (MARKET_TAB_ENABLED) {
+            viewModel(factory = MarketViewModel.factory(newsRepository))
+        } else {
+            null
+        }
     val authViewModel: AuthViewModel = viewModel(
         factory = AuthViewModel.factory(context.applicationContext as Application)
     )
@@ -96,7 +113,7 @@ fun MainScreen(
         val key = navigateToSectionKey?.trim()?.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
         when (key) {
             "briefing", "domestic_news", "news" -> selectedTabIndex = 0
-            "market" -> selectedTabIndex = 1
+            "market" -> selectedTabIndex = if (MARKET_TAB_ENABLED) 1 else 0
         }
         onNavigateToSectionConsumed()
     }
@@ -111,6 +128,7 @@ fun MainScreen(
         },
         bottomBar = {
             BottomNavigationBar(
+                tabs = tabs,
                 selectedTabIndex = selectedTabIndex,
                 onTabSelected = { selectedTabIndex = it }
             )
@@ -124,7 +142,14 @@ fun MainScreen(
         ) {
             when (selectedTabIndex) {
                 0 -> NewsScreen(viewModel = newsViewModel)
-                1 -> MarketScreen(viewModel = marketViewModel)
+                1 -> {
+                    val mv = marketViewModel
+                    if (MARKET_TAB_ENABLED && mv != null) {
+                        MarketScreen(viewModel = mv)
+                    } else {
+                        MyScreen(authViewModel = authViewModel)
+                    }
+                }
                 else -> MyScreen(authViewModel = authViewModel)
             }
         }
@@ -161,6 +186,7 @@ private fun MainTopAppBar(
 
 @Composable
 private fun BottomNavigationBar(
+    tabs: List<BottomTab>,
     selectedTabIndex: Int,
     onTabSelected: (Int) -> Unit
 ) {

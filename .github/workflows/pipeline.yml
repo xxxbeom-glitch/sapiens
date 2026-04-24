@@ -1,25 +1,25 @@
 name: Sapiens Pipeline
 
 # ━ 스케줄(UTC): KST 20분 전 작업 → 정각 푸시(PUSH_KST_HOUR는 워크플로에서 고정).
-# ━ 07:40 슬롯은 PIPELINE_SECTION=all (뉴스+마켓 동시) → 푸시 1건(sapiens_feed).
+# ━ 전 슬롯 뉴스만(PIPELINE_SECTION=news). 마켓 파이프라인은 코드 기본 비활성(SAPIENS_MARKET_PIPELINE=1 시에만).
 # ━ 수동 실행: job 1개(manual), `section` → PIPELINE_SECTION. 푸시 시각은 PUSH_KST 없을 때 다음 KST 정각.
 'on':
   schedule:
-    - cron: "40 22 * * *"  # 07:40 KST 뉴스+마켓(all)
+    - cron: "40 22 * * *"  # 07:40 KST 뉴스
     - cron: "40 1 * * *"   # 10:40 KST 뉴스
     - cron: "40 5 * * *"   # 14:40 KST 뉴스
-    - cron: "40 7 * * *"   # 16:40 KST 뉴스+마켓(all)
+    - cron: "40 7 * * *"   # 16:40 KST 뉴스
   workflow_dispatch:
     inputs:
       section:
-        description: "all = 뉴스+마켓, news = 뉴스만, market = 마켓만"
+        description: "news(기본), all, full — 마켓은 SAPIENS_MARKET_PIPELINE=1일 때만"
         required: false
-        default: "all"
+        default: "news"
         type: choice
         options:
-          - all
           - news
-          - market
+          - all
+          - full
 
 permissions:
   contents: read
@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule' && github.event.schedule == '40 22 * * *'
     env:
-      PIPELINE_SECTION: all
+      PIPELINE_SECTION: news
       PUSH_KST_HOUR: "8"
     steps:
       - uses: actions/checkout@v4
@@ -52,7 +52,7 @@ jobs:
           PIPELINE_SECTION: ${{ env.PIPELINE_SECTION }}
           PUSH_KST_HOUR: ${{ env.PUSH_KST_HOUR }}
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SAPIENS_ARTICLE_LLM_JUDGE: "1"
         run: |
           echo "파이프라인 시작 PIPELINE_SECTION=$PIPELINE_SECTION PUSH_KST_HOUR=$PUSH_KST_HOUR"
@@ -81,7 +81,7 @@ jobs:
           PIPELINE_SECTION: ${{ env.PIPELINE_SECTION }}
           PUSH_KST_HOUR: ${{ env.PUSH_KST_HOUR }}
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SAPIENS_ARTICLE_LLM_JUDGE: "1"
         run: |
           echo "파이프라인 시작 PIPELINE_SECTION=$PIPELINE_SECTION PUSH_KST_HOUR=$PUSH_KST_HOUR"
@@ -110,17 +110,17 @@ jobs:
           PIPELINE_SECTION: ${{ env.PIPELINE_SECTION }}
           PUSH_KST_HOUR: ${{ env.PUSH_KST_HOUR }}
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SAPIENS_ARTICLE_LLM_JUDGE: "1"
         run: |
           echo "파이프라인 시작 PIPELINE_SECTION=$PIPELINE_SECTION PUSH_KST_HOUR=$PUSH_KST_HOUR"
           python -u main.py
 
-  news_and_market_16_40_kst:
+  news_16_40_kst:
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule' && github.event.schedule == '40 7 * * *'
     env:
-      PIPELINE_SECTION: all
+      PIPELINE_SECTION: news
       PUSH_KST_HOUR: "17"
     steps:
       - uses: actions/checkout@v4
@@ -139,7 +139,7 @@ jobs:
           PIPELINE_SECTION: ${{ env.PIPELINE_SECTION }}
           PUSH_KST_HOUR: ${{ env.PUSH_KST_HOUR }}
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SAPIENS_ARTICLE_LLM_JUDGE: "1"
         run: |
           echo "파이프라인 시작 PIPELINE_SECTION=$PIPELINE_SECTION PUSH_KST_HOUR=$PUSH_KST_HOUR"
@@ -164,7 +164,7 @@ jobs:
         env:
           PIPELINE_SECTION: ${{ github.event.inputs.section }}
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SAPIENS_ARTICLE_LLM_JUDGE: "1"
         run: |
           echo "파이프라인 시작 PIPELINE_SECTION=$PIPELINE_SECTION"

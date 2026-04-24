@@ -107,12 +107,16 @@ fun MyScreen(
     }
 
     val notifPermitted = FcmTopicSync.hasNotificationPermission(context)
-    val pushSubtitle = when {
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU -> "뉴스·마켓 알림"
-        pushNotificationsEnabled && !notifPermitted ->
+    val pushSubtitle =
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            pushNotificationsEnabled &&
+            !notifPermitted
+        ) {
             "설정에서 알림 권한을 허용해 주세요"
-        else -> "뉴스·마켓 알림"
-    }
+        } else {
+            ""
+        }
 
     Column(
         modifier = Modifier
@@ -230,13 +234,15 @@ private fun PushNotificationMenuRow(
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextPrimary
                     )
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    if (subtitle.isNotBlank()) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
             Switch(

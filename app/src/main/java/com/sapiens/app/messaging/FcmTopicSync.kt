@@ -11,7 +11,7 @@ import kotlinx.coroutines.tasks.await
 
 /** Cloud Functions / 파이프라인에서 발송하는 FCM 토픽과 동일한 이름. */
 object FcmTopicSync {
-    /** 뉴스·마켓 통합 예약 푸시(구 `news_update` / `market_update` 대체). */
+    /** 통합 예약 푸시(구 `news_update` / `market_update` 대체). */
     val topics: List<String> = listOf("sapiens_feed")
 
     private val legacyTopics: List<String> = listOf("news_update", "market_update")

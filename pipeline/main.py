@@ -8,6 +8,9 @@ PIPELINE_SECTION 환경변수:
   - all: 아래 두 블록을 순서대로 실행(각 블록은 해당 섹션의 휴장 규칙으로 개별 스킵).
   - full: 레거시 전체 파이프라인(피드 초기화 등).
 
+마켓(지표·네이버 테마/업종·시황 요약·Firestore `market/*`)은 기본 비활성.
+켜려면 환경변수 `SAPIENS_MARKET_PIPELINE=1`(또는 true/yes/on).
+
 `from main import run` 을 쓰는 러너(CI, Docker 등)는 import 시점에 부작용·무거운 초기화가
 돌아가지 않도록, 로깅 설정·환경 로드·하위 모듈 import는 모두 `run()` 안에서 수행합니다.
 """
@@ -27,6 +30,16 @@ PIPELINE_SECTION_NEWS = "news"
 PIPELINE_SECTION_MARKET = "market"
 # 하위 호환: 예전 Run/CI의 PIPELINE_SECTION=domestic_news
 _LEGACY_PIPELINE_SECTION_NEWS = "domestic_news"
+
+
+def _market_pipeline_enabled() -> bool:
+    """False 기본. `SAPIENS_MARKET_PIPELINE=1|true|yes|on` 일 때만 마켓 크롤·저장·시황 요약."""
+    v = (os.environ.get("SAPIENS_MARKET_PIPELINE") or "").strip().lower()
+    if v in ("1", "true", "yes", "on"):
+        return True
+    if v in ("0", "false", "no", "off"):
+        return False
+    return False
 
 
 def is_skip_day(section: str) -> Tuple[bool, str]:
@@ -62,7 +75,7 @@ def is_skip_day(section: str) -> Tuple[bool, str]:
 
 
 def _schedule_unified_feed_push(firebase_client: Any) -> None:
-    """뉴스·마켓 반영 후 FCM 예약 1건(토픽 `sapiens_feed`)."""
+    """뉴스 등 반영 후 FCM 예약 1건(토픽 `sapiens_feed`)."""
     import push_schedule_util as psu
 
     when_k = psu.resolve_push_target_kst()
@@ -79,7 +92,7 @@ def _schedule_unified_feed_push(firebase_client: Any) -> None:
 
 def _run_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
     ai_cfg = firebase_client.get_ai_config()
-    summarizer.configure_ai(selected_model=str(ai_cfg.get("selected_model", "claude")))
+    summarizer.configure_ai(selected_model=str(ai_cfg.get("selected_model", "gemini")))
 
     domestic = crawler.crawl_domestic()
     domestic["domestic_market"] = crawler.dedupe_items(domestic["domestic_market"])
@@ -108,6 +121,9 @@ def _run_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
 
 
 def _run_market_only(crawler: Any, firebase_client: Any) -> None:
+    if not _market_pipeline_enabled():
+        logger.info("마켓 파이프라인 비활성 — _run_market_only 스킵")
+        return
     naver_themes = crawler.crawl_naver_stock_themes()
     naver_upjong = crawler.crawl_naver_stock_upjong()
     firebase_client.save_market_themes(naver_themes)
@@ -121,16 +137,22 @@ def _run_pipeline_full(crawler: Any, firebase_client: Any, summarizer: Any) -> N
         logger.exception("뉴스 피드 삭제 단계 실패, 크롤링 계속: %s", e)
 
     ai_cfg = firebase_client.get_ai_config()
-    summarizer.configure_ai(selected_model=str(ai_cfg.get("selected_model", "claude")))
+    summarizer.configure_ai(selected_model=str(ai_cfg.get("selected_model", "gemini")))
 
     domestic = crawler.crawl_domestic()
     domestic["domestic_market"] = crawler.dedupe_items(domestic["domestic_market"])
     domestic["global_market"] = crawler.dedupe_items(domestic["global_market"])
     domestic["ai_issue"] = crawler.dedupe_items(domestic["ai_issue"])
 
-    indicators = crawler.crawl_market_indicators()
-    naver_themes = crawler.crawl_naver_stock_themes()
-    naver_upjong = crawler.crawl_naver_stock_upjong()
+    if _market_pipeline_enabled():
+        indicators = crawler.crawl_market_indicators()
+        naver_themes = crawler.crawl_naver_stock_themes()
+        naver_upjong = crawler.crawl_naver_stock_upjong()
+    else:
+        logger.info("마켓 파이프라인 비활성: 지표·테마·업종 크롤·시황 요약·Firestore 마켓 저장 스킵")
+        indicators = []
+        naver_themes = []
+        naver_upjong = []
 
     counts = {
         "domestic_market": len(domestic["domestic_market"]),
@@ -160,16 +182,17 @@ def _run_pipeline_full(crawler: Any, firebase_client: Any, summarizer: Any) -> N
         if ai:
             fs_ai_issue.append(summarizer.merge_to_firestore_article(row, ai))
 
-    try:
-        fs_for_report: list[dict] = list(fs_global_market) + list(fs_ai_issue)
-        report = summarizer.generate_market_report(indicators, fs_for_report)
-        logger.info("시황 요약:\n%s", report.get("report", "")[:500])
-    except Exception as e:
-        logger.warning("시황 요약 생성 실패: %s", e)
+    if _market_pipeline_enabled():
+        try:
+            fs_for_report: list[dict] = list(fs_global_market) + list(fs_ai_issue)
+            report = summarizer.generate_market_report(indicators, fs_for_report)
+            logger.info("시황 요약:\n%s", report.get("report", "")[:500])
+        except Exception as e:
+            logger.warning("시황 요약 생성 실패: %s", e)
+        firebase_client.save_market_indicators(indicators)
+        firebase_client.save_market_themes(naver_themes)
+        firebase_client.save_market_industries(naver_upjong)
 
-    firebase_client.save_market_indicators(indicators)
-    firebase_client.save_market_themes(naver_themes)
-    firebase_client.save_market_industries(naver_upjong)
     firebase_client.save_news_feed(fs_domestic_market, "domestic_market")
     firebase_client.save_news_feed(fs_global_market, "global_market")
     firebase_client.save_news_feed(fs_ai_issue, "ai_issue")
@@ -237,6 +260,9 @@ def run() -> None:
         _run_news_only(crawler, firebase_client, summarizer)
 
     def _maybe_market() -> None:
+        if not _market_pipeline_enabled():
+            logger.info("마켓 파이프라인 비활성 — _maybe_market 스킵")
+            return
         sk, rs = is_skip_day(PIPELINE_SECTION_MARKET)
         if sk:
             logger.info(
@@ -268,8 +294,11 @@ def run() -> None:
             _run_news_only(crawler, firebase_client, summarizer)
             _schedule_unified_feed_push(firebase_client)
         elif section == PIPELINE_SECTION_MARKET:
-            _run_market_only(crawler, firebase_client)
-            _schedule_unified_feed_push(firebase_client)
+            if not _market_pipeline_enabled():
+                logger.info("마켓 파이프라인 비활성 — section=market 전체 스킵(푸시 없음)")
+            else:
+                _run_market_only(crawler, firebase_client)
+                _schedule_unified_feed_push(firebase_client)
 
         elapsed = time.perf_counter() - t0
         logger.info("파이프라인 종료 section=%s, 소요 %.1f초", section, elapsed)
