@@ -11,7 +11,7 @@
 
 - **앱**: Kotlin + Jetpack Compose, Material 3. 하단 탭 **뉴스 / 마켓 / 마이**.
 - **데이터**: Firestore DB ID `sapiens`. 뉴스 피드·마켓 테마/업종·지표 등은 파이프라인이 적재하고 앱이 구독.
-- **파이프라인**: RSS·네이버 등 크롤 → Claude(Haiku)로 기사 요약·탭 분류 → Firestore 저장. `PIPELINE_SECTION`으로 일부만 실행 가능.
+- **파이프라인**: RSS·네이버 등 크롤 → 탭별 지정 RSS만 `news` 문서에 적재 → Claude(Haiku)로 **기사 요약** → Firestore 저장. `PIPELINE_SECTION`으로 일부만 실행 가능.
 
 ---
 
@@ -22,7 +22,7 @@
 | 앱 | Android (minSdk 26), Kotlin, Compose, Material3, Firebase Auth/Firestore/FCM, Coil, Retrofit/OkHttp, DataStore |
 | 백엔드(서버리스) | Firebase Firestore, FCM 토픽·예약 푸시(`push_schedule_util` 등) |
 | 파이프라인 | Python 3, `feedparser`, BeautifulSoup, Playwright(토스 등), Anthropic Claude(`anthropic`), `python-dotenv` |
-| LLM | 기사 요약·탭 분류·시황 리포트: **Claude Haiku** (`pipeline/summarizer.py`의 `CLAUDE_MODEL`, 기본 `claude-haiku-4-5-20251001`). `ANTHROPIC_API_KEY` 필수. |
+| LLM | 기사 요약·시황 등: **Claude Haiku** (`pipeline/summarizer.py`의 `CLAUDE_MODEL`, 기본 `claude-haiku-4-5-20251001`). `ANTHROPIC_API_KEY` 필수. (뉴스 탭 소스는 RSS 지정으로 고정, LLM 탭 분류 없음.) |
 
 ---
 
@@ -94,10 +94,14 @@ Sapiens/
   - **`full`**: 뉴스 피드 초기화 시도 후 전체 크롤·요약·지표·테마·푸시 예약 등.
 - `domestic_news` → `news`로 하위 호환 매핑.
 
-### 6.2 뉴스 크롤·분류
+### 6.2 뉴스 크롤·탭 소스
 
-- 국내: 매경·한경·조선 RSS 풀 → 중복 제거 → **`news_tab_classification`**: LLM으로 탭 성격에 맞게 **국내증시 / 해외증시 / AI 이슈** 배정(규칙은 해당 모듈·프롬프트 참고).
-- **`ai_issue` Firestore 문서**: CNBC 테크 RSS 풀만 최종 적재(국내 풀에서 LLM이 “AI 이슈”로 준 건 국내/해외 탭으로만 재배치).
+- **`crawl_domestic`**: 탭마다 **지정 RSS만** 읽어 `domestic_market` / `global_market` / `ai_issue` 문서에 넣는다. 풀을 합쳐 LLM으로 탭을 나누지 않는다.
+  - **국내증시**: `RSS_FEEDS_NEWS_KR_MARKET`(매경 증권·한경 finance).
+  - **미국증시**: `RSS_FEEDS_NEWS_CNBC_MARKETS`(CNBC Markets, URL `cnbc.com`만).
+  - **AI 이슈**: `RSS_FEEDS_NEWS_AI`(CNBC Tech).
+- `RSS_FEEDS_NEWS_OVERSEAS` 등은 이 경로에서 사용하지 않는다(필요 시 별도 호출·기능에 연결).
+- 레거시 LLM 탭 분류 프롬프트는 `news_tab_classification.py`에 남아 있으나 `crawl_domestic`에서는 호출하지 않는다.
 - 탭별 기사 상한(크롤 후 슬라이스): **`RSS_DOMESTIC_NEWS_MAX_ITEMS = 9`** (`crawler.py`) — Firestore `articles` 길이와 앱 `take(9)`와 맞춤.
 
 ### 6.3 제거된 파이프라인 기능
