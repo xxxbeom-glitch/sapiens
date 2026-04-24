@@ -135,7 +135,7 @@ def finalize_kr_overseas_tab_label(
     us = looks_us_capital_markets_centric(t_raw, s_raw)
     t_norm = _normalize_tab_label((label or "").strip()) if (label and str(label).strip()) else None
     if fb == "global_market":
-        if t_norm is None:
+        if t_norm is None or t_norm == "제외":
             return "해외증시"
         if t_norm == "해외증시":
             return "해외증시"
