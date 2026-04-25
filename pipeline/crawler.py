@@ -836,6 +836,17 @@ RSS_FEEDS_NEWS_KR_MARKET: list[str] = [
     "https://www.mk.co.kr/rss/50200011/",
     "https://www.hankyung.com/feed/finance",
 ]
+# Firestore `kr_domestic_stock` / `kr_domestic_economy`: 지정 RSS만(레거시 `domestic_market`과 동일 필터·상한)
+RSS_FEEDS_KR_HEADLINE_STOCK: list[str] = [
+    "https://www.mk.co.kr/rss/50200011/",
+    "https://www.hankyung.com/feed/finance",
+    "https://www.yna.co.kr/rss/market.xml",
+]
+RSS_FEEDS_KR_HEADLINE_ECONOMY: list[str] = [
+    "https://www.mk.co.kr/rss/30100041/",
+    "https://www.hankyung.com/feed/economy",
+    "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=02&plink=RSSREADER",
+]
 # 매경 30300018=국제 / 한경 international / 조선 international — `crawl_domestic`에서는 미사용
 RSS_FEEDS_NEWS_OVERSEAS: list[str] = [
     "https://www.mk.co.kr/rss/30300018/",
@@ -1102,6 +1113,22 @@ def crawl_rss_domestic_kr_market() -> list[dict[str, Any]]:
     )
     _attach_mk_hankyung_bodies(rows)
     return rows
+
+
+def crawl_rss_kr_headline_leg(urls: list[str]) -> list[dict[str, Any]]:
+    """
+    앱 헤드라인 Firestore (kr_domestic_stock / kr_domestic_economy) 전용.
+    `crawl_domestic`의 domestic_market과 동일: _crawl_rss_feed_urls(48h·피드당 15) → MK/한경 본문
+    → _dedupe_domestic_pooled_preserve_order → 최신순 상위 RSS_DOMESTIC_NEWS_MAX_ITEMS.
+    """
+    rows = _crawl_rss_feed_urls(
+        urls,
+        max_items_per_feed=RSS_DOMESTIC_KR_MARKET_ITEMS_PER_FEED,
+        allow_missing_published=True,
+    )
+    _attach_mk_hankyung_bodies(rows)
+    pool = _dedupe_domestic_pooled_preserve_order([dict(r) for r in rows])
+    return _sort_domestic_rows_by_published_desc(pool)[:RSS_DOMESTIC_NEWS_MAX_ITEMS]
 
 
 def crawl_rss_domestic_overseas() -> list[dict[str, Any]]:
