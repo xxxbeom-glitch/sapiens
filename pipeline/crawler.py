@@ -39,6 +39,8 @@ MAX_PER_SECTION = 10
 MAX_TOSS_NEWS = 20
 SUMMARY_CHARS = 200
 ARTICLE_BODY_MAX_CHARS = 2000
+# Yahoo Finance 같은 해외 기사(리스트형/본문 뒤쪽에 핵심 정보가 있는 경우)용: 더 긴 본문을 요약기에 전달
+YAHOO_ARTICLE_BODY_MAX_CHARS = 8000
 # 수집 제외: 기사 **제목**에 아래 대괄호를 포함한 문자열이 있으면 수집하지 않음
 _EXCLUDE_TITLE_BRACKET_MARKERS: tuple[str, ...] = ("[사설]", "[포토]", "[표]")
 
@@ -1087,6 +1089,96 @@ def _fetch_mk_hankyung_article_body(article_url: str) -> str:
     return ""
 
 
+def _fetch_yahoo_finance_article_body(article_url: str) -> str:
+    """
+    Yahoo Finance 기사 본문 텍스트 추출(실패 시 빈 문자열).
+    RSS description에 리스트(종목)가 없고 본문 뒤쪽에 있는 경우가 많아, 더 긴 상한으로 전달한다.
+    """
+    u = (article_url or "").strip()
+    if not u:
+        return ""
+    low = u.lower()
+    if "finance.yahoo.com" not in low:
+        return ""
+    html = _fetch(u)
+    if not html:
+        return ""
+    try:
+        soup = BeautifulSoup(html, "lxml")
+    except Exception:
+        return ""
+    try:
+        # 광고/스크립트 제거
+        for tag in soup.select("script, style, noscript, iframe, nav, footer"):
+            tag.decompose()
+    except Exception:
+        pass
+
+    # Yahoo Finance는 caas-body / article 구조가 자주 보인다.
+    candidates = [
+        soup.select_one("div.caas-body"),
+        soup.select_one("div[data-test-locator='stream-item'] div.caas-body"),
+        soup.select_one("article"),
+    ]
+    for node in candidates:
+        if node is None:
+            continue
+        parts: list[str] = []
+        for p in node.select("p"):
+            t = (p.get_text(" ", strip=True) or "").strip()
+            if not t:
+                continue
+            parts.append(t)
+        text = re.sub(r"\s+", " ", " ".join(parts)).strip()
+        if len(text) >= 200:
+            return text[:YAHOO_ARTICLE_BODY_MAX_CHARS]
+
+    # 마지막 폴백: 전체 문서에서 p를 모으되 너무 짧으면 무시
+    parts2: list[str] = []
+    for p in soup.select("p"):
+        t = (p.get_text(" ", strip=True) or "").strip()
+        if not t:
+            continue
+        parts2.append(t)
+        if sum(len(x) for x in parts2) >= YAHOO_ARTICLE_BODY_MAX_CHARS * 1.2:
+            break
+    text2 = re.sub(r"\s+", " ", " ".join(parts2)).strip()
+    if len(text2) >= 260:
+        return text2[:YAHOO_ARTICLE_BODY_MAX_CHARS]
+    return ""
+
+
+def _attach_yahoo_finance_bodies(
+    rows: list[dict[str, Any]],
+    *,
+    max_n: int = 18,
+    pause_sec: float = 0.08,
+) -> None:
+    """
+    Yahoo Finance RSS는 기본적으로 body가 비어 있으므로, 일부(최신 우선)만 본문을 추가 수집한다.
+    너무 많은 HTTP 요청으로 느려지는 것을 막기 위해 max_n을 둔다.
+    """
+    if not rows:
+        return
+    taken = 0
+    for row in rows:
+        if taken >= max_n:
+            break
+        if (row.get("body") or "").strip():
+            continue
+        u = (row.get("url") or "").strip()
+        if not u or "finance.yahoo.com" not in u.lower():
+            continue
+        try:
+            body = _fetch_yahoo_finance_article_body(u)
+            if body:
+                row["body"] = body
+                taken += 1
+        except Exception as e:
+            logger.debug("Yahoo 본문 수집 스킵: %s %s", u[:90], e)
+        time.sleep(pause_sec)
+
+
 def _attach_mk_hankyung_bodies(rows: list[dict[str, Any]], pause_sec: float = 0.06) -> None:
     """MK·한경 기사 URL에서 본문을 채워 요약기에 전달(실패 시 RSS description만 사용)."""
     for row in rows:
@@ -1145,22 +1237,26 @@ def crawl_rss_domestic_overseas() -> list[dict[str, Any]]:
 
 def crawl_rss_domestic_ai_issue() -> list[dict[str, Any]]:
     """뉴스 탭 — AI ISSUE (RSS_FEEDS_NEWS_AI: Yahoo 헤드라인 + 설정 시 CNBC Tech, MK/한경 본문 fetch 없음)."""
-    return _crawl_rss_feed_urls(
+    rows = _crawl_rss_feed_urls(
         RSS_FEEDS_NEWS_AI,
         max_items_per_feed=RSS_DOMESTIC_CNBC_MAX_ITEMS,
         allow_missing_published=True,
         max_age_hours=RSS_AI_ISSUE_MAX_AGE_HOURS,
     )
+    _attach_yahoo_finance_bodies(rows, max_n=18)
+    return rows
 
 
 def crawl_rss_cnbc_markets() -> list[dict[str, Any]]:
     """미국증시 탭 전용 — Yahoo Finance rssindex + 다티커 헤드라인 RSS (7일치, 본문 fetch 없음)."""
-    return _crawl_rss_feed_urls(
+    rows = _crawl_rss_feed_urls(
         RSS_FEEDS_NEWS_CNBC_MARKETS,
         max_items_per_feed=RSS_CNBC_MARKETS_MAX_ITEMS,
         allow_missing_published=True,
         max_age_hours=RSS_CNBC_MARKETS_MAX_AGE_HOURS,
     )
+    _attach_yahoo_finance_bodies(rows, max_n=18)
+    return rows
 
 
 def crawl_rss_headline_urls(
