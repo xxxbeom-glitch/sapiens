@@ -82,11 +82,46 @@ class NewsViewModel(
             all.filter { article ->
                 val haystack = "${article.headline}\n${article.summary}".lowercase()
                 loweredKeywords.any { kw -> haystack.contains(kw.lowercase()) }
-            }
+            }.filterNot(::looksLikeAdOrOpinion)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun setKrKeywords(keywords: List<String>) {
         selectedKrKeywords.value = keywords
+    }
+
+    /**
+     * 키워드로 잡히더라도 광고성(협찬/PR/보도자료) 혹은 칼럼/기자수첩 등 주관성 글로 보이면 제외.
+     * RSS만으로 완벽히 판별은 어렵기 때문에, 문구 패턴 기반의 보수적 필터로 시작한다.
+     */
+    private fun looksLikeAdOrOpinion(article: Article): Boolean {
+        val text = ("${article.headline}\n${article.summary}").lowercase()
+
+        // --- 광고/홍보성 ---
+        val adMarkers = listOf(
+            "광고", "협찬", "제휴", "후원", "sponsored", "sponsor",
+            "프로모션", "promotion", "이벤트", "event", "할인", "특가", "쿠폰",
+            "보도자료", "자료제공", "pr", "press release",
+            "신제품", "출시", "론칭", "런칭",
+            "문의", "상담", "예약", "신청", "구매", "구독",
+        )
+        if (adMarkers.any(text::contains)) return true
+
+        // --- 칼럼/오피니언/기자 주관 ---
+        val opinionMarkers = listOf(
+            "칼럼", "기고", "사설", "논설", "오피니언", "opinion",
+            "기자수첩", "데스크칼럼", "기자의 시선", "기자 생각",
+            "에디터", "editorial",
+        )
+        if (opinionMarkers.any(text::contains)) return true
+
+        // 과도한 클릭 유도/선정성 패턴(가벼운 광고성/주관성에 자주 등장)
+        val clickbaitMarkers = listOf(
+            "지금 사야", "무조건", "대박", "초대박", "충격", "반전", "비밀", "단독",
+            "…", "!!", "!!!"
+        )
+        if (clickbaitMarkers.any(text::contains)) return true
+
+        return false
     }
 
     init {

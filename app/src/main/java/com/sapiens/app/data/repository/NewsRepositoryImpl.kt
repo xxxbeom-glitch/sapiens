@@ -18,6 +18,11 @@ import java.net.URL
 import java.net.URI
 import java.net.URLEncoder
 import java.text.DecimalFormat
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import java.util.Locale
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -225,6 +230,7 @@ class NewsRepositoryImpl(
     private fun fetchRssArticles(url: String): List<Article> {
         val xml = requestText(url)?.takeIf { it.isNotBlank() } ?: return emptyList()
         val sourceName = rssSourceName(url)
+        val cutoffMillis = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
         val parser = Xml.newPullParser().apply {
             setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
             setInput(xml.reader())
@@ -256,6 +262,11 @@ class NewsRepositoryImpl(
                 XmlPullParser.END_TAG -> {
                     if (parser.name == "item" && inItem) {
                         inItem = false
+                        val publishedAt = parseRssPubDateToMillis(pubDate)
+                        if (publishedAt != null && publishedAt < cutoffMillis) {
+                            // 1주일보다 오래된 아이템은 제외.
+                            continue
+                        }
                         val headline = title.trim()
                         if (headline.isNotBlank()) {
                             out += Article(
@@ -272,6 +283,41 @@ class NewsRepositoryImpl(
             event = parser.next()
         }
         return out
+    }
+
+    private fun parseRssPubDateToMillis(raw: String): Long? {
+        val text = raw.trim()
+        if (text.isBlank()) return null
+
+        // Common RSS formats:
+        // - RFC1123: "Tue, 03 Jun 2003 09:39:21 GMT"
+        // - ISO-ish: "2026-04-25T01:23:45Z"
+        val candidates = listOf(
+            DateTimeFormatter.RFC_1123_DATE_TIME,
+            DateTimeFormatter.ISO_ZONED_DATE_TIME,
+            DateTimeFormatter.ISO_OFFSET_DATE_TIME,
+            DateTimeFormatter.ISO_INSTANT,
+        )
+        for (fmt in candidates) {
+            try {
+                return when (fmt) {
+                    DateTimeFormatter.ISO_INSTANT -> Instant.parse(text).toEpochMilli()
+                    else -> ZonedDateTime.parse(text, fmt).toInstant().toEpochMilli()
+                }
+            } catch (_: DateTimeParseException) {
+                // try next
+            } catch (_: Exception) {
+                // try next
+            }
+        }
+
+        // Some feeds omit timezone; try parsing as local time (fallback)
+        return runCatching {
+            ZonedDateTime.parse(text + " GMT", DateTimeFormatter.RFC_1123_DATE_TIME)
+                .withZoneSameInstant(ZoneId.of("UTC"))
+                .toInstant()
+                .toEpochMilli()
+        }.getOrNull()
     }
 
     private fun requestText(
