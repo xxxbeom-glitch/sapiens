@@ -7,7 +7,9 @@ import json
 import logging
 import os
 import re
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Literal
 
 from google import genai
@@ -38,8 +40,9 @@ _RUNTIME_SELECTED_MODEL = SELECTED_MODEL_GEMINI
 _token_input_total: int = 0
 _token_output_total: int = 0
 _token_model: str = ""
-
+_token_usage_lock = threading.Lock()
 _gemini_client: Any = None
+_gemini_client_init_lock = threading.Lock()
 SYSTEM = (
     "당신은 한국 투자자를 위한 금융 뉴스 에디터입니다.\n"
     "뉴스를 분석해서 핵심 내용을 명확하고 구체적으로 요약하세요.\n"
@@ -288,18 +291,20 @@ def configure_ai(*, selected_model: str) -> None:
 
 def reset_token_counters() -> None:
     global _token_input_total, _token_output_total, _token_model
-    _token_input_total = 0
-    _token_output_total = 0
-    _token_model = ""
+    with _token_usage_lock:
+        _token_input_total = 0
+        _token_output_total = 0
+        _token_model = ""
 
 
 def get_token_usage() -> dict[str, Any]:
-    return {
-        "input": _token_input_total,
-        "output": _token_output_total,
-        "total": _token_input_total + _token_output_total,
-        "model": _token_model,
-    }
+    with _token_usage_lock:
+        return {
+            "input": _token_input_total,
+            "output": _token_output_total,
+            "total": _token_input_total + _token_output_total,
+            "model": _token_model,
+        }
 
 
 def _append_model_label(label: str) -> None:
@@ -342,9 +347,10 @@ def _accumulate_gemini_usage(response: Any) -> None:
         return
     inp = _usage_meta_get_int(um, "prompt_token_count", "prompt_tokens")
     out = _usage_meta_get_int(um, "candidates_token_count", "candidates_tokens", "output_token_count")
-    _token_input_total += max(0, inp)
-    _token_output_total += max(0, out)
-    _append_model_label(_gemini_model_id())
+    with _token_usage_lock:
+        _token_input_total += max(0, inp)
+        _token_output_total += max(0, out)
+        _append_model_label(_gemini_model_id())
 
 
 def _ai_any_news_enabled() -> bool:
@@ -425,11 +431,14 @@ def _get_gemini_client() -> Any:
     global _gemini_client
     if _gemini_client is not None:
         return _gemini_client
-    key = (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
-    if not key:
-        raise RuntimeError("GEMINI_API_KEY 또는 GOOGLE_API_KEY 가 설정되어 있어야 합니다.")
-    _gemini_client = genai.Client(api_key=key)
-    return _gemini_client
+    with _gemini_client_init_lock:
+        if _gemini_client is not None:
+            return _gemini_client
+        key = (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
+        if not key:
+            raise RuntimeError("GEMINI_API_KEY 또는 GOOGLE_API_KEY 가 설정되어 있어야 합니다.")
+        _gemini_client = genai.Client(api_key=key)
+        return _gemini_client
 
 
 def _call_gemini(user_content: str, *, temperature: float = 0.35) -> str:
@@ -730,14 +739,43 @@ def generate_market_report(
     raise last_err or RuntimeError("generate_market_report failed")
 
 
+def _summarize_batch_concurrency() -> int:
+    """SAPIENS_SUMMARIZE_CONCURRENCY: 병렬 요약 동시 수(기본 4, 1~16)."""
+    v = (os.environ.get("SAPIENS_SUMMARIZE_CONCURRENCY") or "4").strip()
+    try:
+        n = int(v, 10)
+    except ValueError:
+        n = 4
+    return max(1, min(16, n))
+
+
 def summarize_batch(
     items: list[dict[str, Any]],
     *,
     news_feed: NewsFeedId | None = None,
 ) -> list[dict[str, Any]]:
-    """기사 목록 순차 요약. 항목 사이 0.5초."""
-    out: list[dict[str, Any]] = []
-    for it in items:
+    """기사 요약. SAPIENS_SUMMARIZE_CONCURRENCY>1이면 ThreadPool(입력 순서 유지), 1이면 순차+항목 간 0.5s."""
+    if not items:
+        return []
+    n = _summarize_batch_concurrency()
+    if n <= 1:
+        out: list[dict[str, Any]] = []
+        for it in items:
+            try:
+                ai = summarize_article(
+                    title=it.get("title", ""),
+                    summary=it.get("summary", ""),
+                    source=it.get("source", ""),
+                    body=str(it.get("body") or ""),
+                    news_feed=news_feed,
+                )
+                out.append({**it, "_ai": ai})
+            except Exception as e:
+                logger.error("배치 항목 스킵: %s — %s", it.get("title", "")[:40], e)
+            time.sleep(0.5)
+        return out
+
+    def one(idx: int, it: dict[str, Any]) -> tuple[int, dict[str, Any] | None]:
         try:
             ai = summarize_article(
                 title=it.get("title", ""),
@@ -746,11 +784,18 @@ def summarize_batch(
                 body=str(it.get("body") or ""),
                 news_feed=news_feed,
             )
-            out.append({**it, "_ai": ai})
+            return (idx, {**it, "_ai": ai})
         except Exception as e:
             logger.error("배치 항목 스킵: %s — %s", it.get("title", "")[:40], e)
-        time.sleep(0.5)
-    return out
+            return (idx, None)
+
+    out_pairs: list[tuple[int, dict[str, Any] | None]] = []
+    with ThreadPoolExecutor(max_workers=n) as ex:
+        futs = [ex.submit(one, i, it) for i, it in enumerate(items)]
+        for f in futs:
+            out_pairs.append(f.result())
+    out_pairs.sort(key=lambda t: t[0])
+    return [row for _i, row in out_pairs if row is not None]
 
 
 def merge_to_firestore_article(raw: dict[str, Any], ai: dict[str, Any]) -> dict[str, Any]:
