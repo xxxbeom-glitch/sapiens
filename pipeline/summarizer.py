@@ -53,11 +53,11 @@ SYSTEM = (
 _HANGUL_RE = re.compile(r"[가-힣]")
 _LATIN_RE = re.compile(r"[A-Za-z]")
 
-# 기사 summary_points: 앱/프롬프트·후처리 동기화. 각 항목은 70자 이내·완결된 한 문장(종결)을 권장·유도.
+# 기사 summary_points: 앱/프롬프트·후처리 동기화. 각 항목은 아래 max 이내·완결된 한 문장(종결)을 권장·유도.
 SUMMARY_POINT_MIN_LEN = 30
-SUMMARY_POINT_MAX_LEN = 70
+SUMMARY_POINT_MAX_LEN = 105
 
-# 70자 이하·문장 '완결' 판별용(긴 어미·구두 먼저; 마침표 있음 우선)
+# max 이내·문장 '완결' 판별용(긴 어미·구두 먼저; 마침표 있음 우선)
 _KO_POINT_CLOSERS: tuple[str, ...] = (
     "습니다.",
     "입니다.",
@@ -92,7 +92,7 @@ def _korean_bullet_looks_ended(s: str) -> bool:
     return bool(t) and t[-1] in (".", "!", "?", "…", "‥", "。．")
 
 
-# 종결(다.)이 앞 70자에 없을 때, '절·어구' 끊김(연결어미·쉼표). min_j: rfind 인덱스 하한(너무 앞에서 자르지 않음)
+# 종결(다.)이 앞 max(기본 105)자에 없을 때, '절·어구' 끊김(연결어미·쉼표). min_j: rfind 인덱스 하한(너무 앞에서 자르지 않음)
 _CLAUSE_CUT_TOKENS: tuple[tuple[str, int], ...] = (
     ("하며", 8),
     ("이며", 8),
@@ -114,8 +114,8 @@ def _clip_at_last_space_before_max(s0: str, max_len: int) -> str | None:
     if max_len < 2:
         return None
     win = s0[:max_len]
-    for lo in (40, 32, 24, 18):
-        if lo >= max_len - 1:
+    for lo in (int(max_len * 0.55), int(max_len * 0.42), 32, 22, 18):
+        if lo >= max_len - 1 or lo < 1:
             continue
         j = win.rfind(" ", lo, max_len)
         if j >= lo:
@@ -147,8 +147,9 @@ def _finish_summary_point(
     max_len: int = SUMMARY_POINT_MAX_LEN,
 ) -> str:
     """
-    각 요약 항목을 `max_len`자 이하로 맞추되, **가능하면 70자 안에서 문장이 끊기도록**(종결 어미) 맞춘다.
-    모델이 70을 넘긴 경우, 앞에서부터 가장 긴 '완결' 접두를 택한다.
+    각 요약 항목을 `max_len`자(기본 SUMMARY_POINT_MAX_LEN) 이하로 맞추되,
+    **가능하면 그 안에서 문장이 끊기도록**(종결 어미) 맞춘다.
+    모델이 `max_len`을 넘긴 경우, 앞에서부터 가장 긴 '완결' 접두를 택한다.
     """
     s0 = (text or "").strip()
     if not s0:
@@ -159,7 +160,7 @@ def _finish_summary_point(
         logger.info(
             "summary_point: %d자 이하이나 종결 어미가 약함(권장: 다/요/니다/습니다 등으로 끝냄): %r",
             len(s0),
-            s0[:70],
+            s0[: min(len(s0), max_len * 2)],
         )
         return s0
     for i in range(max_len, 19, -1):
@@ -173,7 +174,7 @@ def _finish_summary_point(
                     t[:45],
                 )
             return t
-    # 종결 접두를 못 찾을 때: 70자 안의 마지막 뉴스식 구절끝(·다.·니다.·어요. …)에서 잘라 완성도 우선
+    # 종결 접두를 못 찾을 때: max_len 안의 마지막 뉴스식 구절끝(·다.·니다.·어요. …)에서 잘라 완성도 우선
     win = s0[:max_len]
     best_e = 0
     for tok, min_j in (
@@ -219,8 +220,9 @@ def _finish_summary_point(
         )
         return t3
     logger.info(
-        "summary_point: %d자, 70자에서 구절·공백 없이 하드 절단(앞 55자=%r)",
+        "summary_point: %d자, %d자에서 구절·공백 없이 하드 절단(앞 55자=%r)",
         len(s0),
+        max_len,
         s0[:55],
     )
     return s0[:max_len].rstrip()
