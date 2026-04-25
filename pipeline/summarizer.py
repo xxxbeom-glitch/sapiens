@@ -53,60 +53,134 @@ SYSTEM = (
 _HANGUL_RE = re.compile(r"[가-힣]")
 _LATIN_RE = re.compile(r"[A-Za-z]")
 
-# 기사 summary_points: 앱/프롬프트·후처리 동기화. 각 항목은 아래 max 이내·완결된 한 문장(종결)을 권장·유도.
+# 기사 summary_points: 앱/프롬프트·후처리 동기화. 각 항목은 아래 max 이내·명사형 종결로 맺을 것.
 SUMMARY_POINT_MIN_LEN = 30
 SUMMARY_POINT_MAX_LEN = 105
 
-# max 이내·문장 '완결' 판별용(긴 어미·구두 먼저; 마침표 있음 우선)
-_KO_POINT_CLOSERS: tuple[str, ...] = (
+# 서술형·해요체 등 — summary_point에서는 쓰지 않음(명사형 종결만).
+_KO_VERBAL_SENTENCE_ENDINGS: tuple[str, ...] = (
+    "잖아요.",
+    "이에요.",
     "습니다.",
     "입니다.",
     "합니다.",
+    "겠습니다.",
+    "어요.",
+    "에요.",
+    "지요.",
+    "니다.",
     "된다.",
     "있다.",
     "없다.",
     "했다.",
-    "인다.",
+    "렸다.",
     "였다.",
     "었다.",
-    "어요.",
-    "에요.",
-    "이에요.",
+    "인다.",
     "죠.",
-    "지요.",
-    "잖아요.",
     "다.",
-    "요.",
-    "음.",
-    "임.",
 )
+
+
+def _ko_point_tail_incomplete(t: str) -> bool:
+    """절·연결 꼬리, 숫자·% 잘림 등 — 명사형으로 잘 맺히지 않은 꼬리."""
+    if not t:
+        return False
+    if t.endswith("다고") or t.endswith("라고") or t.endswith("대고"):
+        return False
+    for suf in ("는데", "다가", "으면", "으나", "지만", "을까", "거든", "거나"):
+        if t.endswith(suf) and len(t) > 8:
+            return True
+    for suf in (
+        "하며",
+        "이며",
+        "라며",
+        "가며",
+        "되며",
+        "연이어",
+        "이어",
+        "가운데",
+        "아울러",
+        "이자",
+    ):
+        if t.endswith(suf) and len(t) > 8:
+            return True
+    if t.endswith("고") and re.search(r"[가-힣]고$", t):
+        if t.endswith("학고"):
+            return False
+        if t.endswith("이고") and " 이고" in t:
+            return False
+        if t.endswith("이고"):
+            return len(t) < 7
+        if "다고" in t[-4:]:
+            return False
+        return True
+    if len(t) >= 3 and t[-1] == "." and t[-2].isdigit():
+        if t.endswith((
+            "원.",
+            "조.",
+            "만.",
+            "초.",
+            "곳.",
+            "배.",
+        )):
+            return False
+        # '… 70.' 등 10~90% 흐름(공백/쉼표 뒤 N0.)이 잘린 경우
+        if re.search(r"[\s,、·](?:1|2|3|4|5|6|7|8|9)0\.$", t):
+            return True
+    return False
 
 
 def _korean_bullet_looks_ended(s: str) -> bool:
-    t = s.rstrip()
+    """summary_point가 **명사형 종결**로 맺혔는지(서술·해요체·절 꼬리 제외)."""
+    t = (s or "").rstrip().rstrip(",;")
     if not t or len(t) < 2:
         return False
-    for clo in _KO_POINT_CLOSERS:
-        if t.endswith(clo):
-            return True
-    return bool(t) and t[-1] in (".", "!", "?", "…", "‥", "。．")
+    if not _HANGUL_RE.search(t):
+        return False
+    if _ko_point_tail_incomplete(t):
+        return False
+    for v in _KO_VERBAL_SENTENCE_ENDINGS:
+        if t.endswith(v):
+            return False
+    last = t[-1]
+    if last not in (".", "!", "?", "…", "‥", "。．"):
+        return False
+    return len(t) >= 2 and bool(_HANGUL_RE.match(t[-2]))
 
 
-# 종결(다.)이 앞 max(기본 105)자에 없을 때, '절·어구' 끊김(연결어미·쉼표). min_j: rfind 인덱스 하한(너무 앞에서 자르지 않음)
-_CLAUSE_CUT_TOKENS: tuple[tuple[str, int], ...] = (
-    ("하며", 8),
-    ("이며", 8),
-    ("라며", 8),
-    ("거나", 5),
-    ("는데", 4),
-    ("다가", 4),
-    ("으면", 4),
-    ("으나", 4),
-    (", ", 18),
-    (",", 20),
-    ("·", 16),
-    ("、", 16),
-)
+def _looks_dangling_ending(s: str) -> bool:
+    """절단·후처리용: 명사형으로 잘 맺히지 않으면 True."""
+    return not _korean_bullet_looks_ended(s)
+
+
+def _longest_nominal_prefix_in_window(s0: str, n: int, min_len: int) -> str | None:
+    """s0[:n] 안에서 min_len 이상·명사형 종결인 가장 긴 접두(뒤에서부터 탐색)."""
+    for e in range(n, min_len - 1, -1):
+        cand = s0[:e].rstrip()
+        if len(cand) < min_len:
+            continue
+        if _korean_bullet_looks_ended(cand):
+            return cand
+    return None
+
+
+def _snap_away_dangling(
+    s0: str, proposed: str, *, max_len: int, min_preserve: int
+) -> str:
+    t = (proposed or "").rstrip()
+    if not t or len(s0) < 10:
+        return t
+    wmax = min(len(s0), max_len)
+    t = t[:wmax] if len(t) > wmax else t
+    if _korean_bullet_looks_ended(t):
+        return t
+    n = wmax
+    for mp in (min_preserve, max(12, min_preserve - 8), 10):
+        c = _longest_nominal_prefix_in_window(s0, n, mp)
+        if c and len(c) <= n and len(c) >= 20:
+            return c
+    return t if len(t) <= wmax else t[:wmax].rstrip()
 
 
 def _clip_at_last_space_before_max(s0: str, max_len: int) -> str | None:
@@ -125,22 +199,6 @@ def _clip_at_last_space_before_max(s0: str, max_len: int) -> str | None:
     return None
 
 
-def _clip_at_subordinate_or_punct(
-    s0: str, win: str, max_len: int
-) -> str | None:
-    best_e = 0
-    for tok, min_j in _CLAUSE_CUT_TOKENS:
-        j = win.rfind(tok)
-        if j < min_j:
-            continue
-        end = j + len(tok)
-        if 20 <= end <= max_len and end > best_e:
-            best_e = end
-    if best_e < 20:
-        return None
-    return s0[:best_e].rstrip()
-
-
 def _finish_summary_point(
     text: str,
     *,
@@ -148,17 +206,23 @@ def _finish_summary_point(
 ) -> str:
     """
     각 요약 항목을 `max_len`자(기본 SUMMARY_POINT_MAX_LEN) 이하로 맞추되,
-    **가능하면 그 안에서 문장이 끊기도록**(종결 어미) 맞춘다.
-    모델이 `max_len`을 넘긴 경우, 앞에서부터 가장 긴 '완결' 접두를 택한다.
+    **가능하면 명사형 종결**로 끊기도록 맞춘다.
+    모델이 `max_len`을 넘긴 경우, 앞에서부터 가장 긴 명사형으로 맺힌 접두를 택한다.
     """
     s0 = (text or "").strip()
     if not s0:
         return s0
+
+    def _snapped(proposed: str) -> str:
+        return _snap_away_dangling(
+            s0, proposed, max_len=max_len, min_preserve=25
+        )
+
     if len(s0) <= max_len and _korean_bullet_looks_ended(s0):
         return s0
     if len(s0) <= max_len:
         logger.info(
-            "summary_point: %d자 이하이나 종결 어미가 약함(권장: 다/요/니다/습니다 등으로 끝냄): %r",
+            "summary_point: %d자 이하이나 명사형 종결이 약함(서술형·해요체·절 꼬리 없이 명사구로 끝낼 것): %r",
             len(s0),
             s0[: min(len(s0), max_len * 2)],
         )
@@ -168,48 +232,22 @@ def _finish_summary_point(
         if 20 <= len(t) <= max_len and _korean_bullet_looks_ended(t):
             if len(s0) > max_len and len(s0) != len(t):
                 logger.info(
-                    "summary_point: %d자 → 완결 접두 %d자: 앞 45자=%r",
+                    "summary_point: %d자 → 명사형 접두 %d자: 앞 45자=%r",
                     len(s0),
                     len(t),
                     t[:45],
                 )
-            return t
-    # 종결 접두를 못 찾을 때: max_len 안의 마지막 뉴스식 구절끝(·다.·니다.·어요. …)에서 잘라 완성도 우선
-    win = s0[:max_len]
-    best_e = 0
-    for tok, min_j in (
-        (".\n", 0),
-        ("다.", 12),
-        ("니다.", 8),
-        ("습니다.", 6),
-        ("어요.", 8),
-        ("에요.", 8),
-        ("이에요.", 5),
-        ("죠.", 6),
-        ("요.", 4),
-    ):
-        j = win.rfind(tok)
-        if j >= min_j and j + len(tok) > best_e:
-            best_e = j + len(tok)
-    if best_e >= 20:
-        t = s0[:best_e].rstrip()
-        if len(t) <= max_len:
-            logger.info(
-                "summary_point: %d자 → 구절끝 토막 %d자: %r",
-                len(s0),
-                len(t),
-                t[:50],
-            )
-            return t
-    t2 = _clip_at_subordinate_or_punct(s0, win, max_len)
-    if t2 and 20 <= len(t2) <= max_len:
+            return _snapped(t)
+    # 명사형 접두를 못 찾을 때: max_len 안에서 가장 긴 명사형 종결 접두
+    t_nom = _longest_nominal_prefix_in_window(s0, max_len, 20)
+    if t_nom and 20 <= len(t_nom) <= max_len:
         logger.info(
-            "summary_point: %d자 → 연결/쉼표·가운뎃점에서 %d자: %r",
+            "summary_point: %d자 → 명사형 접두 %d자: %r",
             len(s0),
-            len(t2),
-            t2[:50],
+            len(t_nom),
+            t_nom[:50],
         )
-        return t2
+        return _snapped(t_nom)
     t3 = _clip_at_last_space_before_max(s0, max_len)
     if t3 and 20 <= len(t3) <= max_len:
         logger.info(
@@ -218,14 +256,14 @@ def _finish_summary_point(
             len(t3),
             t3[:50],
         )
-        return t3
+        return _snapped(t3)
     logger.info(
         "summary_point: %d자, %d자에서 구절·공백 없이 하드 절단(앞 55자=%r)",
         len(s0),
         max_len,
         s0[:55],
     )
-    return s0[:max_len].rstrip()
+    return _snapped(s0[:max_len].rstrip())
 
 
 # summarize_article JSON category — 국내·해외 동일. 앱 ChipColors·프롬프트와 동기화.
@@ -784,9 +822,11 @@ def summarize_article(
         f"{_SUMMARIZE_ARTICLE_CATEGORY_BLOCK}"
         f"summary_points는 기사 핵심을 빠짐없이 담은 문자열 배열로 작성하세요.\n"
         f"반드시 2개 이상 4개 이하로 작성하세요. "
-        f"각 summary_point는 **딱 한 문장**이며(절·콤마로 이어 쓰지 말 것), {SUMMARY_POINT_MIN_LEN}자 이상 {SUMMARY_POINT_MAX_LEN}자 이하(공백·구두점 포함)에서 "
-        f"문장·어미(다/요/니다/습니다/어요 등)로 **반드시 끝맺을 것**. "
-        f"{SUMMARY_POINT_MAX_LEN}자 중간이나 '…'로 끝내지 말 것. 쉼표 뒤에 절이 더 이어질 정도로 길게 쓰지 말 것(한 문장으로 끊을 것).\n"
+        f"각 summary_point는 **명사형 종결문체**로만 작성하세요(서술형 **…다.**·해요체 **…요.**·**…습니다** 등으로 끝내지 말 것). "
+        f"각 줄은 **마침표(.)로 끝낼 것**(명사구 끝에 `.`를 붙이세요). "
+        f"한 줄은 **한 덩어리의 명사구**(핵심 명사·형용사형 명사화·뉴스식 **…세·…화·…전망·…상황** 등)로 맺고, {SUMMARY_POINT_MIN_LEN}자 이상 {SUMMARY_POINT_MAX_LEN}자 이하(공백·구두점 포함)에서 "
+        f"접속·미완(…고, …으나, …는데, …하며)이나 **수치/퍼센트·단위(원·%) 중간**으로 끊지 말 것. "
+        f"{SUMMARY_POINT_MAX_LEN}자 중간이나 '…'로 끝내지 말 것. 쉼표 뒤에 절이 더 이어질 정도로 길게 쓰지 말 것(한 덩어리로 끊을 것).\n"
         f"중요한 사실·수치·배경·영향을 누락하지 말고, 내용을 함축하거나 생략하지 마세요.\n"
         f"구체성 규칙(headline·summary_points 모두 적용):\n"
         f"{proper_noun_rule}"
