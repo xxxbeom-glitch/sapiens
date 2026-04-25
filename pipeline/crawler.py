@@ -1,4 +1,4 @@
-"""
+﻿"""
 국내 뉴스 탭(3요약): 3개 RSS 풀 합친 뒤 LLM이 뉴스탭 3분류(국내증시/해외증시/AI 이슈)로 배정(`news_tab_classification`) 후 요약. 해외 뉴스는 별도 RSS.
 (토스증권 Playwright `crawl_tossinvest_news` 는 보존. `crawl_domestic` 은 `crawl_naver_*` 를 쓰지 않는다.)
 """
@@ -972,6 +972,18 @@ def _crawl_rss_feed_urls(
     seen_url: set[str] = set()
     now = datetime.now(timezone.utc)
     per_feed_mode = max_items_per_feed is not None
+
+    def _normalize_source_label(label: str) -> str:
+        # Yahoo RSS는 feed.title이 "Yahoo! Finance: <tickers> News" 형태로 들어오는 경우가 많아
+        # 앱 칩에서 ':' 뒤가 그대로 노출된다. 저장 시점에 "Yahoo Finance"로 정규화한다.
+        s = (label or "").strip()
+        if not s:
+            return "RSS"
+        low = s.lower()
+        if low.startswith("yahoo! finance:") or low.startswith("yahoo finance:") or low.startswith("yahoo! finance"):
+            return "Yahoo Finance"
+        return s
+
     for feed_url in urls:
         try:
             text, status, err = _fetch_http_debug(feed_url, log_label="RSS")
@@ -983,7 +995,9 @@ def _crawl_rss_feed_urls(
             fd = getattr(parsed, "feed", None)
             if fd is not None and getattr(fd, "title", None):
                 feed_title = str(fd.title).strip()
-            source_label = _RSS_SOURCE_LABEL_MAP.get(feed_url) or feed_title or urlparse(feed_url).netloc or "RSS"
+            source_label = _normalize_source_label(
+                _RSS_SOURCE_LABEL_MAP.get(feed_url) or feed_title or urlparse(feed_url).netloc or "RSS"
+            )
             taken_this_feed = 0
             for entry in getattr(parsed, "entries", None) or []:
                 if per_feed_mode and taken_this_feed >= max_items_per_feed:
