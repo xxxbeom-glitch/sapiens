@@ -28,6 +28,12 @@ def _article_llm_judge_enabled() -> bool:
     return v in ("1", "true", "yes", "on")
 
 
+# SAPIENS_EVIDENCE_SPANS=1: 요약 전에 본문에서 근거 구간(span)을 한 번 더 뽑아 프롬프트에 넣음(추가 Gemini 호출).
+def _evidence_spans_enabled() -> bool:
+    v = (os.environ.get("SAPIENS_EVIDENCE_SPANS") or "").strip().lower()
+    return v in ("1", "true", "yes", "on")
+
+
 def _gemini_model_id() -> str:
     return (os.environ.get("GEMINI_MODEL") or _DEFAULT_GEMINI_MODEL).strip() or _DEFAULT_GEMINI_MODEL
 
@@ -56,6 +62,20 @@ _LATIN_RE = re.compile(r"[A-Za-z]")
 # 기사 summary_points: 앱/프롬프트·후처리 동기화. 각 항목은 아래 max 이내·명사형 종결로 맺을 것.
 SUMMARY_POINT_MIN_LEN = 60
 SUMMARY_POINT_MAX_LEN = 105
+
+# 근거 스팬 선추출(옵션): 본문 일부만 모델에 넘기고, 각 span은 본문 부분문자열로 검증.
+_EVIDENCE_BODY_MAX_CHARS = 8000
+_EVIDENCE_BODY_MIN_FOR_EXTRACT = 320
+_EVIDENCE_MAX_SPANS = 5
+_EVIDENCE_SPAN_MAX_CHARS = 480
+
+_SYSTEM_EVIDENCE_SPANS = (
+    "당신은 뉴스 본문에서 사실 근거만 골라 내는 조력자입니다.\n"
+    "반드시 JSON 객체 하나만 출력하세요. 코드펜스·주석·설명 없이.\n"
+    "키는 spans 하나뿐이며 값은 문자열 배열입니다.\n"
+    "각 문자열은 입력 본문에 나타난 연속 부분 문자열을 **그대로 복사**해야 합니다. "
+    "의역·요약·재작성·본문에 없는 문장 금지."
+)
 
 # 서술형·해요체 등 — summary_point에서는 쓰지 않음(명사형 종결만).
 _KO_VERBAL_SENTENCE_ENDINGS: tuple[str, ...] = (
@@ -146,7 +166,26 @@ def _korean_bullet_looks_ended(s: str) -> bool:
     last = t[-1]
     if last not in (".", "!", "?", "…", "‥", "。．"):
         return False
-    return len(t) >= 2 and bool(_HANGUL_RE.match(t[-2]))
+    return len(t) >= 2 and (bool(_HANGUL_RE.match(t[-2])) or t[-2].isdigit())
+
+
+def _ensure_nominal_period(s: str) -> str:
+    """명사형 종결 강제: 가능하면 끝에 '.'를 붙여 종결 형태로 맞춘다."""
+    t = (s or "").rstrip().rstrip(",;")
+    if not t:
+        return t
+    if t[-1] in (".", "!", "?", "…", "‥", "。．"):
+        return t
+    # 절/미완/수치 꼬리면 억지로 마침표를 붙이지 않음
+    if _ko_point_tail_incomplete(t):
+        return t
+    for v in _KO_VERBAL_SENTENCE_ENDINGS:
+        if t.endswith(v):
+            return t
+    # 끝이 한글(또는 한글 단위 포함)일 때만 '.' 부착
+    if _HANGUL_RE.search(t[-2:]) or bool(_HANGUL_RE.match(t[-1])):
+        return t + "."
+    return t
 
 
 def _looks_dangling_ending(s: str) -> bool:
@@ -157,7 +196,7 @@ def _looks_dangling_ending(s: str) -> bool:
 def _longest_nominal_prefix_in_window(s0: str, n: int, min_len: int) -> str | None:
     """s0[:n] 안에서 min_len 이상·명사형 종결인 가장 긴 접두(뒤에서부터 탐색)."""
     for e in range(n, min_len - 1, -1):
-        cand = s0[:e].rstrip()
+        cand = _ensure_nominal_period(s0[:e].rstrip())
         if len(cand) < min_len:
             continue
         if _korean_bullet_looks_ended(cand):
@@ -168,7 +207,7 @@ def _longest_nominal_prefix_in_window(s0: str, n: int, min_len: int) -> str | No
 def _snap_away_dangling(
     s0: str, proposed: str, *, max_len: int, min_preserve: int
 ) -> str:
-    t = (proposed or "").rstrip()
+    t = _ensure_nominal_period((proposed or "").rstrip())
     if not t or len(s0) < 10:
         return t
     wmax = min(len(s0), max_len)
@@ -219,14 +258,15 @@ def _finish_summary_point(
         )
 
     if len(s0) <= max_len and _korean_bullet_looks_ended(s0):
-        return s0
+        return _ensure_nominal_period(s0)
     if len(s0) <= max_len:
         logger.info(
             "summary_point: %d자 이하이나 명사형 종결이 약함(서술형·해요체·절 꼬리 없이 명사구로 끝낼 것): %r",
             len(s0),
             s0[: min(len(s0), max_len * 2)],
         )
-        return s0
+        # max 이하여도 종결/미완을 보정(스냅/마침표)
+        return _snapped(s0)
     for i in range(max_len, SUMMARY_POINT_MIN_LEN - 1, -1):
         t = s0[:i].rstrip()
         if SUMMARY_POINT_MIN_LEN <= len(t) <= max_len and _korean_bullet_looks_ended(t):
@@ -680,6 +720,94 @@ def _call_gemini(user_content: str, *, temperature: float = 0.35) -> str:
         return ""
 
 
+def _call_gemini_with_system(
+    user_content: str,
+    *,
+    temperature: float,
+    system_instruction: str,
+    max_output_tokens: int = 4096,
+) -> str:
+    try:
+        client = _get_gemini_client()
+        model_id = _gemini_model_id()
+        response = client.models.generate_content(
+            model=model_id,
+            contents=user_content,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                max_output_tokens=max_output_tokens,
+                temperature=temperature,
+            ),
+        )
+        try:
+            _accumulate_gemini_usage(response)
+        except Exception as e:
+            logger.warning("Gemini usage 집계 실패(무시): %s", e)
+        text = (getattr(response, "text", None) or "").strip()
+        return text
+    except Exception as e:
+        logger.exception("_call_gemini_with_system 실패: %s", e)
+        return ""
+
+
+def _extract_evidence_spans_from_article(title: str, body: str) -> list[str]:
+    """
+    본문에서 사실·수치가 든 구간을 부분문자열로 뽑아 요약 프롬프트에 넣기 위한 선행 단계.
+    파싱 실패·검증 실패 시 빈 리스트.
+    """
+    b = (body or "").strip()
+    if len(b) < _EVIDENCE_BODY_MIN_FOR_EXTRACT:
+        return []
+    body_for_model = b if len(b) <= _EVIDENCE_BODY_MAX_CHARS else b[:_EVIDENCE_BODY_MAX_CHARS] + "…"
+    user = (
+        "제목(참고만 — spans에 제목 문장을 복사하지 말 것):\n"
+        f"{title.strip()}\n\n"
+        "기사 본문:\n"
+        f"{body_for_model}\n\n"
+        '위 본문에서 2~5개의 span을 골라 JSON만 출력하세요.\n'
+        '{"spans":["…","…"]}\n'
+        f"각 span은 본문의 연속된 일부를 **글자 단위로 동일하게** 복사해야 합니다. "
+        f"수치·날짜·고유명·정책·거래 조건 등이 든 문장·절을 우선하세요. "
+        f"한 span당 최대 {_EVIDENCE_SPAN_MAX_CHARS}자."
+    )
+    raw = _call_gemini_with_system(
+        user,
+        temperature=0.12,
+        system_instruction=_SYSTEM_EVIDENCE_SPANS,
+        max_output_tokens=2048,
+    )
+    if not raw:
+        return []
+    try:
+        data = _require_json_dict(raw)
+    except Exception:
+        m = re.search(r"\{[\s\S]*\}\s*$", raw)
+        if not m:
+            return []
+        try:
+            data = json.loads(m.group(0))
+        except Exception:
+            return []
+    spans_raw = data.get("spans")
+    if not isinstance(spans_raw, list):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for x in spans_raw:
+        s = str(x).strip()
+        if not s or len(s) > _EVIDENCE_SPAN_MAX_CHARS:
+            continue
+        if s not in b:
+            continue
+        if s in seen:
+            continue
+        seen.add(s)
+        out.append(s)
+        if len(out) >= _EVIDENCE_MAX_SPANS:
+            break
+    return out
+
+
 def _validate_summarize_article_shape(data: dict[str, Any]) -> None:
     if "headline" not in data or "category" not in data or "summary_points" not in data:
         raise ValueError(f"Invalid JSON keys: {list(data.keys())}")
@@ -799,6 +927,27 @@ def summarize_article(
     else:
         article_block = f"제목: {title}\n목록/리드 요약문:\n{summary_stripped}\n"
 
+    use_evidence_spans = False
+    if (
+        body_stripped
+        and _evidence_spans_enabled()
+        and len(body_stripped) >= _EVIDENCE_BODY_MIN_FOR_EXTRACT
+    ):
+        try:
+            ev_spans = _extract_evidence_spans_from_article(title, body_stripped)
+        except Exception as e:
+            logger.warning("근거 스팬 추출 예외(무시): %s", e)
+            ev_spans = []
+        if ev_spans:
+            use_evidence_spans = True
+            evidence_intro = (
+                "[근거 인용] 아래는 기사 본문에서 **문자 그대로** 복사한 구간입니다. "
+                "summary_points에 넣는 **구체 사실·수치·고유명·날짜**는 우선 이 구간에 나온 표현과 일치하게 쓰고, "
+                "제목에만 있는 사실은 제목 범위로 한정하세요. 인용에 없는 수치·주장을 지어내지 마세요.\n\n"
+            )
+            evidence_body = "\n\n".join(f"(구간 {i})\n{s}" for i, s in enumerate(ev_spans, start=1))
+            article_block = evidence_intro + evidence_body + "\n\n---\n\n" + article_block
+
     max_points_keep = 10
     foreign = news_feed in _FOREIGN_RSS_NEWS_FEEDS
     foreign_rss_extra = _FOREIGN_RSS_KO_FORMAL_BLOCK if foreign else ""
@@ -812,6 +961,12 @@ def summarize_article(
         "**최종 확인(해외 RSS):** headline·summary_points 안의 고유명은 한글(정식·통용)만 쓰세요. "
         "영문 회사·제품명만 남기지 마세요.\n\n"
         if foreign
+        else ""
+    )
+    evidence_rule = (
+        "입력 상단에 [근거 인용]이 있으면, summary_points의 **검증 가능한 사실·수치**는 그 인용(또는 제목)에 근거할 것. "
+        "인용 밖 본문만 보고 새 수치·단정을 만들지 말 것.\n"
+        if use_evidence_spans
         else ""
     )
     user = (
@@ -830,6 +985,7 @@ def summarize_article(
         f"접속·미완(…고, …으나, …는데, …하며)이나 **수치/퍼센트·단위(원·%) 중간**으로 끊지 말 것. "
         f"{SUMMARY_POINT_MAX_LEN}자 중간이나 '…'로 끝내지 말 것. 쉼표 뒤에 절이 더 이어질 정도로 길게 쓰지 말 것(한 덩어리로 끊을 것).\n"
         f"중요한 사실·수치·배경·영향을 누락하지 말고, 내용을 함축하거나 생략하지 마세요.\n"
+        f"{evidence_rule}"
         f"구체성 규칙(headline·summary_points 모두 적용):\n"
         f"{proper_noun_rule}"
         f"- 주가, 등락률·퍼센트, 금액 등 구체적 수치가 원문에 있으면 반드시 요약에 포함할 것.\n"
