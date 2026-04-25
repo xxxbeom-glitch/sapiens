@@ -54,7 +54,7 @@ _HANGUL_RE = re.compile(r"[가-힣]")
 _LATIN_RE = re.compile(r"[A-Za-z]")
 
 # 기사 summary_points: 앱/프롬프트·후처리 동기화. 각 항목은 아래 max 이내·명사형 종결로 맺을 것.
-SUMMARY_POINT_MIN_LEN = 30
+SUMMARY_POINT_MIN_LEN = 60
 SUMMARY_POINT_MAX_LEN = 105
 
 # 서술형·해요체 등 — summary_point에서는 쓰지 않음(명사형 종결만).
@@ -178,7 +178,7 @@ def _snap_away_dangling(
     n = wmax
     for mp in (min_preserve, max(12, min_preserve - 8), 10):
         c = _longest_nominal_prefix_in_window(s0, n, mp)
-        if c and len(c) <= n and len(c) >= 20:
+        if c and len(c) <= n and len(c) >= SUMMARY_POINT_MIN_LEN:
             return c
     return t if len(t) <= wmax else t[:wmax].rstrip()
 
@@ -194,7 +194,7 @@ def _clip_at_last_space_before_max(s0: str, max_len: int) -> str | None:
         j = win.rfind(" ", lo, max_len)
         if j >= lo:
             t = s0[:j].rstrip()
-            if len(t) >= 20:
+            if len(t) >= SUMMARY_POINT_MIN_LEN:
                 return t
     return None
 
@@ -215,7 +215,7 @@ def _finish_summary_point(
 
     def _snapped(proposed: str) -> str:
         return _snap_away_dangling(
-            s0, proposed, max_len=max_len, min_preserve=25
+            s0, proposed, max_len=max_len, min_preserve=SUMMARY_POINT_MIN_LEN
         )
 
     if len(s0) <= max_len and _korean_bullet_looks_ended(s0):
@@ -227,9 +227,9 @@ def _finish_summary_point(
             s0[: min(len(s0), max_len * 2)],
         )
         return s0
-    for i in range(max_len, 19, -1):
+    for i in range(max_len, SUMMARY_POINT_MIN_LEN - 1, -1):
         t = s0[:i].rstrip()
-        if 20 <= len(t) <= max_len and _korean_bullet_looks_ended(t):
+        if SUMMARY_POINT_MIN_LEN <= len(t) <= max_len and _korean_bullet_looks_ended(t):
             if len(s0) > max_len and len(s0) != len(t):
                 logger.info(
                     "summary_point: %d자 → 명사형 접두 %d자: 앞 45자=%r",
@@ -239,8 +239,8 @@ def _finish_summary_point(
                 )
             return _snapped(t)
     # 명사형 접두를 못 찾을 때: max_len 안에서 가장 긴 명사형 종결 접두
-    t_nom = _longest_nominal_prefix_in_window(s0, max_len, 20)
-    if t_nom and 20 <= len(t_nom) <= max_len:
+    t_nom = _longest_nominal_prefix_in_window(s0, max_len, SUMMARY_POINT_MIN_LEN)
+    if t_nom and SUMMARY_POINT_MIN_LEN <= len(t_nom) <= max_len:
         logger.info(
             "summary_point: %d자 → 명사형 접두 %d자: %r",
             len(s0),
@@ -249,7 +249,7 @@ def _finish_summary_point(
         )
         return _snapped(t_nom)
     t3 = _clip_at_last_space_before_max(s0, max_len)
-    if t3 and 20 <= len(t3) <= max_len:
+    if t3 and SUMMARY_POINT_MIN_LEN <= len(t3) <= max_len:
         logger.info(
             "summary_point: %d자 → 어구 끝(공백)에서 %d자: %r",
             len(s0),
@@ -720,7 +720,7 @@ def _postprocess_summarize_article_dict(
         if not t:
             continue
         t2 = _finish_summary_point(t)
-        if t2:
+        if t2 and len(t2) >= SUMMARY_POINT_MIN_LEN:
             cleaned.append(t2)
     out["summary_points"] = cleaned[:max_points_keep]
     return out
