@@ -1,0 +1,777 @@
+﻿2026-04-25T08:01:05.0709300Z Current runner version: '2.333.1'
+2026-04-25T08:01:05.0734073Z ##[group]Runner Image Provisioner
+2026-04-25T08:01:05.0734892Z Hosted Compute Agent
+2026-04-25T08:01:05.0735495Z Version: 20260213.493
+2026-04-25T08:01:05.0736155Z Commit: 5c115507f6dd24b8de37d8bbe0bb4509d0cc0fa3
+2026-04-25T08:01:05.0736850Z Build Date: 2026-02-13T00:28:41Z
+2026-04-25T08:01:05.0737526Z Worker ID: {c84d8afa-0e0d-416b-92ee-07bb1e47cb5b}
+2026-04-25T08:01:05.0738227Z Azure Region: centralus
+2026-04-25T08:01:05.0738765Z ##[endgroup]
+2026-04-25T08:01:05.0740957Z ##[group]Operating System
+2026-04-25T08:01:05.0741698Z Ubuntu
+2026-04-25T08:01:05.0742221Z 24.04.4
+2026-04-25T08:01:05.0742690Z LTS
+2026-04-25T08:01:05.0743173Z ##[endgroup]
+2026-04-25T08:01:05.0743678Z ##[group]Runner Image
+2026-04-25T08:01:05.0744230Z Image: ubuntu-24.04
+2026-04-25T08:01:05.0744791Z Version: 20260413.86.1
+2026-04-25T08:01:05.0746069Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260413.86/images/ubuntu/Ubuntu2404-Readme.md
+2026-04-25T08:01:05.0747511Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260413.86
+2026-04-25T08:01:05.0748414Z ##[endgroup]
+2026-04-25T08:01:05.0749533Z ##[group]GITHUB_TOKEN Permissions
+2026-04-25T08:01:05.0751743Z Contents: read
+2026-04-25T08:01:05.0752339Z Metadata: read
+2026-04-25T08:01:05.0752866Z ##[endgroup]
+2026-04-25T08:01:05.0755261Z Secret source: Actions
+2026-04-25T08:01:05.0756277Z Prepare workflow directory
+2026-04-25T08:01:05.1150055Z Prepare all required actions
+2026-04-25T08:01:05.1188890Z Getting action download info
+2026-04-25T08:01:05.4817129Z Download action repository 'actions/checkout@v4' (SHA:34e114876b0b11c390a56381ad16ebd13914f8d5)
+2026-04-25T08:01:05.6064425Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-04-25T08:01:05.7840807Z Complete job name: manual
+2026-04-25T08:01:05.8568941Z ##[group]Run actions/checkout@v4
+2026-04-25T08:01:05.8569896Z with:
+2026-04-25T08:01:05.8570699Z   repository: xxxbeom-glitch/sapiens
+2026-04-25T08:01:05.8571498Z   token: ***
+2026-04-25T08:01:05.8571943Z   ssh-strict: true
+2026-04-25T08:01:05.8572390Z   ssh-user: git
+2026-04-25T08:01:05.8572851Z   persist-credentials: true
+2026-04-25T08:01:05.8573346Z   clean: true
+2026-04-25T08:01:05.8573794Z   sparse-checkout-cone-mode: true
+2026-04-25T08:01:05.8574339Z   fetch-depth: 1
+2026-04-25T08:01:05.8574774Z   fetch-tags: false
+2026-04-25T08:01:05.8575221Z   show-progress: true
+2026-04-25T08:01:05.8575684Z   lfs: false
+2026-04-25T08:01:05.8576100Z   submodules: false
+2026-04-25T08:01:05.8576547Z   set-safe-directory: true
+2026-04-25T08:01:05.8577334Z env:
+2026-04-25T08:01:05.8577766Z   PYTHONUNBUFFERED: 1
+2026-04-25T08:01:05.8578223Z ##[endgroup]
+2026-04-25T08:01:05.9648301Z Syncing repository: xxxbeom-glitch/sapiens
+2026-04-25T08:01:05.9650460Z ##[group]Getting Git version info
+2026-04-25T08:01:05.9651793Z Working directory is '/home/runner/work/sapiens/sapiens'
+2026-04-25T08:01:05.9653012Z [command]/usr/bin/git version
+2026-04-25T08:01:05.9689635Z git version 2.53.0
+2026-04-25T08:01:05.9716100Z ##[endgroup]
+2026-04-25T08:01:05.9731828Z Temporarily overriding HOME='/home/runner/work/_temp/e2e93abb-2326-42e3-99eb-0702569b1da4' before making global git config changes
+2026-04-25T08:01:05.9733367Z Adding repository directory to the temporary git global config as a safe directory
+2026-04-25T08:01:05.9745073Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/sapiens/sapiens
+2026-04-25T08:01:05.9776993Z Deleting the contents of '/home/runner/work/sapiens/sapiens'
+2026-04-25T08:01:05.9780828Z ##[group]Initializing the repository
+2026-04-25T08:01:05.9785106Z [command]/usr/bin/git init /home/runner/work/sapiens/sapiens
+2026-04-25T08:01:05.9879503Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-04-25T08:01:05.9881741Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-04-25T08:01:05.9883712Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-04-25T08:01:05.9885832Z hint: call:
+2026-04-25T08:01:05.9886656Z hint:
+2026-04-25T08:01:05.9887665Z hint: 	git config --global init.defaultBranch <name>
+2026-04-25T08:01:05.9888923Z hint:
+2026-04-25T08:01:05.9890016Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-04-25T08:01:05.9892148Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-04-25T08:01:05.9893712Z hint:
+2026-04-25T08:01:05.9894572Z hint: 	git branch -m <name>
+2026-04-25T08:01:05.9895479Z hint:
+2026-04-25T08:01:05.9896677Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-04-25T08:01:05.9898505Z Initialized empty Git repository in /home/runner/work/sapiens/sapiens/.git/
+2026-04-25T08:01:05.9901693Z [command]/usr/bin/git remote add origin https://github.com/xxxbeom-glitch/sapiens
+2026-04-25T08:01:05.9926590Z ##[endgroup]
+2026-04-25T08:01:05.9927991Z ##[group]Disabling automatic garbage collection
+2026-04-25T08:01:05.9931706Z [command]/usr/bin/git config --local gc.auto 0
+2026-04-25T08:01:05.9960901Z ##[endgroup]
+2026-04-25T08:01:05.9962358Z ##[group]Setting up auth
+2026-04-25T08:01:05.9968660Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-04-25T08:01:06.0001142Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-04-25T08:01:06.0285527Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-04-25T08:01:06.0313584Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-04-25T08:01:06.0537222Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-04-25T08:01:06.0566645Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-04-25T08:01:06.0798131Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-04-25T08:01:06.0836905Z ##[endgroup]
+2026-04-25T08:01:06.0838429Z ##[group]Fetching the repository
+2026-04-25T08:01:06.0847258Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +6f39ef9c7440475c0ba36acf8f81f6de67e33d7e:refs/remotes/origin/main
+2026-04-25T08:01:06.8210094Z From https://github.com/xxxbeom-glitch/sapiens
+2026-04-25T08:01:06.8213802Z  * [new ref]         6f39ef9c7440475c0ba36acf8f81f6de67e33d7e -> origin/main
+2026-04-25T08:01:06.8237517Z ##[endgroup]
+2026-04-25T08:01:06.8238580Z ##[group]Determining the checkout info
+2026-04-25T08:01:06.8239978Z ##[endgroup]
+2026-04-25T08:01:06.8246417Z [command]/usr/bin/git sparse-checkout disable
+2026-04-25T08:01:06.8282719Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-04-25T08:01:06.8309670Z ##[group]Checking out the ref
+2026-04-25T08:01:06.8313042Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-04-25T08:01:06.8730076Z Switched to a new branch 'main'
+2026-04-25T08:01:06.8732557Z branch 'main' set up to track 'origin/main'.
+2026-04-25T08:01:06.8745005Z ##[endgroup]
+2026-04-25T08:01:06.8778380Z [command]/usr/bin/git log -1 --format=%H
+2026-04-25T08:01:06.8800611Z 6f39ef9c7440475c0ba36acf8f81f6de67e33d7e
+2026-04-25T08:01:06.9130936Z ##[group]Run actions/setup-python@v5
+2026-04-25T08:01:06.9132198Z with:
+2026-04-25T08:01:06.9133061Z   python-version: 3.11
+2026-04-25T08:01:06.9134041Z   check-latest: false
+2026-04-25T08:01:06.9135266Z   token: ***
+2026-04-25T08:01:06.9136165Z   update-environment: true
+2026-04-25T08:01:06.9137225Z   allow-prereleases: false
+2026-04-25T08:01:06.9138265Z   freethreaded: false
+2026-04-25T08:01:06.9139207Z env:
+2026-04-25T08:01:06.9140022Z   PYTHONUNBUFFERED: 1
+2026-04-25T08:01:06.9141420Z ##[endgroup]
+2026-04-25T08:01:07.0822693Z ##[group]Installed versions
+2026-04-25T08:01:07.0928534Z Successfully set up CPython (3.11.15)
+2026-04-25T08:01:07.0931587Z ##[endgroup]
+2026-04-25T08:01:07.1081527Z ##[group]Run echo "pip install 시작…"
+2026-04-25T08:01:07.1082734Z [36;1mecho "pip install 시작…"[0m
+2026-04-25T08:01:07.1083879Z [36;1mpython -m pip install --upgrade pip[0m
+2026-04-25T08:01:07.1085251Z [36;1mpip install -r pipeline/requirements.txt[0m
+2026-04-25T08:01:07.1086525Z [36;1mecho "pip install 완료"[0m
+2026-04-25T08:01:07.1127290Z shell: /usr/bin/bash -e {0}
+2026-04-25T08:01:07.1128268Z env:
+2026-04-25T08:01:07.1128987Z   PYTHONUNBUFFERED: 1
+2026-04-25T08:01:07.1130447Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.15/x64
+2026-04-25T08:01:07.1132237Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.15/x64/lib/pkgconfig
+2026-04-25T08:01:07.1133992Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
+2026-04-25T08:01:07.1135557Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
+2026-04-25T08:01:07.1137180Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
+2026-04-25T08:01:07.1138833Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.15/x64/lib
+2026-04-25T08:01:07.1140447Z ##[endgroup]
+2026-04-25T08:01:07.1225613Z pip install 시작…
+2026-04-25T08:01:08.1471408Z Requirement already satisfied: pip in /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages (26.0.1)
+2026-04-25T08:01:09.3655964Z Collecting playwright>=1.42.0 (from -r pipeline/requirements.txt (line 1))
+2026-04-25T08:01:09.4568608Z   Downloading playwright-1.58.0-py3-none-manylinux1_x86_64.whl.metadata (3.5 kB)
+2026-04-25T08:01:09.4984643Z Collecting requests>=2.31.0 (from -r pipeline/requirements.txt (line 2))
+2026-04-25T08:01:09.5148445Z   Downloading requests-2.33.1-py3-none-any.whl.metadata (4.8 kB)
+2026-04-25T08:01:09.5444909Z Collecting beautifulsoup4>=4.12.0 (from -r pipeline/requirements.txt (line 3))
+2026-04-25T08:01:09.5606965Z   Downloading beautifulsoup4-4.14.3-py3-none-any.whl.metadata (3.8 kB)
+2026-04-25T08:01:09.6086312Z Collecting google-genai>=1.10.0 (from -r pipeline/requirements.txt (line 4))
+2026-04-25T08:01:09.6249687Z   Downloading google_genai-1.73.1-py3-none-any.whl.metadata (52 kB)
+2026-04-25T08:01:09.6759115Z Collecting firebase-admin>=6.5.0 (from -r pipeline/requirements.txt (line 5))
+2026-04-25T08:01:09.6920611Z   Downloading firebase_admin-7.4.0-py3-none-any.whl.metadata (1.7 kB)
+2026-04-25T08:01:09.7194025Z Collecting python-dotenv>=1.0.0 (from -r pipeline/requirements.txt (line 6))
+2026-04-25T08:01:09.7357129Z   Downloading python_dotenv-1.2.2-py3-none-any.whl.metadata (27 kB)
+2026-04-25T08:01:09.7616538Z Collecting schedule>=1.2.0 (from -r pipeline/requirements.txt (line 7))
+2026-04-25T08:01:09.7778220Z   Downloading schedule-1.2.2-py3-none-any.whl.metadata (3.8 kB)
+2026-04-25T08:01:09.8343704Z Collecting pytz>=2024.1 (from -r pipeline/requirements.txt (line 8))
+2026-04-25T08:01:09.8505670Z   Downloading pytz-2026.1.post1-py2.py3-none-any.whl.metadata (22 kB)
+2026-04-25T08:01:10.1093720Z Collecting lxml>=5.0.0 (from -r pipeline/requirements.txt (line 9))
+2026-04-25T08:01:10.1260343Z   Downloading lxml-6.1.0-cp311-cp311-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl.metadata (4.0 kB)
+2026-04-25T08:01:10.1505090Z Collecting feedparser>=6.0.11 (from -r pipeline/requirements.txt (line 10))
+2026-04-25T08:01:10.1667191Z   Downloading feedparser-6.0.12-py3-none-any.whl.metadata (2.7 kB)
+2026-04-25T08:01:10.2033138Z Collecting holidays>=0.46 (from -r pipeline/requirements.txt (line 11))
+2026-04-25T08:01:10.2195124Z   Downloading holidays-0.95-py3-none-any.whl.metadata (52 kB)
+2026-04-25T08:01:10.2588027Z Collecting pandas-market-calendars>=4.3 (from -r pipeline/requirements.txt (line 12))
+2026-04-25T08:01:10.2784669Z   Downloading pandas_market_calendars-5.3.2-py3-none-any.whl.metadata (8.4 kB)
+2026-04-25T08:01:10.3054019Z Collecting pyee<14,>=13 (from playwright>=1.42.0->-r pipeline/requirements.txt (line 1))
+2026-04-25T08:01:10.3218655Z   Downloading pyee-13.0.1-py3-none-any.whl.metadata (3.0 kB)
+2026-04-25T08:01:10.6559004Z Collecting greenlet<4.0.0,>=3.1.1 (from playwright>=1.42.0->-r pipeline/requirements.txt (line 1))
+2026-04-25T08:01:10.6723592Z   Downloading greenlet-3.4.0-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (3.7 kB)
+2026-04-25T08:01:10.7032006Z Collecting typing-extensions (from pyee<14,>=13->playwright>=1.42.0->-r pipeline/requirements.txt (line 1))
+2026-04-25T08:01:10.7200770Z   Downloading typing_extensions-4.15.0-py3-none-any.whl.metadata (3.3 kB)
+2026-04-25T08:01:10.8664155Z Collecting charset_normalizer<4,>=2 (from requests>=2.31.0->-r pipeline/requirements.txt (line 2))
+2026-04-25T08:01:10.8836611Z   Downloading charset_normalizer-3.4.7-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (40 kB)
+2026-04-25T08:01:10.9128114Z Collecting idna<4,>=2.5 (from requests>=2.31.0->-r pipeline/requirements.txt (line 2))
+2026-04-25T08:01:10.9289323Z   Downloading idna-3.13-py3-none-any.whl.metadata (8.0 kB)
+2026-04-25T08:01:10.9632075Z Collecting urllib3<3,>=1.26 (from requests>=2.31.0->-r pipeline/requirements.txt (line 2))
+2026-04-25T08:01:10.9793454Z   Downloading urllib3-2.6.3-py3-none-any.whl.metadata (6.9 kB)
+2026-04-25T08:01:11.0084439Z Collecting certifi>=2023.5.7 (from requests>=2.31.0->-r pipeline/requirements.txt (line 2))
+2026-04-25T08:01:11.0246601Z   Downloading certifi-2026.4.22-py3-none-any.whl.metadata (2.5 kB)
+2026-04-25T08:01:11.0538529Z Collecting soupsieve>=1.6.1 (from beautifulsoup4>=4.12.0->-r pipeline/requirements.txt (line 3))
+2026-04-25T08:01:11.0725653Z   Downloading soupsieve-2.8.3-py3-none-any.whl.metadata (4.6 kB)
+2026-04-25T08:01:11.1036497Z Collecting anyio<5.0.0,>=4.8.0 (from google-genai>=1.10.0->-r pipeline/requirements.txt (line 4))
+2026-04-25T08:01:11.1200164Z   Downloading anyio-4.13.0-py3-none-any.whl.metadata (4.5 kB)
+2026-04-25T08:01:11.1621843Z Collecting google-auth<3.0.0,>=2.48.1 (from google-auth[requests]<3.0.0,>=2.48.1->google-genai>=1.10.0->-r pipeline/requirements.txt (line 4))
+2026-04-25T08:01:11.1782100Z   Downloading google_auth-2.49.2-py3-none-any.whl.metadata (6.2 kB)
+2026-04-25T08:01:11.2101138Z Collecting httpx<1.0.0,>=0.28.1 (from google-genai>=1.10.0->-r pipeline/requirements.txt (line 4))
+2026-04-25T08:01:11.2262588Z   Downloading httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+2026-04-25T08:01:11.3562745Z Collecting pydantic<3.0.0,>=2.9.0 (from google-genai>=1.10.0->-r pipeline/requirements.txt (line 4))
+2026-04-25T08:01:11.3724639Z   Downloading pydantic-2.13.3-py3-none-any.whl.metadata (108 kB)
+2026-04-25T08:01:11.4097826Z Collecting tenacity<9.2.0,>=8.2.3 (from google-genai>=1.10.0->-r pipeline/requirements.txt (line 4))
+2026-04-25T08:01:11.4258571Z   Downloading tenacity-9.1.4-py3-none-any.whl.metadata (1.2 kB)
+2026-04-25T08:01:11.5296301Z Collecting websockets<17.0,>=13.0.0 (from google-genai>=1.10.0->-r pipeline/requirements.txt (line 4))
+2026-04-25T08:01:11.5460672Z   Downloading websockets-16.0-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (6.8 kB)
+2026-04-25T08:01:11.5700693Z Collecting distro<2,>=1.7.0 (from google-genai>=1.10.0->-r pipeline/requirements.txt (line 4))
+2026-04-25T08:01:11.5859434Z   Downloading distro-1.9.0-py3-none-any.whl.metadata (6.8 kB)
+2026-04-25T08:01:11.6079140Z Collecting sniffio (from google-genai>=1.10.0->-r pipeline/requirements.txt (line 4))
+2026-04-25T08:01:11.6254890Z   Downloading sniffio-1.3.1-py3-none-any.whl.metadata (3.9 kB)
+2026-04-25T08:01:11.6603468Z Collecting pyasn1-modules>=0.2.1 (from google-auth<3.0.0,>=2.48.1->google-auth[requests]<3.0.0,>=2.48.1->google-genai>=1.10.0->-r pipeline/requirements.txt (line 4))
+2026-04-25T08:01:11.6765008Z   Downloading pyasn1_modules-0.4.2-py3-none-any.whl.metadata (3.5 kB)
+2026-04-25T08:01:11.9119251Z Collecting cryptography>=38.0.3 (from google-auth<3.0.0,>=2.48.1->google-auth[requests]<3.0.0,>=2.48.1->google-genai>=1.10.0->-r pipeline/requirements.txt (line 4))
+2026-04-25T08:01:11.9283416Z   Downloading cryptography-47.0.0-cp311-abi3-manylinux_2_34_x86_64.whl.metadata (4.5 kB)
+2026-04-25T08:01:11.9673078Z Collecting httpcore==1.* (from httpx<1.0.0,>=0.28.1->google-genai>=1.10.0->-r pipeline/requirements.txt (line 4))
+2026-04-25T08:01:11.9833754Z   Downloading httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+2026-04-25T08:01:12.0075196Z Collecting h11>=0.16 (from httpcore==1.*->httpx<1.0.0,>=0.28.1->google-genai>=1.10.0->-r pipeline/requirements.txt (line 4))
+2026-04-25T08:01:12.0236273Z   Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+2026-04-25T08:01:12.0464585Z Collecting annotated-types>=0.6.0 (from pydantic<3.0.0,>=2.9.0->google-genai>=1.10.0->-r pipeline/requirements.txt (line 4))
+2026-04-25T08:01:12.0627343Z   Downloading annotated_types-0.7.0-py3-none-any.whl.metadata (15 kB)
+2026-04-25T08:01:12.7968372Z Collecting pydantic-core==2.46.3 (from pydantic<3.0.0,>=2.9.0->google-genai>=1.10.0->-r pipeline/requirements.txt (line 4))
+2026-04-25T08:01:12.8135513Z   Downloading pydantic_core-2.46.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+2026-04-25T08:01:12.8388058Z Collecting typing-inspection>=0.4.2 (from pydantic<3.0.0,>=2.9.0->google-genai>=1.10.0->-r pipeline/requirements.txt (line 4))
+2026-04-25T08:01:12.8548171Z   Downloading typing_inspection-0.4.2-py3-none-any.whl.metadata (2.6 kB)
+2026-04-25T08:01:12.8811666Z Collecting cachecontrol>=0.14.3 (from firebase-admin>=6.5.0->-r pipeline/requirements.txt (line 5))
+2026-04-25T08:01:12.8969782Z   Downloading cachecontrol-0.14.4-py3-none-any.whl.metadata (3.1 kB)
+2026-04-25T08:01:12.9826931Z Collecting google-api-core<3.0.0dev,>=2.25.1 (from google-api-core[grpc]<3.0.0dev,>=2.25.1; platform_python_implementation != "PyPy"->firebase-admin>=6.5.0->-r pipeline/requirements.txt (line 5))
+2026-04-25T08:01:12.9988855Z   Downloading google_api_core-2.30.3-py3-none-any.whl.metadata (3.1 kB)
+2026-04-25T08:01:13.0296251Z Collecting google-cloud-firestore>=2.21.0 (from firebase-admin>=6.5.0->-r pipeline/requirements.txt (line 5))
+2026-04-25T08:01:13.0455806Z   Downloading google_cloud_firestore-2.27.0-py3-none-any.whl.metadata (10.0 kB)
+2026-04-25T08:01:13.0797282Z Collecting google-cloud-storage>=3.1.1 (from firebase-admin>=6.5.0->-r pipeline/requirements.txt (line 5))
+2026-04-25T08:01:13.0962189Z   Downloading google_cloud_storage-3.10.1-py3-none-any.whl.metadata (15 kB)
+2026-04-25T08:01:13.1269108Z Collecting pyjwt>=2.10.1 (from pyjwt[crypto]>=2.10.1->firebase-admin>=6.5.0->-r pipeline/requirements.txt (line 5))
+2026-04-25T08:01:13.1430525Z   Downloading pyjwt-2.12.1-py3-none-any.whl.metadata (4.1 kB)
+2026-04-25T08:01:13.1720750Z Collecting h2<5,>=3 (from httpx[http2]==0.28.1->firebase-admin>=6.5.0->-r pipeline/requirements.txt (line 5))
+2026-04-25T08:01:13.1880278Z   Downloading h2-4.3.0-py3-none-any.whl.metadata (5.1 kB)
+2026-04-25T08:01:13.2164454Z Collecting googleapis-common-protos<2.0.0,>=1.63.2 (from google-api-core<3.0.0dev,>=2.25.1->google-api-core[grpc]<3.0.0dev,>=2.25.1; platform_python_implementation != "PyPy"->firebase-admin>=6.5.0->-r pipeline/requirements.txt (line 5))
+2026-04-25T08:01:13.2322757Z   Downloading googleapis_common_protos-1.74.0-py3-none-any.whl.metadata (9.2 kB)
+2026-04-25T08:01:13.3945836Z Collecting protobuf<8.0.0,>=4.25.8 (from google-api-core<3.0.0dev,>=2.25.1->google-api-core[grpc]<3.0.0dev,>=2.25.1; platform_python_implementation != "PyPy"->firebase-admin>=6.5.0->-r pipeline/requirements.txt (line 5))
+2026-04-25T08:01:13.4108163Z   Downloading protobuf-7.34.1-cp310-abi3-manylinux2014_x86_64.whl.metadata (595 bytes)
+2026-04-25T08:01:13.4386478Z Collecting proto-plus<2.0.0,>=1.22.3 (from google-api-core<3.0.0dev,>=2.25.1->google-api-core[grpc]<3.0.0dev,>=2.25.1; platform_python_implementation != "PyPy"->firebase-admin>=6.5.0->-r pipeline/requirements.txt (line 5))
+2026-04-25T08:01:13.4547194Z   Downloading proto_plus-1.27.2-py3-none-any.whl.metadata (2.2 kB)
+2026-04-25T08:01:14.0129207Z Collecting grpcio<2.0.0,>=1.33.2 (from google-api-core[grpc]<3.0.0dev,>=2.25.1; platform_python_implementation != "PyPy"->firebase-admin>=6.5.0->-r pipeline/requirements.txt (line 5))
+2026-04-25T08:01:14.0293071Z   Downloading grpcio-1.80.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (3.8 kB)
+2026-04-25T08:01:14.0765834Z Collecting grpcio-status<2.0.0,>=1.33.2 (from google-api-core[grpc]<3.0.0dev,>=2.25.1; platform_python_implementation != "PyPy"->firebase-admin>=6.5.0->-r pipeline/requirements.txt (line 5))
+2026-04-25T08:01:14.0927016Z   Downloading grpcio_status-1.80.0-py3-none-any.whl.metadata (1.3 kB)
+2026-04-25T08:01:14.1090949Z Collecting protobuf<8.0.0,>=4.25.8 (from google-api-core<3.0.0dev,>=2.25.1->google-api-core[grpc]<3.0.0dev,>=2.25.1; platform_python_implementation != "PyPy"->firebase-admin>=6.5.0->-r pipeline/requirements.txt (line 5))
+2026-04-25T08:01:14.1253036Z   Downloading protobuf-6.33.6-cp39-abi3-manylinux2014_x86_64.whl.metadata (593 bytes)
+2026-04-25T08:01:14.1549524Z Collecting hyperframe<7,>=6.1 (from h2<5,>=3->httpx[http2]==0.28.1->firebase-admin>=6.5.0->-r pipeline/requirements.txt (line 5))
+2026-04-25T08:01:14.1709325Z   Downloading hyperframe-6.1.0-py3-none-any.whl.metadata (4.3 kB)
+2026-04-25T08:01:14.1932107Z Collecting hpack<5,>=4.1 (from h2<5,>=3->httpx[http2]==0.28.1->firebase-admin>=6.5.0->-r pipeline/requirements.txt (line 5))
+2026-04-25T08:01:14.2090349Z   Downloading hpack-4.1.0-py3-none-any.whl.metadata (4.6 kB)
+2026-04-25T08:01:14.2364983Z Collecting sgmllib3k (from feedparser>=6.0.11->-r pipeline/requirements.txt (line 10))
+2026-04-25T08:01:14.2524236Z   Downloading sgmllib3k-1.0.0.tar.gz (5.8 kB)
+2026-04-25T08:01:14.2583630Z   Installing build dependencies: started
+2026-04-25T08:01:15.2086034Z   Installing build dependencies: finished with status 'done'
+2026-04-25T08:01:15.2091754Z   Getting requirements to build wheel: started
+2026-04-25T08:01:15.5788399Z   Getting requirements to build wheel: finished with status 'done'
+2026-04-25T08:01:15.5797069Z   Preparing metadata (pyproject.toml): started
+2026-04-25T08:01:15.7500813Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-04-25T08:01:15.7734446Z Collecting python-dateutil<3,>=2.9.0.post0 (from holidays>=0.46->-r pipeline/requirements.txt (line 11))
+2026-04-25T08:01:15.7898369Z   Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl.metadata (8.4 kB)
+2026-04-25T08:01:15.8179072Z Collecting six>=1.5 (from python-dateutil<3,>=2.9.0.post0->holidays>=0.46->-r pipeline/requirements.txt (line 11))
+2026-04-25T08:01:15.8338083Z   Downloading six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+2026-04-25T08:01:15.8628205Z Collecting exchange-calendars>=3.3 (from pandas-market-calendars>=4.3->-r pipeline/requirements.txt (line 12))
+2026-04-25T08:01:15.8802515Z   Downloading exchange_calendars-4.13.2-py3-none-any.whl.metadata (26 kB)
+2026-04-25T08:01:16.0183600Z Collecting pandas>=1.1 (from pandas-market-calendars>=4.3->-r pipeline/requirements.txt (line 12))
+2026-04-25T08:01:16.0347507Z   Downloading pandas-3.0.2-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (79 kB)
+2026-04-25T08:01:16.4098478Z Collecting msgpack<2.0.0,>=0.5.2 (from cachecontrol>=0.14.3->firebase-admin>=6.5.0->-r pipeline/requirements.txt (line 5))
+2026-04-25T08:01:16.4260663Z   Downloading msgpack-1.1.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (8.1 kB)
+2026-04-25T08:01:17.0287302Z Collecting cffi>=2.0.0 (from cryptography>=38.0.3->google-auth<3.0.0,>=2.48.1->google-auth[requests]<3.0.0,>=2.48.1->google-genai>=1.10.0->-r pipeline/requirements.txt (line 4))
+2026-04-25T08:01:17.0454224Z   Downloading cffi-2.0.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.6 kB)
+2026-04-25T08:01:17.4332575Z Collecting pycparser (from cffi>=2.0.0->cryptography>=38.0.3->google-auth<3.0.0,>=2.48.1->google-auth[requests]<3.0.0,>=2.48.1->google-genai>=1.10.0->-r pipeline/requirements.txt (line 4))
+2026-04-25T08:01:17.4491653Z   Downloading pycparser-3.0-py3-none-any.whl.metadata (8.2 kB)
+2026-04-25T08:01:17.7261893Z Collecting numpy>=1.26.4 (from exchange-calendars>=3.3->pandas-market-calendars>=4.3->-r pipeline/requirements.txt (line 12))
+2026-04-25T08:01:17.7427075Z   Downloading numpy-2.4.4-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+2026-04-25T08:01:17.7694563Z Collecting pyluach>=2.3.0 (from exchange-calendars>=3.3->pandas-market-calendars>=4.3->-r pipeline/requirements.txt (line 12))
+2026-04-25T08:01:17.7868102Z   Downloading pyluach-2.3.0-py3-none-any.whl.metadata (4.3 kB)
+2026-04-25T08:01:17.8104032Z Collecting toolz>=1.0.0 (from exchange-calendars>=3.3->pandas-market-calendars>=4.3->-r pipeline/requirements.txt (line 12))
+2026-04-25T08:01:17.8266274Z   Downloading toolz-1.1.0-py3-none-any.whl.metadata (5.1 kB)
+2026-04-25T08:01:17.8610997Z Collecting tzdata>=2025.2 (from exchange-calendars>=3.3->pandas-market-calendars>=4.3->-r pipeline/requirements.txt (line 12))
+2026-04-25T08:01:17.8776488Z   Downloading tzdata-2026.2-py2.py3-none-any.whl.metadata (1.4 kB)
+2026-04-25T08:01:17.9005786Z Collecting korean_lunar_calendar>=0.3.1 (from exchange-calendars>=3.3->pandas-market-calendars>=4.3->-r pipeline/requirements.txt (line 12))
+2026-04-25T08:01:17.9184192Z   Downloading korean_lunar_calendar-0.3.1-py3-none-any.whl.metadata (2.8 kB)
+2026-04-25T08:01:17.9508423Z Collecting google-cloud-core<3.0.0,>=2.0.0 (from google-cloud-firestore>=2.21.0->firebase-admin>=6.5.0->-r pipeline/requirements.txt (line 5))
+2026-04-25T08:01:17.9669871Z   Downloading google_cloud_core-2.5.1-py3-none-any.whl.metadata (2.8 kB)
+2026-04-25T08:01:17.9976237Z Collecting google-resumable-media<3.0.0,>=2.7.2 (from google-cloud-storage>=3.1.1->firebase-admin>=6.5.0->-r pipeline/requirements.txt (line 5))
+2026-04-25T08:01:18.0138967Z   Downloading google_resumable_media-2.8.2-py3-none-any.whl.metadata (2.2 kB)
+2026-04-25T08:01:18.0747151Z Collecting google-crc32c<2.0.0,>=1.1.3 (from google-cloud-storage>=3.1.1->firebase-admin>=6.5.0->-r pipeline/requirements.txt (line 5))
+2026-04-25T08:01:18.0913647Z   Downloading google_crc32c-1.8.0-cp311-cp311-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl.metadata (1.7 kB)
+2026-04-25T08:01:18.1374179Z Collecting pyasn1<0.7.0,>=0.6.1 (from pyasn1-modules>=0.2.1->google-auth<3.0.0,>=2.48.1->google-auth[requests]<3.0.0,>=2.48.1->google-genai>=1.10.0->-r pipeline/requirements.txt (line 4))
+2026-04-25T08:01:18.1534748Z   Downloading pyasn1-0.6.3-py3-none-any.whl.metadata (8.4 kB)
+2026-04-25T08:01:18.1929575Z Downloading playwright-1.58.0-py3-none-manylinux1_x86_64.whl (46.2 MB)
+2026-04-25T08:01:18.4694296Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 46.2/46.2 MB 178.0 MB/s  0:00:00
+2026-04-25T08:01:18.4864250Z Downloading greenlet-3.4.0-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (613 kB)
+2026-04-25T08:01:18.4919805Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 613.5/613.5 kB 105.3 MB/s  0:00:00
+2026-04-25T08:01:18.5083099Z Downloading pyee-13.0.1-py3-none-any.whl (15 kB)
+2026-04-25T08:01:18.5265969Z Downloading requests-2.33.1-py3-none-any.whl (64 kB)
+2026-04-25T08:01:18.5455705Z Downloading charset_normalizer-3.4.7-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (214 kB)
+2026-04-25T08:01:18.5778383Z Downloading idna-3.13-py3-none-any.whl (68 kB)
+2026-04-25T08:01:18.5965069Z Downloading urllib3-2.6.3-py3-none-any.whl (131 kB)
+2026-04-25T08:01:18.6150593Z Downloading beautifulsoup4-4.14.3-py3-none-any.whl (107 kB)
+2026-04-25T08:01:18.6336471Z Downloading google_genai-1.73.1-py3-none-any.whl (783 kB)
+2026-04-25T08:01:18.6395981Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 783.6/783.6 kB 155.6 MB/s  0:00:00
+2026-04-25T08:01:18.6555778Z Downloading anyio-4.13.0-py3-none-any.whl (114 kB)
+2026-04-25T08:01:18.6755657Z Downloading distro-1.9.0-py3-none-any.whl (20 kB)
+2026-04-25T08:01:18.6939535Z Downloading google_auth-2.49.2-py3-none-any.whl (240 kB)
+2026-04-25T08:01:18.7130102Z Downloading httpx-0.28.1-py3-none-any.whl (73 kB)
+2026-04-25T08:01:18.7317903Z Downloading httpcore-1.0.9-py3-none-any.whl (78 kB)
+2026-04-25T08:01:18.7503923Z Downloading pydantic-2.13.3-py3-none-any.whl (471 kB)
+2026-04-25T08:01:18.7697093Z Downloading pydantic_core-2.46.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.1 MB)
+2026-04-25T08:01:18.7781118Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.1/2.1 MB 295.4 MB/s  0:00:00
+2026-04-25T08:01:18.7939377Z Downloading tenacity-9.1.4-py3-none-any.whl (28 kB)
+2026-04-25T08:01:18.8118233Z Downloading typing_extensions-4.15.0-py3-none-any.whl (44 kB)
+2026-04-25T08:01:18.8307174Z Downloading websockets-16.0-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (184 kB)
+2026-04-25T08:01:18.8493133Z Downloading firebase_admin-7.4.0-py3-none-any.whl (140 kB)
+2026-04-25T08:01:18.8677023Z Downloading google_api_core-2.30.3-py3-none-any.whl (173 kB)
+2026-04-25T08:01:18.8860552Z Downloading googleapis_common_protos-1.74.0-py3-none-any.whl (300 kB)
+2026-04-25T08:01:18.9050116Z Downloading grpcio-1.80.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (6.8 MB)
+2026-04-25T08:01:18.9262262Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.8/6.8 MB 350.6 MB/s  0:00:00
+2026-04-25T08:01:18.9422917Z Downloading grpcio_status-1.80.0-py3-none-any.whl (14 kB)
+2026-04-25T08:01:18.9603819Z Downloading h2-4.3.0-py3-none-any.whl (61 kB)
+2026-04-25T08:01:18.9785148Z Downloading hpack-4.1.0-py3-none-any.whl (34 kB)
+2026-04-25T08:01:18.9961802Z Downloading hyperframe-6.1.0-py3-none-any.whl (13 kB)
+2026-04-25T08:01:19.0139489Z Downloading proto_plus-1.27.2-py3-none-any.whl (50 kB)
+2026-04-25T08:01:19.0316269Z Downloading protobuf-6.33.6-cp39-abi3-manylinux2014_x86_64.whl (323 kB)
+2026-04-25T08:01:19.0541794Z Downloading python_dotenv-1.2.2-py3-none-any.whl (22 kB)
+2026-04-25T08:01:19.0728037Z Downloading schedule-1.2.2-py3-none-any.whl (12 kB)
+2026-04-25T08:01:19.0908839Z Downloading pytz-2026.1.post1-py2.py3-none-any.whl (510 kB)
+2026-04-25T08:01:19.1113821Z Downloading lxml-6.1.0-cp311-cp311-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl (5.2 MB)
+2026-04-25T08:01:19.1294739Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.2/5.2 MB 315.5 MB/s  0:00:00
+2026-04-25T08:01:19.1459086Z Downloading feedparser-6.0.12-py3-none-any.whl (81 kB)
+2026-04-25T08:01:19.1642504Z Downloading holidays-0.95-py3-none-any.whl (1.5 MB)
+2026-04-25T08:01:19.1736142Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.5/1.5 MB 183.7 MB/s  0:00:00
+2026-04-25T08:01:19.1897836Z Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+2026-04-25T08:01:19.2085793Z Downloading pandas_market_calendars-5.3.2-py3-none-any.whl (130 kB)
+2026-04-25T08:01:19.2267028Z Downloading annotated_types-0.7.0-py3-none-any.whl (13 kB)
+2026-04-25T08:01:19.2448201Z Downloading cachecontrol-0.14.4-py3-none-any.whl (22 kB)
+2026-04-25T08:01:19.2640777Z Downloading msgpack-1.1.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (426 kB)
+2026-04-25T08:01:19.2836469Z Downloading certifi-2026.4.22-py3-none-any.whl (135 kB)
+2026-04-25T08:01:19.3026147Z Downloading cryptography-47.0.0-cp311-abi3-manylinux_2_34_x86_64.whl (4.7 MB)
+2026-04-25T08:01:19.3172984Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.7/4.7 MB 359.0 MB/s  0:00:00
+2026-04-25T08:01:19.3333444Z Downloading cffi-2.0.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (215 kB)
+2026-04-25T08:01:19.3521671Z Downloading exchange_calendars-4.13.2-py3-none-any.whl (213 kB)
+2026-04-25T08:01:19.3709751Z Downloading google_cloud_firestore-2.27.0-py3-none-any.whl (429 kB)
+2026-04-25T08:01:19.3929287Z Downloading google_cloud_core-2.5.1-py3-none-any.whl (29 kB)
+2026-04-25T08:01:19.4109453Z Downloading google_cloud_storage-3.10.1-py3-none-any.whl (324 kB)
+2026-04-25T08:01:19.4335747Z Downloading google_crc32c-1.8.0-cp311-cp311-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl (33 kB)
+2026-04-25T08:01:19.4516234Z Downloading google_resumable_media-2.8.2-py3-none-any.whl (81 kB)
+2026-04-25T08:01:19.4699171Z Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+2026-04-25T08:01:19.4875704Z Downloading korean_lunar_calendar-0.3.1-py3-none-any.whl (9.0 kB)
+2026-04-25T08:01:19.5056353Z Downloading numpy-2.4.4-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.9 MB)
+2026-04-25T08:01:19.5520550Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.9/16.9 MB 379.3 MB/s  0:00:00
+2026-04-25T08:01:19.5682614Z Downloading pandas-3.0.2-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (11.3 MB)
+2026-04-25T08:01:19.6048540Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 11.3/11.3 MB 320.0 MB/s  0:00:00
+2026-04-25T08:01:19.6211090Z Downloading pyasn1_modules-0.4.2-py3-none-any.whl (181 kB)
+2026-04-25T08:01:19.6392715Z Downloading pyasn1-0.6.3-py3-none-any.whl (83 kB)
+2026-04-25T08:01:19.6582129Z Downloading pyjwt-2.12.1-py3-none-any.whl (29 kB)
+2026-04-25T08:01:19.6799132Z Downloading pyluach-2.3.0-py3-none-any.whl (25 kB)
+2026-04-25T08:01:19.6978134Z Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)
+2026-04-25T08:01:19.7157147Z Downloading soupsieve-2.8.3-py3-none-any.whl (37 kB)
+2026-04-25T08:01:19.7344626Z Downloading toolz-1.1.0-py3-none-any.whl (58 kB)
+2026-04-25T08:01:19.7526050Z Downloading typing_inspection-0.4.2-py3-none-any.whl (14 kB)
+2026-04-25T08:01:19.7709996Z Downloading tzdata-2026.2-py2.py3-none-any.whl (349 kB)
+2026-04-25T08:01:19.7900223Z Downloading pycparser-3.0-py3-none-any.whl (48 kB)
+2026-04-25T08:01:19.8077006Z Downloading sniffio-1.3.1-py3-none-any.whl (10 kB)
+2026-04-25T08:01:19.9470548Z Building wheels for collected packages: sgmllib3k
+2026-04-25T08:01:19.9479188Z   Building wheel for sgmllib3k (pyproject.toml): started
+2026-04-25T08:01:20.1372294Z   Building wheel for sgmllib3k (pyproject.toml): finished with status 'done'
+2026-04-25T08:01:20.1378629Z   Created wheel for sgmllib3k: filename=sgmllib3k-1.0.0-py3-none-any.whl size=6090 sha256=a88a83d25ae6cab4364b254a130ee96f45eb2c489d4f058c7e5af81304d68633
+2026-04-25T08:01:20.1380970Z   Stored in directory: /home/runner/.cache/pip/wheels/3b/25/2a/105d6a15df6914f4d15047691c6c28f9052cc1173e40285d03
+2026-04-25T08:01:20.1394975Z Successfully built sgmllib3k
+2026-04-25T08:01:20.2592396Z Installing collected packages: sgmllib3k, pytz, korean_lunar_calendar, websockets, urllib3, tzdata, typing-extensions, toolz, tenacity, soupsieve, sniffio, six, schedule, python-dotenv, pyluach, pyjwt, pycparser, pyasn1, protobuf, numpy, msgpack, lxml, idna, hyperframe, hpack, h11, greenlet, google-crc32c, feedparser, distro, charset_normalizer, certifi, annotated-types, typing-inspection, requests, python-dateutil, pyee, pydantic-core, pyasn1-modules, proto-plus, httpcore, h2, grpcio, googleapis-common-protos, google-resumable-media, cffi, beautifulsoup4, anyio, pydantic, playwright, pandas, httpx, holidays, grpcio-status, cryptography, cachecontrol, google-auth, exchange-calendars, pandas-market-calendars, google-api-core, google-genai, google-cloud-core, google-cloud-storage, google-cloud-firestore, firebase-admin
+2026-04-25T08:01:31.3536217Z 
+2026-04-25T08:01:31.3571158Z Successfully installed annotated-types-0.7.0 anyio-4.13.0 beautifulsoup4-4.14.3 cachecontrol-0.14.4 certifi-2026.4.22 cffi-2.0.0 charset_normalizer-3.4.7 cryptography-47.0.0 distro-1.9.0 exchange-calendars-4.13.2 feedparser-6.0.12 firebase-admin-7.4.0 google-api-core-2.30.3 google-auth-2.49.2 google-cloud-core-2.5.1 google-cloud-firestore-2.27.0 google-cloud-storage-3.10.1 google-crc32c-1.8.0 google-genai-1.73.1 google-resumable-media-2.8.2 googleapis-common-protos-1.74.0 greenlet-3.4.0 grpcio-1.80.0 grpcio-status-1.80.0 h11-0.16.0 h2-4.3.0 holidays-0.95 hpack-4.1.0 httpcore-1.0.9 httpx-0.28.1 hyperframe-6.1.0 idna-3.13 korean_lunar_calendar-0.3.1 lxml-6.1.0 msgpack-1.1.2 numpy-2.4.4 pandas-3.0.2 pandas-market-calendars-5.3.2 playwright-1.58.0 proto-plus-1.27.2 protobuf-6.33.6 pyasn1-0.6.3 pyasn1-modules-0.4.2 pycparser-3.0 pydantic-2.13.3 pydantic-core-2.46.3 pyee-13.0.1 pyjwt-2.12.1 pyluach-2.3.0 python-dateutil-2.9.0.post0 python-dotenv-1.2.2 pytz-2026.1.post1 requests-2.33.1 schedule-1.2.2 sgmllib3k-1.0.0 six-1.17.0 sniffio-1.3.1 soupsieve-2.8.3 tenacity-9.1.4 toolz-1.1.0 typing-extensions-4.15.0 typing-inspection-0.4.2 tzdata-2026.2 urllib3-2.6.3 websockets-16.0
+2026-04-25T08:01:31.9214250Z pip install 완료
+2026-04-25T08:01:31.9254537Z ##[group]Run echo "파이프라인 시작 PIPELINE_SECTION=$PIPELINE_SECTION"
+2026-04-25T08:01:31.9255014Z [36;1mecho "파이프라인 시작 PIPELINE_SECTION=$PIPELINE_SECTION"[0m
+2026-04-25T08:01:31.9255348Z [36;1mpython -u main.py[0m
+2026-04-25T08:01:31.9277054Z shell: /usr/bin/bash -e {0}
+2026-04-25T08:01:31.9277290Z env:
+2026-04-25T08:01:31.9277472Z   PYTHONUNBUFFERED: 1
+2026-04-25T08:01:31.9277765Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.15/x64
+2026-04-25T08:01:31.9278197Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.15/x64/lib/pkgconfig
+2026-04-25T08:01:31.9278599Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
+2026-04-25T08:01:31.9278967Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
+2026-04-25T08:01:31.9279337Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.15/x64
+2026-04-25T08:01:31.9279721Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.15/x64/lib
+2026-04-25T08:01:31.9280053Z   PIPELINE_SECTION: news
+2026-04-25T08:01:31.9375504Z   FIREBASE_SERVICE_ACCOUNT_B64: ***
+2026-04-25T08:01:31.9375909Z   GEMINI_API_KEY: ***
+2026-04-25T08:01:31.9376129Z   SAPIENS_ARTICLE_LLM_JUDGE: 1
+2026-04-25T08:01:31.9376360Z ##[endgroup]
+2026-04-25T08:01:31.9421323Z 파이프라인 시작 PIPELINE_SECTION=news
+2026-04-25T08:01:34.7271302Z 2026-04-25 08:01:34,726 [INFO] summarizer: summarizer AI runtime: selected_model=claude gemini_model=gemini-3.1-flash-lite-preview
+2026-04-25T08:01:34.7275618Z /opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/google/cloud/firestore_v1/base_collection.py:317: UserWarning: Detected filter using positional arguments. Prefer using the 'filter' keyword argument instead.
+2026-04-25T08:01:34.7276743Z   return query.where(field_path, op_string, value)
+2026-04-25T08:01:36.0793336Z 2026-04-25 08:01:36,079 [INFO] crawler: RSS: status=200 url=https://www.mk.co.kr/rss/50200011/ response_bytes=39496 encoding=UTF-8
+2026-04-25T08:01:36.7318936Z 2026-04-25 08:01:36,731 [INFO] crawler: RSS: status=200 url=https://www.hankyung.com/feed/finance response_bytes=17583 encoding=UTF-8
+2026-04-25T08:01:36.7608249Z 2026-04-25 08:01:36,760 [INFO] crawler: RSS 수집: 피드당 최대 15건, 합계 30건 (피드 2개) urls=['https://www.mk.co.kr/rss/50200011/', 'https://www.hankyung.com/feed/finance']
+2026-04-25T08:02:01.9126158Z 2026-04-25 08:02:01,912 [INFO] crawler: RSS: status=200 url=https://finance.yahoo.com/rss/headline?s=NVDA,AMD,AVGO,TSM,MU,ANET,ASML,LRCX,INTC,MSFT,GOOGL,AMZN,META,PLTR,SNOW,ORCL,CRM,NOW,ADBE,TSLA,AAPL,FIG response_bytes=16711 encoding=utf-8
+2026-04-25T08:02:01.9253499Z 2026-04-25 08:02:01,924 [INFO] crawler: RSS 수집: 피드당 최대 45건, 합계 20건 (피드 1개) urls=['https://finance.yahoo.com/rss/headline?s=NVDA,AMD,AVGO,TSM,MU,ANET,ASML,LRCX,INTC,MSFT,GOOGL,AMZN,META,PLTR,SNOW,ORCL,CRM,NOW,ADBE,TSLA,AAPL,FIG']
+2026-04-25T08:02:01.9589681Z 2026-04-25 08:02:01,958 [INFO] crawler: ai_issue RSS: 입력 19건 → 전량 유지 19건
+2026-04-25T08:02:02.0892217Z 2026-04-25 08:02:02,088 [INFO] crawler: RSS: status=200 url=https://finance.yahoo.com/news/rssindex response_bytes=26732 encoding=utf-8
+2026-04-25T08:02:02.4287273Z 2026-04-25 08:02:02,428 [INFO] crawler: RSS: status=200 url=https://finance.yahoo.com/rss/headline?s=WDC,STX,SNDK,BLK,BRK-B,JPM,GS,MS,BX,KKR response_bytes=17122 encoding=utf-8
+2026-04-25T08:02:02.7461972Z 2026-04-25 08:02:02,745 [INFO] crawler: RSS: status=200 url=https://finance.yahoo.com/rss/headline?s=RKLB,LMT,BA,NOC,ASTS,LUNR,PL,BKSY,IRDM,SPCE response_bytes=14012 encoding=utf-8
+2026-04-25T08:02:02.7585760Z 2026-04-25 08:02:02,758 [INFO] crawler: RSS 수집: 피드당 최대 45건, 합계 82건 (피드 3개) urls=['https://finance.yahoo.com/news/rssindex', 'https://finance.yahoo.com/rss/headline?s=WDC,STX,SNDK,BLK,BRK-B,JPM,GS,MS,BX,KKR', 'https://finance.yahoo.com/rss/headline?s=RKLB,LMT,BA,NOC,ASTS,LUNR,PL,BKSY,IRDM,SPCE']
+2026-04-25T08:02:03.2112000Z 2026-04-25 08:02:03,210 [WARNING] crawler: global_market 풀 중 yahoo.com 이 아닌 URL 8건 제외
+2026-04-25T08:02:03.2113458Z 2026-04-25 08:02:03,211 [INFO] crawler: crawl_domestic(탭별 RSS 전용): domestic_market=15 global_market=15 ai_issue=15
+2026-04-25T08:02:03.3261423Z 2026-04-25 08:02:03,325 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:03.3273005Z 2026-04-25 08:02:03,327 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:03.3284605Z 2026-04-25 08:02:03,328 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:03.3296903Z 2026-04-25 08:02:03,329 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:04.6576759Z 2026-04-25 08:02:04,657 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:04.6598044Z 2026-04-25 08:02:04,659 [INFO] summarizer: summary_point: 110자 → 명사형 접두 105자: '인텔이 1분기 데이터센터 및 AI 부문 CPU 수요 급증으로 27% 급등하며 반도체 랠리를'
+2026-04-25T08:02:04.6601165Z 2026-04-25 08:02:04,659 [INFO] summarizer: summary_point: 116자 → 명사형 접두 105자: '다음 주 뉴욕 증시는 Fed를 포함한 각국 중앙은행의 통화정책 회의와 아마존, 알파벳, 애'
+2026-04-25T08:02:04.6602416Z 2026-04-25 08:02:04,660 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:04.7576988Z 2026-04-25 08:02:04,757 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:04.7597371Z 2026-04-25 08:02:04,759 [INFO] summarizer: summary_point: 117자 → 명사형 접두 105자: '김현태 책임은 스페이스X의 발사체 재사용 성공 이후 위성 발사 비용이 급감함에 따라 202'
+2026-04-25T08:02:04.7598673Z 2026-04-25 08:02:04,759 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:05.0204648Z 2026-04-25 08:02:05,020 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:05.0216999Z 2026-04-25 08:02:05,021 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:05.0486200Z 2026-04-25 08:02:05,048 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:05.0502715Z 2026-04-25 08:02:05,050 [INFO] summarizer: summary_point: 111자 → 명사형 접두 105자: '삼성전자와 SK하이닉스의 1분기 깜짝 실적으로 시장 유동성이 풍부해진 가운데 AI 데이터센'
+2026-04-25T08:02:05.0505213Z 2026-04-25 08:02:05,050 [INFO] summarizer: summary_point: 116자 → 명사형 접두 105자: '중동전쟁 종전 기대감에 따른 에너지 시설 재건 수요와 해외 수주 증가 전망으로 DL이앤씨,'
+2026-04-25T08:02:05.0508704Z 2026-04-25 08:02:05,050 [INFO] summarizer: summary_point: 106자 → 어구 끝(공백)에서 102자: '고유가와 고환율로 인한 수익성 악화 우려로 진에어와 CJ대한통운 등 항공 및 운송 업종의 '
+2026-04-25T08:02:05.0509941Z 2026-04-25 08:02:05,050 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:06.2608821Z 2026-04-25 08:02:06,260 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:06.2621715Z 2026-04-25 08:02:06,261 [INFO] summarizer: summary_point: 110자 → 어구 끝(공백)에서 102자: 'AI 데이터센터 전력 수요 급증으로 대형 가스터빈 공급이 지연되자 납기가 1년가량 빠른 선'
+2026-04-25T08:02:06.2624725Z 2026-04-25 08:02:06,262 [INFO] summarizer: summary_point: 107자 → 어구 끝(공백)에서 103자: 'HD현대중공업이 지난 22일 6271억원 규모의 미국 데이터센터용 엔진 수주를 성공하며 기'
+2026-04-25T08:02:06.2626143Z 2026-04-25 08:02:06,262 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:06.7151630Z 2026-04-25 08:02:06,714 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:06.7163477Z 2026-04-25 08:02:06,716 [INFO] summarizer: summary_point: 106자 → 어구 끝(공백)에서 101자: '국내 서학개미들이 최근 일주일간 인텔 주식을 720억 원 규모로 순매수하며 반도체 종목 중'
+2026-04-25T08:02:06.7164735Z 2026-04-25 08:02:06,716 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:06.9229679Z 2026-04-25 08:02:06,922 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:06.9241838Z 2026-04-25 08:02:06,924 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:07.7617686Z 2026-04-25 08:02:07,761 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:07.7629977Z 2026-04-25 08:02:07,762 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:07.9768273Z 2026-04-25 08:02:07,976 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:07.9781760Z 2026-04-25 08:02:07,977 [INFO] summarizer: summary_point: 107자 → 어구 끝(공백)에서 102자: '한국거래소가 글로벌 유동성 경쟁 대응을 위해 주식 거래시간을 기존 6시간 30분에서 12시'
+2026-04-25T08:02:07.9782822Z 2026-04-25 08:02:07,978 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:08.1059743Z 2026-04-25 08:02:08,105 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:08.1071074Z 2026-04-25 08:02:08,106 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:08.3136112Z 2026-04-25 08:02:08,313 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:08.3146002Z 2026-04-25 08:02:08,314 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:08.9165632Z 2026-04-25 08:02:08,916 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:09.2512256Z 2026-04-25 08:02:09,250 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:09.2523521Z 2026-04-25 08:02:09,252 [INFO] summarizer: summary_point: 111자 → 명사형 접두 105자: '순이익 조작 가능성이 있는 PER과 PBR 대신 현금 흐름을 기준으로 주주가치 희석 비용을'
+2026-04-25T08:02:09.5435409Z 2026-04-25 08:02:09,543 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:10.9709575Z 2026-04-25 08:02:10,970 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:10.9721960Z 2026-04-25 08:02:10,971 [INFO] summarizer: summary_point: 106자 → 어구 끝(공백)에서 101자: '지난 20년간 코스닥지수는 727.07에서 1203.84로 65.6% 상승에 그쳐 같은 기'
+2026-04-25T08:02:10.9725044Z 2026-04-25 08:02:10,972 [INFO] summarizer: summary_point: 109자 → 명사형 접두 105자: '기술특례상장 제도가 바이오 섹터에만 편중되어 기형적인 생태계를 형성했으며, 매출 30억원 '
+2026-04-25T08:02:10.9732704Z 2026-04-25 08:02:10,973 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:10.9744570Z 2026-04-25 08:02:10,974 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:10.9755019Z 2026-04-25 08:02:10,975 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:10.9765261Z 2026-04-25 08:02:10,976 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:12.0833408Z 2026-04-25 08:02:12,083 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:12.0843303Z 2026-04-25 08:02:12,084 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:12.1291194Z 2026-04-25 08:02:12,128 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:12.1297178Z 2026-04-25 08:02:12,129 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:12.1305555Z 2026-04-25 08:02:12,130 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:12.1323061Z 2026-04-25 08:02:12,132 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:12.2424288Z 2026-04-25 08:02:12,242 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:12.2432967Z 2026-04-25 08:02:12,243 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:12.8488621Z 2026-04-25 08:02:12,848 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:12.8498690Z 2026-04-25 08:02:12,849 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:12.8791079Z 2026-04-25 08:02:12,878 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:12.8800208Z 2026-04-25 08:02:12,879 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:13.1088045Z 2026-04-25 08:02:13,108 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:13.1098722Z 2026-04-25 08:02:13,109 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:13.4201839Z 2026-04-25 08:02:13,419 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:13.4211020Z 2026-04-25 08:02:13,420 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:13.8112813Z 2026-04-25 08:02:13,810 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:13.8118059Z 2026-04-25 08:02:13,811 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:13.8130857Z 2026-04-25 08:02:13,812 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:13.8147462Z 2026-04-25 08:02:13,814 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:14.2821167Z 2026-04-25 08:02:14,281 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:14.2833025Z 2026-04-25 08:02:14,283 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:14.7732014Z 2026-04-25 08:02:14,772 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:14.7746117Z 2026-04-25 08:02:14,774 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:14.9577515Z 2026-04-25 08:02:14,957 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:14.9587650Z 2026-04-25 08:02:14,958 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:15.0596786Z 2026-04-25 08:02:15,059 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:15.0605297Z 2026-04-25 08:02:15,060 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:15.3371932Z 2026-04-25 08:02:15,336 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:15.3382179Z 2026-04-25 08:02:15,338 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:15.6136715Z 2026-04-25 08:02:15,613 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:15.9313741Z 2026-04-25 08:02:15,931 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:16.0455833Z 2026-04-25 08:02:16,045 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:16.4138639Z 2026-04-25 08:02:16,413 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:16.4156762Z 2026-04-25 08:02:16,415 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:16.4167295Z 2026-04-25 08:02:16,416 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:16.4179521Z 2026-04-25 08:02:16,417 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:16.4193201Z 2026-04-25 08:02:16,419 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:17.4098475Z 2026-04-25 08:02:17,409 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:17.4110034Z 2026-04-25 08:02:17,410 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:17.6821701Z 2026-04-25 08:02:17,681 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:17.6831394Z 2026-04-25 08:02:17,682 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:17.6943381Z 2026-04-25 08:02:17,694 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:17.6948983Z 2026-04-25 08:02:17,694 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:17.7395270Z 2026-04-25 08:02:17,739 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:17.7402966Z 2026-04-25 08:02:17,740 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:18.3570758Z 2026-04-25 08:02:18,356 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:18.3580927Z 2026-04-25 08:02:18,357 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:18.6346768Z 2026-04-25 08:02:18,634 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:18.6356399Z 2026-04-25 08:02:18,635 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:18.7492762Z 2026-04-25 08:02:18,748 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:18.7503424Z 2026-04-25 08:02:18,750 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:19.2126467Z 2026-04-25 08:02:19,212 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:19.2136277Z 2026-04-25 08:02:19,213 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:19.6774805Z 2026-04-25 08:02:19,677 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:19.6787653Z 2026-04-25 08:02:19,678 [INFO] summarizer: summary_point: 108자 → 어구 끝(공백)에서 103자: '순다르 피차이 알파벳 최고경영자가 AI 인프라 경쟁력 확보를 위해 올해 설비투자 규모를 최'
+2026-04-25T08:02:19.6788712Z 2026-04-25 08:02:19,678 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:19.7371948Z 2026-04-25 08:02:19,736 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:19.7382650Z 2026-04-25 08:02:19,738 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:20.1801770Z 2026-04-25 08:02:20,179 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:20.1811948Z 2026-04-25 08:02:20,181 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:20.3331286Z 2026-04-25 08:02:20,332 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:20.3340535Z 2026-04-25 08:02:20,333 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:20.9429519Z 2026-04-25 08:02:20,942 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:20.9440860Z 2026-04-25 08:02:20,943 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:21.0730705Z 2026-04-25 08:02:21,072 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:21.0741096Z 2026-04-25 08:02:21,073 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:21.2744119Z 2026-04-25 08:02:21,274 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:21.2754694Z 2026-04-25 08:02:21,275 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:21.4476825Z 2026-04-25 08:02:21,447 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:22.1175245Z 2026-04-25 08:02:22,117 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:22.1591972Z 2026-04-25 08:02:22,158 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:22.5015887Z 2026-04-25 08:02:22,501 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:22.5026898Z 2026-04-25 08:02:22,502 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:23.0917820Z 2026-04-25 08:02:23,091 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:25.9666669Z 2026-04-25 08:02:25,966 [INFO] crawler: RSS: status=200 url=https://www.mk.co.kr/rss/50200011/ response_bytes=39496 encoding=UTF-8
+2026-04-25T08:02:26.2808920Z 2026-04-25 08:02:26,280 [INFO] crawler: RSS: status=200 url=https://www.hankyung.com/feed/finance response_bytes=17583 encoding=UTF-8
+2026-04-25T08:02:27.5045553Z 2026-04-25 08:02:27,504 [INFO] crawler: RSS: status=200 url=https://www.yna.co.kr/rss/market.xml response_bytes=82720 encoding=UTF-8
+2026-04-25T08:02:27.5566865Z 2026-04-25 08:02:27,556 [INFO] crawler: RSS 수집: 피드당 최대 15건, 합계 45건 (피드 3개) urls=['https://www.mk.co.kr/rss/50200011/', 'https://www.hankyung.com/feed/finance', 'https://www.yna.co.kr/rss/market.xml']
+2026-04-25T08:02:52.8879051Z 2026-04-25 08:02:52,887 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:52.8892086Z 2026-04-25 08:02:52,889 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:52.8904008Z 2026-04-25 08:02:52,890 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:52.8915851Z 2026-04-25 08:02:52,891 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:54.0708463Z 2026-04-25 08:02:54,070 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:54.0719322Z 2026-04-25 08:02:54,071 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:54.2696508Z 2026-04-25 08:02:54,269 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:54.2708192Z 2026-04-25 08:02:54,270 [INFO] summarizer: summary_point: 109자 → 명사형 접두 105자: '스페이스X의 발사체 재사용 성공으로 위성 발사 비용이 급감함에 따라 현재 1만 대 수준인 '
+2026-04-25T08:02:54.2709391Z 2026-04-25 08:02:54,270 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:54.4933901Z 2026-04-25 08:02:54,493 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:54.4946886Z 2026-04-25 08:02:54,494 [INFO] summarizer: summary_point: 116자 → 어구 끝(공백)에서 103자: '인텔이 AI 추론 수요 증가에 따른 CPU 매출 22% 성장과 파운드리 16% 증가 등 호'
+2026-04-25T08:02:54.4949702Z 2026-04-25 08:02:54,494 [INFO] summarizer: summary_point: 117자 → 어구 끝(공백)에서 103자: '에버코어ISI와 HSBC 등 주요 투자은행은 AI 에이전트 확산으로 서버 CPU 공급 부족'
+2026-04-25T08:02:54.4952749Z 2026-04-25 08:02:54,495 [INFO] summarizer: summary_point: 119자 → 어구 끝(공백)에서 103자: '다음 주는 미국 연방준비제도와 주요국 중앙은행의 통화정책 회의를 비롯해 아마존, 알파벳, '
+2026-04-25T08:02:54.4954333Z 2026-04-25 08:02:54,495 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:54.7259505Z 2026-04-25 08:02:54,725 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:54.7274741Z 2026-04-25 08:02:54,727 [INFO] summarizer: summary_point: 118자 → 명사형 접두 105자: 'AI 데이터센터 운영 계획을 밝힌 SGC에너지의 목표주가가 4만 8000원에서 8만 166'
+2026-04-25T08:02:54.7275982Z 2026-04-25 08:02:54,727 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:55.1443048Z 2026-04-25 08:02:55,143 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:55.1457489Z 2026-04-25 08:02:55,145 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:55.5807799Z 2026-04-25 08:02:55,580 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:55.5820085Z 2026-04-25 08:02:55,581 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:55.8556714Z 2026-04-25 08:02:55,855 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:55.8565884Z 2026-04-25 08:02:55,856 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:56.3515746Z 2026-04-25 08:02:56,351 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:56.3528328Z 2026-04-25 08:02:56,352 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:56.6696417Z 2026-04-25 08:02:56,669 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:56.6706351Z 2026-04-25 08:02:56,670 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:57.0096305Z 2026-04-25 08:02:57,009 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:57.0105833Z 2026-04-25 08:02:57,010 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:57.2893036Z 2026-04-25 08:02:57,288 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:57.2904206Z 2026-04-25 08:02:57,290 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:02:57.7199083Z 2026-04-25 08:02:57,719 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:57.8991114Z 2026-04-25 08:02:57,898 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:58.1166578Z 2026-04-25 08:02:58,116 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:58.3509181Z 2026-04-25 08:02:58,350 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:02:59.7272303Z 2026-04-25 08:02:59,727 [INFO] crawler: RSS: status=200 url=https://www.mk.co.kr/rss/30100041/ response_bytes=38018 encoding=UTF-8
+2026-04-25T08:03:00.0050742Z 2026-04-25 08:03:00,004 [INFO] crawler: RSS: status=200 url=https://www.hankyung.com/feed/economy response_bytes=17434 encoding=UTF-8
+2026-04-25T08:03:00.3544834Z 2026-04-25 08:03:00,354 [INFO] crawler: RSS: status=200 url=https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=02&plink=RSSREADER response_bytes=263545 encoding=UTF-8
+2026-04-25T08:03:00.4639336Z 2026-04-25 08:03:00,463 [INFO] crawler: RSS 수집: 피드당 최대 15건, 합계 31건 (피드 3개) urls=['https://www.mk.co.kr/rss/30100041/', 'https://www.hankyung.com/feed/economy', 'https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=02&plink=RSSREADER']
+2026-04-25T08:03:22.1246817Z 2026-04-25 08:03:22,124 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:22.1279935Z 2026-04-25 08:03:22,125 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:22.1290334Z 2026-04-25 08:03:22,128 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:22.1302381Z 2026-04-25 08:03:22,129 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:23.4318031Z 2026-04-25 08:03:23,431 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:23.4328644Z 2026-04-25 08:03:23,432 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:23.4971001Z 2026-04-25 08:03:23,496 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:23.4981300Z 2026-04-25 08:03:23,497 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:23.5120047Z 2026-04-25 08:03:23,511 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:23.5131045Z 2026-04-25 08:03:23,512 [INFO] summarizer: summary_point: 109자 → 어구 끝(공백)에서 102자: '삼성전자와 SK하이닉스 등 성장주와 경기민감주에 쏠린 현재 포트폴리오를 주택 매입 시점까지'
+2026-04-25T08:03:23.5134664Z 2026-04-25 08:03:23,513 [INFO] summarizer: summary_point: 111자 → 명사형 접두 105자: '연 3%대 중후반 수익이 가능한 발행어음과 단기금융상품을 6개월에서 18개월 만기로 분산 '
+2026-04-25T08:03:23.5135896Z 2026-04-25 08:03:23,513 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:23.6233241Z 2026-04-25 08:03:23,623 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:23.6242807Z 2026-04-25 08:03:23,624 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:24.5566211Z 2026-04-25 08:03:24,556 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:24.5575292Z 2026-04-25 08:03:24,557 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:24.6710577Z 2026-04-25 08:03:24,670 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:24.6719818Z 2026-04-25 08:03:24,671 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:24.7901874Z 2026-04-25 08:03:24,789 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:24.7911842Z 2026-04-25 08:03:24,791 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:24.8574437Z 2026-04-25 08:03:24,857 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:24.8583428Z 2026-04-25 08:03:24,858 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:25.5748959Z 2026-04-25 08:03:25,574 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:25.5758663Z 2026-04-25 08:03:25,575 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:25.8189610Z 2026-04-25 08:03:25,818 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:25.8202056Z 2026-04-25 08:03:25,819 [INFO] summarizer: summary_point: 111자 → 명사형 접두 105자: '로이터와 디지타임스 등 주요 외신은 삼성전자의 파업 현실화 시 반도체 공급망 차질은 물론 '
+2026-04-25T08:03:25.8203510Z 2026-04-25 08:03:25,820 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:26.2544559Z 2026-04-25 08:03:26,254 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:26.2557634Z 2026-04-25 08:03:26,255 [INFO] summarizer: summary_point: 106자 → 어구 끝(공백)에서 102자: '중국 제조업의 급격한 추격과 국내 전기차 시장 점유율 30% 돌파 등 위기 상황 속에서 숙'
+2026-04-25T08:03:26.2558701Z 2026-04-25 08:03:26,255 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:26.4274133Z 2026-04-25 08:03:26,427 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:26.9528008Z 2026-04-25 08:03:26,952 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:27.0689000Z 2026-04-25 08:03:27,068 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:27.0701205Z 2026-04-25 08:03:27,069 [INFO] summarizer: summary_point: 113자 → 명사형 접두 105자: '연간 금융소득 2000만 원 초과 시 종합소득세와 건강보험료 부담이 가중되므로 ISA 계좌'
+2026-04-25T08:03:27.0703935Z 2026-04-25 08:03:27,070 [INFO] summarizer: summary_point: 109자 → 어구 끝(공백)에서 102자: '24일 코스닥지수가 외국인의 강한 매수세 유입에 힘입어 전날 대비 2.51% 상승한 120'
+2026-04-25T08:03:27.6158155Z 2026-04-25 08:03:27,615 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:28.3439083Z 2026-04-25 08:03:28,343 [INFO] crawler: RSS: status=200 url=https://finance.yahoo.com/rss/headline?s=AAPL,MSFT,GOOGL,META,AMZN,CRM,NOW,ADBE,ORCL,FIG,PLTR,SNOW response_bytes=16957 encoding=utf-8
+2026-04-25T08:03:28.3566709Z 2026-04-25 08:03:28,356 [INFO] crawler: RSS 수집: 피드당 최대 45건, 합계 20건 (피드 1개) urls=['https://finance.yahoo.com/rss/headline?s=AAPL,MSFT,GOOGL,META,AMZN,CRM,NOW,ADBE,ORCL,FIG,PLTR,SNOW']
+2026-04-25T08:03:28.3878475Z 2026-04-25 08:03:28,387 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:28.3892923Z 2026-04-25 08:03:28,389 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:28.3905446Z 2026-04-25 08:03:28,390 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:28.3915802Z 2026-04-25 08:03:28,391 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:29.3902183Z 2026-04-25 08:03:29,389 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:29.3912550Z 2026-04-25 08:03:29,391 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:29.4456168Z 2026-04-25 08:03:29,445 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:29.4465941Z 2026-04-25 08:03:29,446 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:29.5222251Z 2026-04-25 08:03:29,521 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:29.5230900Z 2026-04-25 08:03:29,522 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:29.5582964Z 2026-04-25 08:03:29,558 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:29.5592325Z 2026-04-25 08:03:29,559 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:30.0080768Z 2026-04-25 08:03:30,007 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:30.0090044Z 2026-04-25 08:03:30,008 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:30.1432621Z 2026-04-25 08:03:30,142 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:30.1442256Z 2026-04-25 08:03:30,144 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:30.2484563Z 2026-04-25 08:03:30,248 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:30.2494368Z 2026-04-25 08:03:30,249 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:30.2830631Z 2026-04-25 08:03:30,282 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:30.2842212Z 2026-04-25 08:03:30,283 [INFO] summarizer: summary_point: 109자 → 명사형 접두 105자: '순다 피차이 알파벳 CEO는 인공지능 인프라 경쟁력을 강화하기 위해 올해 설비투자 규모를 '
+2026-04-25T08:03:30.2843191Z 2026-04-25 08:03:30,284 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:31.0300959Z 2026-04-25 08:03:31,029 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:31.0310316Z 2026-04-25 08:03:31,030 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:31.1380452Z 2026-04-25 08:03:31,137 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:31.1389002Z 2026-04-25 08:03:31,138 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:31.2894007Z 2026-04-25 08:03:31,289 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:31.2904405Z 2026-04-25 08:03:31,290 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:31.3016503Z 2026-04-25 08:03:31,301 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:31.3026529Z 2026-04-25 08:03:31,302 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:31.7337852Z 2026-04-25 08:03:31,733 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:31.7347587Z 2026-04-25 08:03:31,734 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:32.0587392Z 2026-04-25 08:03:32,058 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:32.0597775Z 2026-04-25 08:03:32,059 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:32.3412135Z 2026-04-25 08:03:32,340 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:32.3422422Z 2026-04-25 08:03:32,342 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:32.6168477Z 2026-04-25 08:03:32,616 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:32.6176897Z 2026-04-25 08:03:32,617 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:32.7235773Z 2026-04-25 08:03:32,723 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:32.7244648Z 2026-04-25 08:03:32,724 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:33.4958955Z 2026-04-25 08:03:33,495 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:33.6348926Z 2026-04-25 08:03:33,634 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:33.6361068Z 2026-04-25 08:03:33,635 [INFO] summarizer: summary_point: 106자 → 어구 끝(공백)에서 102자: '미국 증시가 사상 최고치 수준을 기록하는 가운데 애플과 아마존 그리고 구글 등 빅테크 기업'
+2026-04-25T08:03:33.7868508Z 2026-04-25 08:03:33,786 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:35.4032097Z 2026-04-25 08:03:35,402 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:36.0082068Z 2026-04-25 08:03:36,007 [INFO] crawler: RSS: status=200 url=https://finance.yahoo.com/rss/headline?s=NVDA,AMD,TSM,INTC,ASML,LRCX,ARM,QCOM,AVGO,ANET,MU,WDC,STX,SNDK response_bytes=15294 encoding=utf-8
+2026-04-25T08:03:36.0205181Z 2026-04-25 08:03:36,020 [INFO] crawler: RSS 수집: 피드당 최대 45건, 합계 20건 (피드 1개) urls=['https://finance.yahoo.com/rss/headline?s=NVDA,AMD,TSM,INTC,ASML,LRCX,ARM,QCOM,AVGO,ANET,MU,WDC,STX,SNDK']
+2026-04-25T08:03:36.0487408Z 2026-04-25 08:03:36,048 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:36.0500684Z 2026-04-25 08:03:36,049 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:36.0512333Z 2026-04-25 08:03:36,051 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:36.0524433Z 2026-04-25 08:03:36,052 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:37.1349940Z 2026-04-25 08:03:37,134 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:37.1359389Z 2026-04-25 08:03:37,135 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:37.1469095Z 2026-04-25 08:03:37,146 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:37.1479173Z 2026-04-25 08:03:37,147 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:37.2254719Z 2026-04-25 08:03:37,225 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:37.2263792Z 2026-04-25 08:03:37,226 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:37.2284438Z 2026-04-25 08:03:37,228 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:37.2293060Z 2026-04-25 08:03:37,229 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:37.8095355Z 2026-04-25 08:03:37,809 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:37.8106717Z 2026-04-25 08:03:37,810 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:37.9837606Z 2026-04-25 08:03:37,983 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:37.9848417Z 2026-04-25 08:03:37,984 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:38.0663300Z 2026-04-25 08:03:38,066 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:38.0673166Z 2026-04-25 08:03:38,067 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:38.6906673Z 2026-04-25 08:03:38,690 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:38.6916014Z 2026-04-25 08:03:38,691 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:38.7541388Z 2026-04-25 08:03:38,753 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:38.7551878Z 2026-04-25 08:03:38,754 [INFO] summarizer: summary_point: 118자 → 어구 끝(공백)에서 103자: '억만장자 투자자 켄 그리핀이 선정한 8대 인공지능 유망주에 포함될 만큼 엔비디아의 기업 가'
+2026-04-25T08:03:38.7552991Z 2026-04-25 08:03:38,755 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:39.1167189Z 2026-04-25 08:03:39,116 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:39.1179143Z 2026-04-25 08:03:39,117 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:39.3046350Z 2026-04-25 08:03:39,304 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:39.3055803Z 2026-04-25 08:03:39,305 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:39.7471791Z 2026-04-25 08:03:39,746 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:39.7480920Z 2026-04-25 08:03:39,747 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:39.8823939Z 2026-04-25 08:03:39,881 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:39.8834080Z 2026-04-25 08:03:39,883 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:39.9862093Z 2026-04-25 08:03:39,985 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:39.9873169Z 2026-04-25 08:03:39,987 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:40.2541770Z 2026-04-25 08:03:40,253 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:40.2553166Z 2026-04-25 08:03:40,255 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:40.8052716Z 2026-04-25 08:03:40,804 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:41.1392400Z 2026-04-25 08:03:41,138 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:41.1414112Z 2026-04-25 08:03:41,141 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:41.3243932Z 2026-04-25 08:03:41,323 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:41.3253293Z 2026-04-25 08:03:41,325 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:42.2080024Z 2026-04-25 08:03:42,207 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:42.8025151Z 2026-04-25 08:03:42,802 [INFO] crawler: RSS: status=200 url=https://finance.yahoo.com/rss/headline?s=LMT,BA,NOC,RKLB,ASTS,LUNR,PL,BKSY,IRDM,SPCE,TSLA response_bytes=14805 encoding=utf-8
+2026-04-25T08:03:42.8150877Z 2026-04-25 08:03:42,814 [INFO] crawler: RSS 수집: 피드당 최대 45건, 합계 20건 (피드 1개) urls=['https://finance.yahoo.com/rss/headline?s=LMT,BA,NOC,RKLB,ASTS,LUNR,PL,BKSY,IRDM,SPCE,TSLA']
+2026-04-25T08:03:42.8458289Z 2026-04-25 08:03:42,845 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:42.8469339Z 2026-04-25 08:03:42,846 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:42.8481280Z 2026-04-25 08:03:42,847 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:42.8496033Z 2026-04-25 08:03:42,848 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:43.8801634Z 2026-04-25 08:03:43,879 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:43.8810505Z 2026-04-25 08:03:43,880 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:43.9420064Z 2026-04-25 08:03:43,941 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:43.9431824Z 2026-04-25 08:03:43,942 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:44.1052260Z 2026-04-25 08:03:44,104 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:44.1062767Z 2026-04-25 08:03:44,106 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:44.1077051Z 2026-04-25 08:03:44,107 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:44.1084492Z 2026-04-25 08:03:44,108 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:45.0117096Z 2026-04-25 08:03:45,011 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:45.0127657Z 2026-04-25 08:03:45,012 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:45.1427129Z 2026-04-25 08:03:45,142 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:45.1436292Z 2026-04-25 08:03:45,143 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:45.2076180Z 2026-04-25 08:03:45,207 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:45.2087065Z 2026-04-25 08:03:45,208 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:45.2591855Z 2026-04-25 08:03:45,258 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:45.2600681Z 2026-04-25 08:03:45,259 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:46.0829296Z 2026-04-25 08:03:46,082 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:46.0838708Z 2026-04-25 08:03:46,083 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:46.2991068Z 2026-04-25 08:03:46,298 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:46.3000609Z 2026-04-25 08:03:46,299 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:46.4015917Z 2026-04-25 08:03:46,401 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:46.4027237Z 2026-04-25 08:03:46,402 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:47.0280518Z 2026-04-25 08:03:47,027 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:47.0290100Z 2026-04-25 08:03:47,028 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:47.1734201Z 2026-04-25 08:03:47,173 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:47.4867160Z 2026-04-25 08:03:47,486 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:47.4898043Z 2026-04-25 08:03:47,489 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:48.0851873Z 2026-04-25 08:03:48,082 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:48.7225137Z 2026-04-25 08:03:48,722 [INFO] crawler: RSS: status=200 url=https://finance.yahoo.com/rss/headline?s=JPM,GS,MS,BLK,BRK-B,BX,KKR response_bytes=16610 encoding=utf-8
+2026-04-25T08:03:48.7354048Z 2026-04-25 08:03:48,735 [INFO] crawler: RSS 수집: 피드당 최대 45건, 합계 20건 (피드 1개) urls=['https://finance.yahoo.com/rss/headline?s=JPM,GS,MS,BLK,BRK-B,BX,KKR']
+2026-04-25T08:03:48.7652813Z 2026-04-25 08:03:48,765 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:48.7666599Z 2026-04-25 08:03:48,766 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:48.7677989Z 2026-04-25 08:03:48,767 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:48.7691591Z 2026-04-25 08:03:48,768 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:49.9811707Z 2026-04-25 08:03:49,980 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:49.9822170Z 2026-04-25 08:03:49,982 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:50.6431933Z 2026-04-25 08:03:50,642 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:50.6444560Z 2026-04-25 08:03:50,644 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:50.9383380Z 2026-04-25 08:03:50,937 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:50.9392482Z 2026-04-25 08:03:50,939 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:51.2267640Z 2026-04-25 08:03:51,226 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:51.2277865Z 2026-04-25 08:03:51,227 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:51.5900921Z 2026-04-25 08:03:51,589 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:51.5911893Z 2026-04-25 08:03:51,590 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:51.8003105Z 2026-04-25 08:03:51,799 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:51.8014874Z 2026-04-25 08:03:51,801 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:52.0062278Z 2026-04-25 08:03:52,005 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:52.0072529Z 2026-04-25 08:03:52,007 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:52.7595865Z 2026-04-25 08:03:52,759 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:52.7606633Z 2026-04-25 08:03:52,760 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:53.0991213Z 2026-04-25 08:03:53,098 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:53.1001302Z 2026-04-25 08:03:53,099 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:53.1294991Z 2026-04-25 08:03:53,129 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:53.1305755Z 2026-04-25 08:03:53,130 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:53.4319795Z 2026-04-25 08:03:53,431 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:53.4329297Z 2026-04-25 08:03:53,432 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:53.8133958Z 2026-04-25 08:03:53,813 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:53.8144435Z 2026-04-25 08:03:53,814 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:54.2856088Z 2026-04-25 08:03:54,285 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:54.2865971Z 2026-04-25 08:03:54,286 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:54.6126939Z 2026-04-25 08:03:54,612 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:54.6138002Z 2026-04-25 08:03:54,613 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:54.6394250Z 2026-04-25 08:03:54,639 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:54.6403205Z 2026-04-25 08:03:54,640 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:54.8829062Z 2026-04-25 08:03:54,882 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:54.8838077Z 2026-04-25 08:03:54,883 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-04-25T08:03:55.2609941Z 2026-04-25 08:03:55,260 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:55.5352738Z 2026-04-25 08:03:55,534 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:55.5855829Z 2026-04-25 08:03:55,585 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:55.6426961Z 2026-04-25 08:03:55,642 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent "HTTP/1.1 200 OK"
+2026-04-25T08:03:56.1182791Z 2026-04-25 08:03:56,118 [INFO] firebase_client: push_schedule 저장: feed_20260425_1800 (news)
+2026-04-25T08:03:56.1183476Z 2026-04-25 08:03:56,118 [INFO] pipeline: 파이프라인 종료 section=news, 소요 142.8초
+2026-04-25T08:03:56.3298731Z 2026-04-25 08:03:56,329 [INFO] firebase_client: pipeline_logs 저장: news_20260425_1701 (news)
+2026-04-25T08:03:56.4881077Z Post job cleanup.
+2026-04-25T08:03:56.6514180Z Post job cleanup.
+2026-04-25T08:03:56.7466932Z [command]/usr/bin/git version
+2026-04-25T08:03:56.7504460Z git version 2.53.0
+2026-04-25T08:03:56.7549416Z Temporarily overriding HOME='/home/runner/work/_temp/6c5aec03-19d1-4ca7-96b2-c971e0f236a7' before making global git config changes
+2026-04-25T08:03:56.7551142Z Adding repository directory to the temporary git global config as a safe directory
+2026-04-25T08:03:56.7565486Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/sapiens/sapiens
+2026-04-25T08:03:56.7600110Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-04-25T08:03:56.7632089Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-04-25T08:03:56.7855943Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-04-25T08:03:56.7879278Z http.https://github.com/.extraheader
+2026-04-25T08:03:56.7892632Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-04-25T08:03:56.7924286Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-04-25T08:03:56.8144829Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-04-25T08:03:56.8179333Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-04-25T08:03:56.8519059Z Cleaning up orphan processes
+2026-04-25T08:03:56.8905215Z ##[warning]Node.js 20 actions are deprecated. The following actions are running on Node.js 20 and may not work as expected: actions/checkout@v4, actions/setup-python@v5. Actions will be forced to run with Node.js 24 by default starting June 2nd, 2026. Node.js 20 will be removed from the runner on September 16th, 2026. Please check if updated versions of these actions are available that support Node.js 24. To opt into Node.js 24 now, set the FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true environment variable on the runner or in your workflow file. Once Node.js 24 becomes the default, you can temporarily opt out by setting ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

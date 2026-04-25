@@ -1,0 +1,4 @@
+2026-04-25T08:01:02.0230000Z Evaluating news_16_40_kst.if
+2026-04-25T08:01:02.0230000Z Evaluating: (success() && (((github.event_name == 'schedule') && (github.event.schedule == '40 7 * * *'))))
+2026-04-25T08:01:02.0230000Z Expanded: (true && (('workflow_dispatch' == 'schedule') && (github.event.schedule == '40 7 * * *')))
+2026-04-25T08:01:02.0230000Z Result: false
