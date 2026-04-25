@@ -30,9 +30,12 @@ object Spacing {
     val space44 = 44.dp
     val space48 = 48.dp
     val space52 = 52.dp
+    val space54 = 54.dp
     val space56 = 56.dp
     val space64 = 64.dp
     val space76 = 76.dp
+    /** 뉴스 본문 시작: 상단에서 84px(@1x). */
+    val space84 = 84.dp
     /** 국내 브리핑 상단 페이저 고정 높이. */
     val space332 = 332.dp
 }

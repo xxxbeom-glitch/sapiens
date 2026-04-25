@@ -4,9 +4,13 @@ import android.app.Application
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -15,7 +19,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -122,9 +125,13 @@ fun MainScreen(
         modifier = Modifier.fillMaxSize(),
         containerColor = Background,
         topBar = {
-            MainTopAppBar(
-                title = tabs[selectedTabIndex].label,
-            )
+            if (selectedTabIndex == 0) {
+                Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars))
+            } else {
+                MainTopAppBar(
+                    title = tabs[selectedTabIndex].label,
+                )
+            }
         },
         bottomBar = {
             BottomNavigationBar(

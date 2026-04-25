@@ -2,6 +2,8 @@ package com.sapiens.app.data.repository
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.text.Html
+import android.util.Xml
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.MarketDirection
 import com.sapiens.app.data.model.MarketIndex
@@ -13,6 +15,7 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URI
 import java.net.URLEncoder
 import java.text.DecimalFormat
 import java.util.Locale
@@ -24,6 +27,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.Dispatchers
 import org.json.JSONArray
 import org.json.JSONObject
+import org.xmlpull.v1.XmlPullParser
 
 /** Firestore `news` 문서 구독 시 탭당(국내·미국·AI) UI에 올릴 엄선 기사 최대 개수. */
 private const val NEWS_FEED_MAX_ARTICLES = 15
@@ -62,6 +66,10 @@ class NewsRepositoryImpl(
             }
         awaitClose { reg.remove() }
     }
+
+    override fun getRssFeed(url: String): Flow<List<Article>> = flow {
+        emit(fetchRssArticles(url).take(NEWS_FEED_MAX_ARTICLES))
+    }.flowOn(Dispatchers.IO)
 
     override fun getMarketThemes(): Flow<List<MarketTheme>> = callbackFlow {
         val coll = firestore.collection(COLLECTION_MARKET)
@@ -211,6 +219,98 @@ class NewsRepositoryImpl(
             null
         } finally {
             conn.disconnect()
+        }
+    }
+
+    private fun fetchRssArticles(url: String): List<Article> {
+        val xml = requestText(url)?.takeIf { it.isNotBlank() } ?: return emptyList()
+        val sourceName = rssSourceName(url)
+        val parser = Xml.newPullParser().apply {
+            setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
+            setInput(xml.reader())
+        }
+        val out = mutableListOf<Article>()
+        var event = parser.eventType
+        var inItem = false
+        var title = ""
+        var link = ""
+        var description = ""
+        var pubDate = ""
+        while (event != XmlPullParser.END_DOCUMENT) {
+            when (event) {
+                XmlPullParser.START_TAG -> {
+                    when (parser.name) {
+                        "item" -> {
+                            inItem = true
+                            title = ""
+                            link = ""
+                            description = ""
+                            pubDate = ""
+                        }
+                        "title" -> if (inItem) title = parser.nextText().orEmpty()
+                        "link" -> if (inItem) link = parser.nextText().orEmpty()
+                        "description" -> if (inItem) description = parser.nextText().orEmpty()
+                        "pubDate" -> if (inItem) pubDate = parser.nextText().orEmpty()
+                    }
+                }
+                XmlPullParser.END_TAG -> {
+                    if (parser.name == "item" && inItem) {
+                        inItem = false
+                        val headline = title.trim()
+                        if (headline.isNotBlank()) {
+                            out += Article(
+                                source = sourceName,
+                                headline = headline,
+                                summary = description.toPlainText(),
+                                time = pubDate.trim(),
+                                url = link.trim(),
+                            )
+                        }
+                    }
+                }
+            }
+            event = parser.next()
+        }
+        return out
+    }
+
+    private fun requestText(
+        url: String,
+        headers: Map<String, String> = emptyMap()
+    ): String? {
+        val conn = (URL(url).openConnection() as? HttpURLConnection) ?: return null
+        return try {
+            conn.requestMethod = "GET"
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 10_000
+            conn.setRequestProperty("User-Agent", USER_AGENT)
+            headers.forEach { (k, v) -> conn.setRequestProperty(k, v) }
+            conn.inputStream.bufferedReader().use { it.readText() }
+        } catch (_: Exception) {
+            null
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    private fun String.toPlainText(): String {
+        val raw = this.trim()
+        if (raw.isBlank()) return ""
+        return runCatching {
+            Html.fromHtml(raw, Html.FROM_HTML_MODE_LEGACY).toString().trim()
+        }.getOrDefault(raw)
+    }
+
+    private fun rssSourceName(url: String): String {
+        val host = runCatching { URI(url).host.orEmpty().lowercase(Locale.US) }.getOrDefault("")
+        return when {
+            host.contains("yahoo") -> "Yahoo Finance"
+            host.contains("yna.co.kr") -> "연합뉴스"
+            host.contains("mk.co.kr") -> "매일경제"
+            host.contains("hankyung.com") -> "한국경제"
+            host.contains("sbs.co.kr") -> "SBS"
+            host.isNotBlank() -> host
+            else -> "RSS"
         }
     }
 
