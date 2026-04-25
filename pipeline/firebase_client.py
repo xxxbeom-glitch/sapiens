@@ -7,6 +7,7 @@ import base64
 import json
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Any, List
 
 import firebase_admin
@@ -16,6 +17,9 @@ from google.cloud.firestore import DELETE_FIELD, SERVER_TIMESTAMP
 logger = logging.getLogger(__name__)
 
 _db: firestore.Client | None = None
+
+# Firestore TTL(자동 삭제)용 — `expireAt`이 현재 시각보다 과거면 TTL 정책/정리 작업으로 삭제 가능.
+_NEWS_DOC_TTL_HOURS = 48
 
 # 뉴스 피드 문서(단일 문서 + articles 배열). 국내 탭 3분류: domestic/global market + AI.
 _NEWS_FEED_DOC_IDS = (
@@ -307,11 +311,34 @@ def save_news_feed(articles: List[dict[str, Any]], feed_type: str) -> None:
             {
                 "articles": articles,
                 "updated_at": SERVER_TIMESTAMP,
+                # Firestore TTL 정책(또는 파이프라인 정리)이 이 필드를 기준으로 문서를 자동 삭제.
+                "expireAt": datetime.now(timezone.utc) + timedelta(hours=_NEWS_DOC_TTL_HOURS),
             },
             merge=False,
         )
     except Exception as e:
         logger.exception("save_news_feed 실패 [%s]: %s", feed_type, e)
+
+
+def cleanup_expired_news_docs() -> None:
+    """
+    Firestore TTL이 켜져있으면 expireAt 기반 자동 삭제가 수행된다.
+    TTL이 없거나 지연될 수 있어, 파이프라인에서도 보조적으로 만료 문서를 정리한다.
+    """
+    try:
+        db = _get_db()
+        now = datetime.now(timezone.utc)
+        q = db.collection("news").where("expireAt", "<", now)
+        expired = list(q.stream())
+        for snap in expired:
+            try:
+                snap.reference.delete()
+            except Exception as e:
+                logger.warning("만료 news 문서 삭제 실패 %s: %s", snap.reference.path, e)
+        if expired:
+            logger.info("만료 news 문서 정리: %d건", len(expired))
+    except Exception as e:
+        logger.exception("cleanup_expired_news_docs 실패(무시): %s", e)
 
 
 _SETTINGS = "settings"

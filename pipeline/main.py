@@ -94,6 +94,12 @@ def _run_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
     ai_cfg = firebase_client.get_ai_config()
     summarizer.configure_ai(selected_model=str(ai_cfg.get("selected_model", "gemini")))
 
+    # TTL 보조 정리(48시간 만료). Firestore TTL이 켜져 있어도 지연될 수 있어 선제 정리.
+    try:
+        firebase_client.cleanup_expired_news_docs()
+    except Exception:
+        pass
+
     domestic = crawler.crawl_domestic()
     domestic["domestic_market"] = crawler.dedupe_items(domestic["domestic_market"])
     domestic["global_market"] = crawler.dedupe_items(domestic["global_market"])
@@ -121,6 +127,9 @@ def _run_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
 
     # --- 헤드라인 화면(한국/미국)용: 카테고리별 RSS → 요약/번역 → 저장 ---
     # Firestore 문서 ID는 앱에서 그대로 구독한다.
+    TARGET_ARTICLE_COUNT = 15
+    BACKFILL_STEP_HOURS = 168.0  # 1주
+    BACKFILL_MAX_AGE_HOURS = 168.0 * 4  # 최대 4주까지 확장
     KR_RSS_URLS = [
         "https://www.yna.co.kr/rss/market.xml",
         "https://www.mk.co.kr/rss/50200011/",
@@ -258,10 +267,54 @@ def _run_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
             return True
         return False
 
+    def _sort_newest_first(rows: list[dict]) -> list[dict]:
+        # published_at은 crawler에서 UTC ISO 문자열로 들어간다(없으면 빈 문자열).
+        return sorted(rows, key=lambda r: str(r.get("published_at") or ""), reverse=True)
+
+    def _backfill_pick(
+        *,
+        urls: list[str],
+        keywords: list[str] | None,
+        max_items_per_feed: int,
+        attach_mk_hankyung_body: bool,
+    ) -> list[dict]:
+        """
+        1주 → 2주 → ... 로 max_age_hours 를 늘리며 수집해,
+        (키워드/광고·주관 필터 적용 후) TARGET_ARTICLE_COUNT 개를 채우도록 시도.
+        """
+        collected: list[dict] = []
+        age = BACKFILL_STEP_HOURS
+        while True:
+            rows = crawler.crawl_rss_headline_urls(
+                urls,
+                max_items_per_feed=max_items_per_feed,
+                max_age_hours=age,
+                attach_mk_hankyung_body=attach_mk_hankyung_body,
+            )
+            collected = crawler.dedupe_items(collected + rows)
+
+            picked = collected
+            if keywords is not None:
+                picked = _kw_match(picked, keywords)
+            picked = [r for r in picked if not _looks_like_ad_or_opinion(r)]
+            picked = _sort_newest_first(picked)
+
+            if len(picked) >= TARGET_ARTICLE_COUNT:
+                return picked[:TARGET_ARTICLE_COUNT]
+            if age >= BACKFILL_MAX_AGE_HOURS:
+                return picked
+            age += BACKFILL_STEP_HOURS
+
     kr_all = crawler.crawl_rss_headline_urls(KR_RSS_URLS, max_items_per_feed=20)
     kr_all = crawler.dedupe_items(kr_all)
     for doc_id, keywords in kr_categories:
-        picked = [r for r in _kw_match(kr_all, keywords) if not _looks_like_ad_or_opinion(r)]
+        # 1주 내에서 부족하면 2주/3주...로 확장(backfill)해서 목표 개수 채우기 시도.
+        picked = _backfill_pick(
+            urls=KR_RSS_URLS,
+            keywords=keywords,
+            max_items_per_feed=20,
+            attach_mk_hankyung_body=True,
+        )
         fs: list[dict] = []
         for row in summarizer.summarize_batch(picked, news_feed="domestic_market"):
             ai = row.pop("_ai", None)
@@ -289,8 +342,12 @@ def _run_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
     ]
 
     for doc_id, url in us_categories:
-        rows = crawler.crawl_rss_headline_urls([url], max_items_per_feed=45, attach_mk_hankyung_body=False)
-        rows = crawler.dedupe_items(rows)
+        rows = _backfill_pick(
+            urls=[url],
+            keywords=None,
+            max_items_per_feed=45,
+            attach_mk_hankyung_body=False,
+        )
         fs: list[dict] = []
         for row in summarizer.summarize_batch(rows, news_feed="global_market"):
             ai = row.pop("_ai", None)
