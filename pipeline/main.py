@@ -335,12 +335,6 @@ def _run_pipeline_full(crawler: Any, firebase_client: Any, summarizer: Any) -> N
             fs_ai_issue.append(summarizer.merge_to_firestore_article(row, ai))
 
     if _market_pipeline_enabled():
-        try:
-            fs_for_report: list[dict] = list(fs_global_market) + list(fs_ai_issue)
-            report = summarizer.generate_market_report(indicators, fs_for_report)
-            logger.info("시황 요약:\n%s", report.get("report", "")[:500])
-        except Exception as e:
-            logger.warning("시황 요약 생성 실패: %s", e)
         firebase_client.save_market_indicators(indicators)
         firebase_client.save_market_themes(naver_themes)
         firebase_client.save_market_industries(naver_upjong)
