@@ -53,6 +53,10 @@ SYSTEM = (
 _HANGUL_RE = re.compile(r"[가-힣]")
 _LATIN_RE = re.compile(r"[A-Za-z]")
 
+# 기사 summary_points: 앱/프롬프트·후처리 동기화 (초과 시 잘라 강제).
+SUMMARY_POINT_MIN_LEN = 30
+SUMMARY_POINT_MAX_LEN = 70
+
 # summarize_article JSON category — 국내·해외 동일. 앱 ChipColors·프롬프트와 동기화.
 _CANONICAL_ARTICLE_CATEGORIES: frozenset[str] = frozenset(
     {
@@ -473,6 +477,34 @@ def _validate_summarize_article_shape(data: dict[str, Any]) -> None:
         raise ValueError("summary_points must be a list")
 
 
+def _clamp_summary_point(
+    text: str,
+    *,
+    max_len: int = SUMMARY_POINT_MAX_LEN,
+) -> str:
+    """
+    요약 항목 길이(공백 포함)를 max_len 이하로 맞춤. 초과 시 최대한 자연스러운 경계(공백·쉼표 등)에서 끊음.
+    """
+    s = (text or "").strip()
+    if not s or len(s) <= max_len:
+        return s
+    chunk = s[:max_len]
+    for sep in (" ", "·", ", ", ",", "、", ")", "]", "…", ".", "!", "?"):
+        j = chunk.rfind(sep)
+        if j < 16:
+            continue
+        cut = chunk[: j + 1].rstrip()
+        if cut:
+            return cut
+    logger.info(
+        "summary_point %d자 초과로 %d자까지 절단(문장부호 없음), 앞 50자=%r",
+        len(s),
+        max_len,
+        s[:50],
+    )
+    return chunk
+
+
 def _postprocess_summarize_article_dict(
     data: dict[str, Any],
     max_points_keep: int,
@@ -499,9 +531,15 @@ def _postprocess_summarize_article_dict(
     pts = out["summary_points"]
     if not isinstance(pts, list):
         raise ValueError("summary_points must be a list")
-    out["summary_points"] = [
-        str(p).strip() for p in pts if str(p).strip()
-    ][:max_points_keep]
+    cleaned: list[str] = []
+    for p in pts:
+        t = str(p).strip()
+        if not t:
+            continue
+        t2 = _clamp_summary_point(t)
+        if t2:
+            cleaned.append(t2)
+    out["summary_points"] = cleaned[:max_points_keep]
     return out
 
 
@@ -602,7 +640,9 @@ def summarize_article(
         f"{foreign_rss_extra}"
         f"{_SUMMARIZE_ARTICLE_CATEGORY_BLOCK}"
         f"summary_points는 기사 핵심을 빠짐없이 담은 문자열 배열로 작성하세요.\n"
-        f"반드시 2개 이상 4개 이하로 작성하세요. 각 포인트는 30자 이상 70자 이내로 작성하세요.\n"
+        f"반드시 2개 이상 4개 이하로 작성하세요. "
+        f"각 포인트는 {SUMMARY_POINT_MIN_LEN}자 이상 {SUMMARY_POINT_MAX_LEN}자 이하(공백·구두점 포함)여야 합니다. "
+        f"초과 시 서버가 잘라내며 끊김이 생길 수 있으니 반드시 {SUMMARY_POINT_MAX_LEN}자를 넘기지 말 것.\n"
         f"중요한 사실·수치·배경·영향을 누락하지 말고, 내용을 함축하거나 생략하지 마세요.\n"
         f"구체성 규칙(headline·summary_points 모두 적용):\n"
         f"{proper_noun_rule}"
