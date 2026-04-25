@@ -38,7 +38,9 @@ REQUEST_TIMEOUT = 20
 MAX_PER_SECTION = 10
 MAX_TOSS_NEWS = 20
 SUMMARY_CHARS = 200
-ARTICLE_BODY_MAX_CHARS = 2000
+# 요약기는 가능한 한 원문 기반으로. RSS description만으로는 종목/수치/조건이 유실되는 경우가 많다.
+# 단, 과도한 토큰을 막기 위해 도메인별 상한을 둔다.
+ARTICLE_BODY_MAX_CHARS = 6000
 # Yahoo Finance 같은 해외 기사(리스트형/본문 뒤쪽에 핵심 정보가 있는 경우)용: 더 긴 본문을 요약기에 전달
 YAHOO_ARTICLE_BODY_MAX_CHARS = 8000
 # 수집 제외: 기사 **제목**에 아래 대괄호를 포함한 문자열이 있으면 수집하지 않음
@@ -111,6 +113,113 @@ def _element_to_plain_article_text(root: Any) -> str:
         return text[:ARTICLE_BODY_MAX_CHARS]
     except Exception:
         return ""
+
+
+def _plain_text_from_selectors(html: str, selectors: tuple[str, ...], *, max_chars: int) -> str:
+    """공통: 셀렉터로 본문 노드 찾고 텍스트 정리."""
+    if not html:
+        return ""
+    try:
+        soup = BeautifulSoup(html, "lxml")
+    except Exception:
+        return ""
+    try:
+        for tag in soup.select("script, style, noscript, iframe, nav, footer"):
+            tag.decompose()
+    except Exception:
+        pass
+    for sel in selectors:
+        node = soup.select_one(sel)
+        if not node:
+            continue
+        try:
+            for rem in node.select("script, style, noscript, iframe, .ad, .advertisement"):
+                rem.decompose()
+        except Exception:
+            pass
+        text = node.get_text(" ", strip=True)
+        text = re.sub(r"\s+", " ", text).strip()
+        if len(text) >= 140:
+            return text[:max_chars]
+    return ""
+
+
+def _plain_text_from_paragraphs(html: str, *, max_chars: int) -> str:
+    """마지막 폴백: p를 모아 가장 흔한 기사 본문 형태로 복원."""
+    if not html:
+        return ""
+    try:
+        soup = BeautifulSoup(html, "lxml")
+    except Exception:
+        return ""
+    try:
+        for tag in soup.select("script, style, noscript, iframe, nav, footer"):
+            tag.decompose()
+    except Exception:
+        pass
+    parts: list[str] = []
+    for p in soup.select("article p, div p, p"):
+        t = (p.get_text(" ", strip=True) or "").strip()
+        if not t:
+            continue
+        # 너무 짧은 조각(버튼/캡션 등) 제외
+        if len(t) < 25 and not re.search(r"\d", t):
+            continue
+        parts.append(t)
+        if sum(len(x) for x in parts) >= max_chars * 1.2:
+            break
+    text = re.sub(r"\s+", " ", " ".join(parts)).strip()
+    if len(text) >= 220:
+        return text[:max_chars]
+    return ""
+
+
+YNA_ARTICLE_BODY_SELECTORS = (
+    "div#articleWrap div.article-txt",
+    "div#articleWrap div.story-news",
+    "div#articleWrap",
+    "article",
+)
+SBS_ARTICLE_BODY_SELECTORS = (
+    "div#newsview .text_area",
+    "div#newsview",
+    "article",
+)
+CHOSUN_ARTICLE_BODY_SELECTORS = (
+    "div.article-body",
+    "section.article-body",
+    "article",
+)
+
+
+def _fetch_domestic_rss_article_body(article_url: str) -> str:
+    """
+    국내 RSS(연합/방송/신문 등) 기사 본문 텍스트 추출. 실패 시 빈 문자열.
+    - MK/한경은 기존 전용 파서(_fetch_mk_hankyung_article_body)를 우선 사용.
+    - 그 외는 도메인별 셀렉터 + p 폴백을 사용.
+    """
+    u = (article_url or "").strip()
+    if not u:
+        return ""
+    low = u.lower()
+    if "mk.co.kr" in low or "hankyung.com" in low:
+        return _fetch_mk_hankyung_article_body(u)
+    if "finance.yahoo.com" in low:
+        return _fetch_yahoo_finance_article_body(u)
+    html = _fetch(u)
+    if not html:
+        return ""
+    if "yna.co.kr" in low:
+        t = _plain_text_from_selectors(html, YNA_ARTICLE_BODY_SELECTORS, max_chars=ARTICLE_BODY_MAX_CHARS)
+        return t or _plain_text_from_paragraphs(html, max_chars=ARTICLE_BODY_MAX_CHARS)
+    if "news.sbs.co.kr" in low or "sbs.co.kr" in low:
+        t = _plain_text_from_selectors(html, SBS_ARTICLE_BODY_SELECTORS, max_chars=ARTICLE_BODY_MAX_CHARS)
+        return t or _plain_text_from_paragraphs(html, max_chars=ARTICLE_BODY_MAX_CHARS)
+    if "chosun.com" in low:
+        t = _plain_text_from_selectors(html, CHOSUN_ARTICLE_BODY_SELECTORS, max_chars=ARTICLE_BODY_MAX_CHARS)
+        return t or _plain_text_from_paragraphs(html, max_chars=ARTICLE_BODY_MAX_CHARS)
+    # 기타: p 폴백만(너무 공격적으로 긁으면 잡음 증가)
+    return _plain_text_from_paragraphs(html, max_chars=ARTICLE_BODY_MAX_CHARS)
 
 
 def _naver_finance_news_read_to_n_news_article_url(url: str) -> str:
@@ -1196,6 +1305,37 @@ def _attach_mk_hankyung_bodies(rows: list[dict[str, Any]], pause_sec: float = 0.
         time.sleep(pause_sec)
 
 
+def _attach_domestic_rss_bodies(
+    rows: list[dict[str, Any]],
+    *,
+    max_n: int = 18,
+    pause_sec: float = 0.08,
+) -> None:
+    """
+    국내 RSS 기사들에 대해 본문을 가능한 한 채운다.
+    너무 많은 HTTP 요청으로 느려지는 것을 막기 위해 max_n(최신 우선)을 둔다.
+    """
+    if not rows:
+        return
+    taken = 0
+    for row in rows:
+        if taken >= max_n:
+            break
+        if (row.get("body") or "").strip():
+            continue
+        u = (row.get("url") or "").strip()
+        if not u:
+            continue
+        try:
+            body = _fetch_domestic_rss_article_body(u)
+            if body:
+                row["body"] = body
+                taken += 1
+        except Exception as e:
+            logger.debug("국내 RSS 본문 수집 스킵: %s %s", u[:90], e)
+        time.sleep(pause_sec)
+
+
 def crawl_rss_domestic_kr_market() -> list[dict[str, Any]]:
     """뉴스 탭 국내 — 국내 증시(실시간 RSS 풀)."""
     rows = _crawl_rss_feed_urls(
@@ -1204,6 +1344,7 @@ def crawl_rss_domestic_kr_market() -> list[dict[str, Any]]:
         allow_missing_published=True,
     )
     _attach_mk_hankyung_bodies(rows)
+    _attach_domestic_rss_bodies(rows, max_n=12)
     return rows
 
 
@@ -1219,6 +1360,7 @@ def crawl_rss_kr_headline_leg(urls: list[str]) -> list[dict[str, Any]]:
         allow_missing_published=True,
     )
     _attach_mk_hankyung_bodies(rows)
+    _attach_domestic_rss_bodies(rows, max_n=18)
     pool = _dedupe_domestic_pooled_preserve_order([dict(r) for r in rows])
     return _sort_domestic_rows_by_published_desc(pool)[:RSS_DOMESTIC_NEWS_MAX_ITEMS]
 
