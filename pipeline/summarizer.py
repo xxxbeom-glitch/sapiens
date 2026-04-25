@@ -92,6 +92,55 @@ def _korean_bullet_looks_ended(s: str) -> bool:
     return bool(t) and t[-1] in (".", "!", "?", "…", "‥", "。．")
 
 
+# 종결(다.)이 앞 70자에 없을 때, '절·어구' 끊김(연결어미·쉼표). min_j: rfind 인덱스 하한(너무 앞에서 자르지 않음)
+_CLAUSE_CUT_TOKENS: tuple[tuple[str, int], ...] = (
+    ("하며", 8),
+    ("이며", 8),
+    ("라며", 8),
+    ("거나", 5),
+    ("는데", 4),
+    ("다가", 4),
+    ("으면", 4),
+    ("으나", 4),
+    (", ", 18),
+    (",", 20),
+    ("·", 16),
+    ("、", 16),
+)
+
+
+def _clip_at_last_space_before_max(s0: str, max_len: int) -> str | None:
+    """[min_tok, max) 구간의 마지막 공백(어구)에서 자름. 단어/자모 중간 절단을 줄이기 위함."""
+    if max_len < 2:
+        return None
+    win = s0[:max_len]
+    for lo in (40, 32, 24, 18):
+        if lo >= max_len - 1:
+            continue
+        j = win.rfind(" ", lo, max_len)
+        if j >= lo:
+            t = s0[:j].rstrip()
+            if len(t) >= 20:
+                return t
+    return None
+
+
+def _clip_at_subordinate_or_punct(
+    s0: str, win: str, max_len: int
+) -> str | None:
+    best_e = 0
+    for tok, min_j in _CLAUSE_CUT_TOKENS:
+        j = win.rfind(tok)
+        if j < min_j:
+            continue
+        end = j + len(tok)
+        if 20 <= end <= max_len and end > best_e:
+            best_e = end
+    if best_e < 20:
+        return None
+    return s0[:best_e].rstrip()
+
+
 def _finish_summary_point(
     text: str,
     *,
@@ -151,8 +200,26 @@ def _finish_summary_point(
                 t[:50],
             )
             return t
-    logger.warning(
-        "summary_point: %d자, 70자에서 완결 어미/구절끝을 못 잡아 하드 절단: 앞 55자=%r",
+    t2 = _clip_at_subordinate_or_punct(s0, win, max_len)
+    if t2 and 20 <= len(t2) <= max_len:
+        logger.info(
+            "summary_point: %d자 → 연결/쉼표·가운뎃점에서 %d자: %r",
+            len(s0),
+            len(t2),
+            t2[:50],
+        )
+        return t2
+    t3 = _clip_at_last_space_before_max(s0, max_len)
+    if t3 and 20 <= len(t3) <= max_len:
+        logger.info(
+            "summary_point: %d자 → 어구 끝(공백)에서 %d자: %r",
+            len(s0),
+            len(t3),
+            t3[:50],
+        )
+        return t3
+    logger.info(
+        "summary_point: %d자, 70자에서 구절·공백 없이 하드 절단(앞 55자=%r)",
         len(s0),
         s0[:55],
     )
