@@ -13,6 +13,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -56,6 +57,7 @@ import com.sapiens.app.ui.theme.CardPaddingHorizontal
 import com.sapiens.app.ui.theme.RowVertical
 import com.sapiens.app.ui.theme.Spacing
 import com.sapiens.app.ui.theme.Primary
+import com.sapiens.app.ui.theme.SapiensTextStyles
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
@@ -128,8 +130,30 @@ fun MyScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(top = RowVertical)
+                // 뉴스 헤더와 동일한 시작 위치/타이포를 사용
+                .padding(top = Spacing.space36)
         ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = Spacing.space20,
+                        end = Spacing.space20,
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "#마이",
+                    modifier = Modifier.weight(1f),
+                    color = TextPrimary,
+                    style = SapiensTextStyles.todayHeadlineTitle,
+                    maxLines = 2,
+                )
+            }
+
+            Spacer(Modifier.height(Spacing.space28))
+
             AccountMenuRow(
                 cardHeight = MySettingsMenuCardHeight,
                 subtitle = authUser?.email?.let { email -> "$email 로그인 됨" } ?: "로그인이 필요합니다",

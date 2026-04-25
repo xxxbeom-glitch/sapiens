@@ -125,7 +125,8 @@ fun MainScreen(
         modifier = Modifier.fillMaxSize(),
         containerColor = Background,
         topBar = {
-            if (selectedTabIndex == 0) {
+            val label = tabs.getOrNull(selectedTabIndex)?.label.orEmpty()
+            if (label == "뉴스" || label == "마이") {
                 Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars))
             } else {
                 MainTopAppBar(

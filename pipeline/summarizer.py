@@ -358,6 +358,69 @@ def _call_news_llm(user_content: str) -> str:
     return str(_call_gemini(user_content) or "").strip()
 
 
+def classify_kr_headline_bucket(
+    row: dict[str, Any],
+) -> tuple[Literal["domestic_stock", "domestic_economy", "none"], float]:
+    """
+    RSS 한 줄(제목·요약·가능하면 본문)만 보고, 국내 '증시' / '경제' 중 어디에 더 맞는지 판정.
+    키워드 누락(표기/동음이의어 등) 보강용 — 호출 측에서 budget 을 둡니다.
+    """
+    if not _ai_any_news_enabled():
+        return "none", 0.0
+
+    title = str(row.get("title") or "").strip()
+    summary = str(row.get("summary") or "").strip()
+    body = str(row.get("body") or "").strip()
+    if len(body) > 6000:
+        body = body[:6000] + "…"
+
+    if not (title or summary or body):
+        return "none", 0.0
+
+    user = (
+        "아래 기사(제목+요약+가능한 본문)를 읽고, '국내 증시'와 '국내 경제(거시/정책/물가/고용/무역/환율/부동산정책/실물경제)'\n"
+        "중에서 더 잘 맞는 한 가지로 분류하세요.\n"
+        "- domestic_stock: 상장기업, 실적, 목표가, 밸류에이션, 국내 주식/지수/ETF, 증권·거래제도, 공매도/공시 등 '주식·증시' 중심\n"
+        "- domestic_economy: 한은/금리, CPI/GDP, 고용, 재정, 세금, 대외/무역, 가계/기업/부채, 정책(부동산/규제 포함) 등 '경제' 중심\n"
+        "둘 다에 해당해도, 더 강한 축을 하나만 고르세요. 뉴스가 둘 다에 해당 없으면 none.\n\n"
+        f"title:\n{title}\n\nsummary:\n{summary}\n\nbody:\n{body}\n\n"
+        "반드시 JSON 한 개만(코드펜스/주석/설명 없이) 출력:\n"
+        '{"bucket":"domestic_stock"|"domestic_economy"|"none","confidence":0.0~1.0}'
+    )
+
+    raw = str(_call_gemini(user, temperature=0.15) or "").strip()
+    if not raw:
+        return "none", 0.0
+    # 모델이 ```json``` 이나 잡담을 앞/뒤에 붙이는 경우 — 마지막 {..} 쪽을 우선 파싱
+    try:
+        data = _require_json_dict(raw)
+    except Exception:
+        m = re.search(r"\{[\s\S]*\}\s*$", raw)
+        if not m:
+            return "none", 0.0
+        try:
+            data = json.loads(m.group(0))
+        except Exception:
+            return "none", 0.0
+
+    b = str(data.get("bucket", "")).strip().lower()
+    if b in ("stock", "kr_stock", "korea_stock", "kospi", "kosdaq"):
+        b = "domestic_stock"
+    if b in ("economy", "macro", "korea_economy"):
+        b = "domestic_economy"
+    if b not in ("domestic_stock", "domestic_economy", "none"):
+        b = "none"
+    try:
+        conf = float(data.get("confidence", 0.0))
+    except (TypeError, ValueError):
+        conf = 0.0
+    if conf < 0.0:
+        conf = 0.0
+    if conf > 1.0:
+        conf = 1.0
+    return b, conf  # type: ignore[return-value]
+
+
 def _get_gemini_client() -> Any:
     global _gemini_client
     if _gemini_client is not None:
@@ -369,7 +432,7 @@ def _get_gemini_client() -> Any:
     return _gemini_client
 
 
-def _call_gemini(user_content: str) -> str:
+def _call_gemini(user_content: str, *, temperature: float = 0.35) -> str:
     try:
         client = _get_gemini_client()
         model_id = _gemini_model_id()
@@ -379,7 +442,7 @@ def _call_gemini(user_content: str) -> str:
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM,
                 max_output_tokens=8192,
-                temperature=0.35,
+                temperature=temperature,
             ),
         )
         try:

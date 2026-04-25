@@ -20,7 +20,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any, Tuple
+from typing import Any, Literal, Tuple
 
 logger = logging.getLogger("pipeline")
 
@@ -130,6 +130,18 @@ def _run_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
     TARGET_ARTICLE_COUNT = 15
     BACKFILL_STEP_HOURS = 168.0  # 1주
     BACKFILL_MAX_AGE_HOURS = 168.0 * 4  # 최대 4주까지 확장
+    kr_ai_topup_env = (os.environ.get("SAPIENS_KR_AI_TOPUP") or "1").strip().lower()
+    KR_AI_TOPUP = kr_ai_topup_env not in ("0", "false", "no", "off")
+    try:
+        KR_AI_TOPUP_MAX = max(0, int((os.environ.get("SAPIENS_KR_AI_TOPUP_MAX") or "80").strip() or "80"))
+    except ValueError:
+        KR_AI_TOPUP_MAX = 80
+    try:
+        KR_AI_TOPUP_MIN_CONF = float(
+            (os.environ.get("SAPIENS_KR_AI_TOPUP_MIN_CONF") or "0.5").strip() or "0.5"
+        )
+    except ValueError:
+        KR_AI_TOPUP_MIN_CONF = 0.5
     KR_RSS_URLS = [
         "https://www.yna.co.kr/rss/market.xml",
         "https://www.mk.co.kr/rss/50200011/",
@@ -271,8 +283,74 @@ def _run_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
         # published_at은 crawler에서 UTC ISO 문자열로 들어간다(없으면 빈 문자열).
         return sorted(rows, key=lambda r: str(r.get("published_at") or ""), reverse=True)
 
+    def _row_key(row: dict) -> str:
+        u = str(row.get("url") or "").strip()
+        return u or f"title:{str(row.get('title') or '')[:120]}"
+
+    def _merge_newest_dedup(base: list[dict], add: list[dict]) -> list[dict]:
+        seen: set[str] = set()
+        out: list[dict] = []
+        for r in _sort_newest_first(base + add):
+            k = _row_key(r)
+            if k in seen:
+                continue
+            seen.add(k)
+            out.append(r)
+        return out
+
+    def _ai_top_up(
+        base: list[dict], pool: list[dict], want_bucket: str
+    ) -> tuple[list[dict], int, int]:
+        """
+        base: 키워드로 이미 뽑힌(최신순) 목록
+        pool: 동일 backfill 누적 pool(키워드 미일치분 포함) — base 에 없는 후보만 LLM
+        return: (merged, llm_accepted, llm_calls)
+        """
+        if not KR_AI_TOPUP or KR_AI_TOPUP_MAX <= 0 or len(base) >= TARGET_ARTICLE_COUNT:
+            return base, 0, 0
+        want: Literal["domestic_stock", "domestic_economy"]
+        if want_bucket == "kr_domestic_stock":
+            want = "domestic_stock"
+        elif want_bucket == "kr_domestic_economy":
+            want = "domestic_economy"
+        else:
+            return base, 0, 0
+
+        base_keys = {_row_key(r) for r in base}
+        rest = [r for r in _sort_newest_first(pool) if _row_key(r) not in base_keys]
+        if not rest or len(base) >= TARGET_ARTICLE_COUNT:
+            return base, 0, 0
+
+        out = list(base)
+        llm_calls = 0
+        accepted = 0
+        for r in rest:
+            if len(out) >= TARGET_ARTICLE_COUNT or llm_calls >= KR_AI_TOPUP_MAX:
+                break
+            if _looks_like_ad_or_opinion(r):
+                continue
+            b, conf = summarizer.classify_kr_headline_bucket(r)
+            llm_calls += 1
+            if b == want and conf >= KR_AI_TOPUP_MIN_CONF:
+                out = _merge_newest_dedup(out, [r])
+                accepted += 1
+            time.sleep(0.03)
+        if accepted:
+            logger.info(
+                "KR %s: 키워드 %d건 + LLM 보강 %d건(호출 %d) → 합 %d (목표 %d, 임계 %.2f)",
+                want_bucket,
+                len(base),
+                accepted,
+                llm_calls,
+                min(len(out), TARGET_ARTICLE_COUNT),
+                TARGET_ARTICLE_COUNT,
+                KR_AI_TOPUP_MIN_CONF,
+            )
+        return out, accepted, llm_calls
+
     def _backfill_pick(
         *,
+        feed_doc: str,
         urls: list[str],
         keywords: list[str] | None,
         max_items_per_feed: int,
@@ -280,7 +358,9 @@ def _run_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
     ) -> list[dict]:
         """
         1주 → 2주 → ... 로 max_age_hours 를 늘리며 수집해,
-        (키워드/광고·주관 필터 적용 후) TARGET_ARTICLE_COUNT 개를 채우도록 시도.
+        1) 키워드(요청) 필터
+        2) 부족하면 같은 수집 pool 안에서 LLM이 국내 증시/국내 경제에 해당하는지 추가 선별
+        를 거친 뒤, TARGET_ARTICLE_COUNT 개를 채우도록 시도.
         """
         collected: list[dict] = []
         age = BACKFILL_STEP_HOURS
@@ -293,11 +373,14 @@ def _run_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
             )
             collected = crawler.dedupe_items(collected + rows)
 
-            picked = collected
+            by_kw: list[dict] = list(collected)
             if keywords is not None:
-                picked = _kw_match(picked, keywords)
-            picked = [r for r in picked if not _looks_like_ad_or_opinion(r)]
-            picked = _sort_newest_first(picked)
+                by_kw = _kw_match(collected, keywords)
+            by_kw = [r for r in by_kw if not _looks_like_ad_or_opinion(r)]
+            by_kw = _sort_newest_first(by_kw)
+            if keywords is not None:
+                by_kw, _, _ = _ai_top_up(by_kw, collected, feed_doc)
+            picked = by_kw
 
             if len(picked) >= TARGET_ARTICLE_COUNT:
                 return picked[:TARGET_ARTICLE_COUNT]
@@ -305,11 +388,10 @@ def _run_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
                 return picked
             age += BACKFILL_STEP_HOURS
 
-    kr_all = crawler.crawl_rss_headline_urls(KR_RSS_URLS, max_items_per_feed=20)
-    kr_all = crawler.dedupe_items(kr_all)
     for doc_id, keywords in kr_categories:
         # 1주 내에서 부족하면 2주/3주...로 확장(backfill)해서 목표 개수 채우기 시도.
         picked = _backfill_pick(
+            feed_doc=doc_id,
             urls=KR_RSS_URLS,
             keywords=keywords,
             max_items_per_feed=20,
@@ -343,6 +425,7 @@ def _run_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
 
     for doc_id, url in us_categories:
         rows = _backfill_pick(
+            feed_doc=doc_id,
             urls=[url],
             keywords=None,
             max_items_per_feed=45,
