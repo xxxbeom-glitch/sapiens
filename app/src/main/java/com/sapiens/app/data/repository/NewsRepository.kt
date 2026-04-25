@@ -8,8 +8,8 @@ import kotlinx.coroutines.flow.Flow
 interface NewsRepository {
     fun getRepresentativeIndices(): Flow<MarketIndexSnapshot>
     fun getNewsFeed(type: NewsFeedType): Flow<List<Article>>
-    /** 임의 RSS URL에서 기사 목록을 가져온다(예: Yahoo Finance RSS). */
-    fun getRssFeed(url: String): Flow<List<Article>>
+    /** Firestore `news/{documentId}` 문서의 `articles`를 구독한다. */
+    fun getNewsFeedDocument(documentId: String): Flow<List<Article>>
 
     /** Firestore `market/themes/by_no/{theme_no}` 문서들(파이프라인 `rank` 순). */
     fun getMarketThemes(): Flow<List<MarketTheme>>

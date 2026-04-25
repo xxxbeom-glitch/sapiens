@@ -1,4 +1,4 @@
-﻿"""
+"""
 국내 뉴스 탭(3요약): 3개 RSS 풀 합친 뒤 LLM이 뉴스탭 3분류(국내증시/해외증시/AI 이슈)로 배정(`news_tab_classification`) 후 요약. 해외 뉴스는 별도 RSS.
 (토스증권 Playwright `crawl_tossinvest_news` 는 보존. `crawl_domestic` 은 `crawl_naver_*` 를 쓰지 않는다.)
 """
@@ -820,6 +820,8 @@ RSS_AI_ISSUE_MAX_AGE_HOURS = 72.0
 RSS_GLOBAL_MARKET_MAX_AGE_HOURS = 72.0
 # 미국증시 탭 전용 RSS(Yahoo Finance rssindex) 수집 창
 RSS_CNBC_MARKETS_MAX_AGE_HOURS = 168.0
+# 헤드라인(한국/미국) 화면: 1주일(168h)
+RSS_HEADLINE_MAX_AGE_HOURS = 168.0
 # 뉴스 탭: 국내(KR) RSS 풀은 **피드당** 최대 N건, 해외(국제) 풀은 M건, 미국증시 탭 피드는 별도 상한
 RSS_DOMESTIC_KR_MARKET_ITEMS_PER_FEED = 15
 RSS_DOMESTIC_ITEMS_PER_FEED = 10
@@ -855,8 +857,11 @@ RSS_FEEDS_NEWS_CNBC_MARKETS: list[str] = [
 
 _RSS_SOURCE_LABEL_MAP: dict[str, str] = {
     "https://www.mk.co.kr/rss/50200011/": "매일경제",
+    "https://www.mk.co.kr/rss/30100041/": "매일경제",
     "https://www.mk.co.kr/rss/30300018/": "매일경제",
+    "https://www.yna.co.kr/rss/market.xml": "연합뉴스",
     "https://www.hankyung.com/feed/finance": "한국경제",
+    "https://www.hankyung.com/feed/economy": "한국경제",
     "https://www.hankyung.com/feed/international": "한국경제",
     "https://www.chosun.com/arc/outboundfeeds/rss/category/international/?outputType=xml": "조선일보",
     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910": "CNBC",
@@ -864,6 +869,7 @@ _RSS_SOURCE_LABEL_MAP: dict[str, str] = {
     "https://finance.yahoo.com/rss/headline?s=NVDA,AMD,AVGO,TSM,MU,ANET,ASML,LRCX,INTC,MSFT,GOOGL,AMZN,META,PLTR,SNOW,ORCL,CRM,NOW,ADBE,TSLA,AAPL,FIG": "Yahoo Finance",
     "https://finance.yahoo.com/rss/headline?s=WDC,STX,SNDK,BLK,BRK-B,JPM,GS,MS,BX,KKR": "Yahoo Finance",
     "https://finance.yahoo.com/rss/headline?s=RKLB,LMT,BA,NOC,ASTS,LUNR,PL,BKSY,IRDM,SPCE": "Yahoo Finance",
+    "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=02&plink=RSSREADER": "SBS",
 }
 MK_ARTICLE_BODY_SELECTORS = (
     "div.news_cnt_detail",
@@ -1114,6 +1120,25 @@ def crawl_rss_cnbc_markets() -> list[dict[str, Any]]:
         allow_missing_published=True,
         max_age_hours=RSS_CNBC_MARKETS_MAX_AGE_HOURS,
     )
+
+
+def crawl_rss_headline_urls(
+    urls: list[str],
+    *,
+    max_items_per_feed: int = 15,
+    max_age_hours: float = RSS_HEADLINE_MAX_AGE_HOURS,
+    attach_mk_hankyung_body: bool = True,
+) -> list[dict[str, Any]]:
+    """헤드라인용 RSS 수집(1주일). MK/한경은 본문을 추가로 채울 수 있다."""
+    rows = _crawl_rss_feed_urls(
+        urls,
+        max_items_per_feed=max_items_per_feed,
+        allow_missing_published=True,
+        max_age_hours=max_age_hours,
+    )
+    if attach_mk_hankyung_body:
+        _attach_mk_hankyung_bodies(rows)
+    return rows
 
 
 def _fetch_stock_naver_json(url: str) -> Any | None:

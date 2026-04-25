@@ -36,77 +36,41 @@ import com.sapiens.app.ui.theme.TextPrimary
 
 private data class UsCategory(
     val label: String,
-    val rssUrl: String,
+    val documentId: String,
 )
 
 private val usCategories = listOf(
     UsCategory(
         label = "소프트웨어 및 인터넷",
-        rssUrl = "https://finance.yahoo.com/rss/headline?s=AAPL,MSFT,GOOGL,META,AMZN,CRM,NOW,ADBE,ORCL,FIG,PLTR,SNOW"
+        documentId = "us_software_internet"
     ),
     UsCategory(
         label = "반도체 및 하드웨어",
-        rssUrl = "https://finance.yahoo.com/rss/headline?s=NVDA,AMD,TSM,INTC,ASML,LRCX,ARM,QCOM,AVGO,ANET,MU,WDC,STX,SNDK"
+        documentId = "us_semiconductor_hw"
     ),
     UsCategory(
         label = "항공우주 및 모빌리티",
-        rssUrl = "https://finance.yahoo.com/rss/headline?s=LMT,BA,NOC,RKLB,ASTS,LUNR,PL,BKSY,IRDM,SPCE,TSLA"
+        documentId = "us_aerospace_mobility"
     ),
     UsCategory(
         label = "금융 및 자본 시장",
-        rssUrl = "https://finance.yahoo.com/rss/headline?s=JPM,GS,MS,BLK,BRK-B,BX,KKR"
+        documentId = "us_finance_capital"
     ),
 )
 
 private data class KrCategory(
     val label: String,
-    val keywords: List<String>,
+    val documentId: String,
 )
 
 private val krCategories = listOf(
     KrCategory(
         label = "국내증시",
-        keywords = listOf(
-            "코스닥", "코스피", "삼성전자", "SK하이닉스", "국내 증시", "오전장", "오후장",
-            "사이드카", "서킷브레이크", "현대차",
-        )
+        documentId = "kr_domestic_stock"
     ),
     KrCategory(
-        label = "반도체 및 하드웨어",
-        keywords = listOf(
-            "삼성전자(005930)", "SK하이닉스(000660)", "한미반도체(042700)", "HPSP(403870)",
-            "이오테크닉스(039200)", "리노공업(058470)", "파운드리", "HBM", "D램", "낸드",
-            "웨이퍼", "패키징", "유리기판",
-        )
-    ),
-    KrCategory(
-        label = "금융",
-        keywords = listOf(
-            "KB금융(105560)", "신한지주(055550)", "하나금융지주(086790)", "우리금융지주(316140)",
-            "메리츠금융지주(138040)", "미래에셋증권(006800)",
-        )
-    ),
-    KrCategory(
-        label = "조선 및 해양",
-        keywords = listOf(
-            "HD한국조선해양(009540)", "삼성중공업(010140)", "한화오션(042660)", "HD현대미포(010620)",
-            "HD현대중공업(329180)", "NG선", "암모니아 운반선", "친환경 선박", "해양 플랜트",
-        )
-    ),
-    KrCategory(
-        label = "에너지 및 전력 인프라",
-        keywords = listOf(
-            "HD현대일렉트릭(267260)", "LS일렉트릭(010120)", "두산에너빌리티(034020)", "씨에스윈드(112610)",
-            "한국전력(015760)", "SMR(소형모듈원전)", "원전", "원자력", "데이터센터 전력",
-            "신재생 에너지", "초고압 변압기",
-        )
-    ),
-    KrCategory(
-        label = "AI 및 로봇",
-        keywords = listOf(
-            "네이버(035420)", "카카오(035720)", "두산로보틱스(454910)", "레인보우로보틱스(277810)",
-            "엔젤로보틱스(455900)",
-        )
+        label = "국내경제",
+        documentId = "kr_domestic_economy"
     ),
 )
 
@@ -115,8 +79,7 @@ fun NewsScreen(
     viewModel: NewsViewModel,
 ) {
     val isLoading by viewModel.isLoading.collectAsState()
-    val krRssNews by viewModel.krRssNews.collectAsState()
-    val usRssNews by viewModel.usRssNews.collectAsState()
+    val headlineNews by viewModel.headlineNews.collectAsState()
 
     /** (기사, 뉴스 탭 페이지 0·1·2) — 바텀시트 등에서 탭 컨텍스트가 필요할 때 사용 */
     var sheetArticleAndPage by remember { mutableStateOf<Pair<Article, Int>?>(null) }
@@ -138,10 +101,10 @@ fun NewsScreen(
     androidx.compose.runtime.LaunchedEffect(regionChipIndex, secondDepthTabIndex) {
         if (regionChipIndex == 1) {
             val idx = secondDepthTabIndex.coerceIn(0, usCategories.lastIndex)
-            viewModel.setUsRssUrl(usCategories[idx].rssUrl)
+            viewModel.setSelectedNewsDocId(usCategories[idx].documentId)
         } else {
             val idx = secondDepthTabIndex.coerceIn(0, krCategories.lastIndex)
-            viewModel.setKrKeywords(krCategories[idx].keywords)
+            viewModel.setSelectedNewsDocId(krCategories[idx].documentId)
         }
     }
 
@@ -195,9 +158,8 @@ fun NewsScreen(
                     onSelect = { secondDepthTabIndex = it },
                     modifier = Modifier.padding(bottom = Spacing.space18),
                 )
-                val pageItems = if (regionChipIndex == 1) usRssNews else krRssNews
                 ArticleMixedFeedCard(
-                    articles = pageItems,
+                    articles = headlineNews,
                     onClickArticle = { sheetArticleAndPage = it to 0 },
                     modifier = Modifier
                         .fillMaxSize()

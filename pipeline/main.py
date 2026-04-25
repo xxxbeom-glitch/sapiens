@@ -119,6 +119,185 @@ def _run_news_only(crawler: Any, firebase_client: Any, summarizer: Any) -> None:
     firebase_client.save_news_feed(fs_global_market, "global_market")
     firebase_client.save_news_feed(fs_ai_issue, "ai_issue")
 
+    # --- 헤드라인 화면(한국/미국)용: 카테고리별 RSS → 요약/번역 → 저장 ---
+    # Firestore 문서 ID는 앱에서 그대로 구독한다.
+    KR_RSS_URLS = [
+        "https://www.yna.co.kr/rss/market.xml",
+        "https://www.mk.co.kr/rss/50200011/",
+        "https://www.mk.co.kr/rss/30100041/",
+        "https://www.hankyung.com/feed/finance",
+        "https://www.hankyung.com/feed/economy",
+        "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=02&plink=RSSREADER",
+    ]
+
+    kr_categories: list[tuple[str, list[str]]] = [
+        (
+            "kr_domestic_stock",
+            [
+                "삼성전자(005930)",
+                "sk하이닉스(0006600)",
+                "sk하이닉스(000660)",
+                "lg에너지솔루션(373220)",
+                "현대차(005380)",
+                "두산에너빌리티(034020)",
+                "sk스퀘어(402340)",
+                "한화에어로스페이스(012450)",
+                "현대모비스(012330)",
+                "ls일레트릭(010120)",
+                "ls일렉트릭(010120)",
+                "한화오션(042660)",
+                "한미반도체(042700)",
+                "미래에셋증권(006800)",
+                "코스닥 지수",
+                "코스피 지수",
+                "반도체",
+                "hbm",
+                "목표가",
+                "삼전닉스",
+                "자사주 소각",
+                "서킷브레이커",
+                "서킷브레이커",
+                "사이드카",
+            ],
+        ),
+        (
+            "kr_domestic_economy",
+            [
+                "한국은행",
+                "기준금리",
+                "금리",
+                "소비자물가",
+                "gdp",
+                "경제성장률",
+                "실업률",
+                "쉬었음청년",
+                "실업급여",
+                "원달러 환율",
+                "원/달러",
+                "무역수지",
+                "외환보유액",
+                "가계부채",
+                "부동산 정책",
+                "아파트 매매가",
+                "기획재정부",
+                "환율",
+            ],
+        ),
+    ]
+
+    def _kw_match(rows: list[dict], keywords: list[str]) -> list[dict]:
+        ks = [k.strip().lower() for k in keywords if str(k).strip()]
+        if not ks:
+            return rows
+        out = []
+        for r in rows:
+            text = f"{r.get('title','')}\n{r.get('summary','')}\n{r.get('body','')}".lower()
+            if any(k in text for k in ks):
+                out.append(r)
+        return out
+
+    def _looks_like_ad_or_opinion(row: dict) -> bool:
+        text = (
+            f"{row.get('title','')}\n{row.get('summary','')}\n{row.get('body','')}"
+        ).lower()
+        ad_markers = (
+            "광고",
+            "협찬",
+            "제휴",
+            "후원",
+            "sponsored",
+            "sponsor",
+            "프로모션",
+            "promotion",
+            "이벤트",
+            "event",
+            "할인",
+            "특가",
+            "쿠폰",
+            "보도자료",
+            "자료제공",
+            "press release",
+            "문의",
+            "상담",
+            "예약",
+            "신청",
+            "구매",
+            "구독",
+        )
+        if any(m in text for m in ad_markers):
+            return True
+        opinion_markers = (
+            "칼럼",
+            "기고",
+            "사설",
+            "논설",
+            "오피니언",
+            "opinion",
+            "기자수첩",
+            "데스크칼럼",
+            "기자의 시선",
+            "기자 생각",
+            "에디터",
+            "editorial",
+        )
+        if any(m in text for m in opinion_markers):
+            return True
+        clickbait_markers = (
+            "지금 사야",
+            "무조건",
+            "대박",
+            "초대박",
+            "충격",
+            "반전",
+            "비밀",
+            "단독",
+            "!!",
+            "!!!",
+        )
+        if any(m in text for m in clickbait_markers):
+            return True
+        return False
+
+    kr_all = crawler.crawl_rss_headline_urls(KR_RSS_URLS, max_items_per_feed=20)
+    kr_all = crawler.dedupe_items(kr_all)
+    for doc_id, keywords in kr_categories:
+        picked = [r for r in _kw_match(kr_all, keywords) if not _looks_like_ad_or_opinion(r)]
+        fs: list[dict] = []
+        for row in summarizer.summarize_batch(picked, news_feed="domestic_market"):
+            ai = row.pop("_ai", None)
+            if ai:
+                fs.append(summarizer.merge_to_firestore_article(row, ai))
+        firebase_client.save_news_feed(fs, doc_id)
+
+    us_categories: list[tuple[str, str]] = [
+        (
+            "us_software_internet",
+            "https://finance.yahoo.com/rss/headline?s=AAPL,MSFT,GOOGL,META,AMZN,CRM,NOW,ADBE,ORCL,FIG,PLTR,SNOW",
+        ),
+        (
+            "us_semiconductor_hw",
+            "https://finance.yahoo.com/rss/headline?s=NVDA,AMD,TSM,INTC,ASML,LRCX,ARM,QCOM,AVGO,ANET,MU,WDC,STX,SNDK",
+        ),
+        (
+            "us_aerospace_mobility",
+            "https://finance.yahoo.com/rss/headline?s=LMT,BA,NOC,RKLB,ASTS,LUNR,PL,BKSY,IRDM,SPCE,TSLA",
+        ),
+        (
+            "us_finance_capital",
+            "https://finance.yahoo.com/rss/headline?s=JPM,GS,MS,BLK,BRK-B,BX,KKR",
+        ),
+    ]
+
+    for doc_id, url in us_categories:
+        rows = crawler.crawl_rss_headline_urls([url], max_items_per_feed=45, attach_mk_hankyung_body=False)
+        rows = crawler.dedupe_items(rows)
+        fs: list[dict] = []
+        for row in summarizer.summarize_batch(rows, news_feed="global_market"):
+            ai = row.pop("_ai", None)
+            if ai:
+                fs.append(summarizer.merge_to_firestore_article(row, ai))
+        firebase_client.save_news_feed(fs, doc_id)
+
 
 def _run_market_only(crawler: Any, firebase_client: Any) -> None:
     if not _market_pipeline_enabled():

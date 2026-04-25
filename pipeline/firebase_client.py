@@ -299,10 +299,8 @@ def save_market_industries(industries: List[dict[str, Any]]) -> None:
 def save_news_feed(articles: List[dict[str, Any]], feed_type: str) -> None:
     """
     news/{feed_type} 문서에 저장.
-    feed_type: domestic_market | global_market | ai_issue
+    feed_type: 문서 ID (예: domestic_market, kr_domestic_stock, us_semiconductor_hw 등)
     """
-    if feed_type not in ("domestic_market", "global_market", "ai_issue"):
-        raise ValueError(f"Invalid feed_type: {feed_type}")
     try:
         db = _get_db()
         db.collection("news").document(feed_type).set(
