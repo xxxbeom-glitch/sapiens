@@ -1202,6 +1202,7 @@ def _fetch_yahoo_finance_article_body(article_url: str) -> str:
     """
     Yahoo Finance 기사 본문 텍스트 추출(실패 시 빈 문자열).
     RSS description에 리스트(종목)가 없고 본문 뒤쪽에 있는 경우가 많아, 더 긴 상한으로 전달한다.
+    본문 컨테이너(caas-body) 전체 텍스트를 가져오되, 잡음(광고/관련기사 등)은 제거한다.
     """
     u = (article_url or "").strip()
     if not u:
@@ -1216,45 +1217,32 @@ def _fetch_yahoo_finance_article_body(article_url: str) -> str:
         soup = BeautifulSoup(html, "lxml")
     except Exception:
         return ""
-    try:
-        # 광고/스크립트 제거
-        for tag in soup.select("script, style, noscript, iframe, nav, footer"):
-            tag.decompose()
-    except Exception:
-        pass
 
-    # Yahoo Finance는 caas-body / article 구조가 자주 보인다.
-    candidates = [
-        soup.select_one("div.caas-body"),
-        soup.select_one("div[data-test-locator='stream-item'] div.caas-body"),
-        soup.select_one("article"),
-    ]
-    for node in candidates:
-        if node is None:
-            continue
-        parts: list[str] = []
-        for p in node.select("p"):
-            t = (p.get_text(" ", strip=True) or "").strip()
-            if not t:
-                continue
-            parts.append(t)
-        text = re.sub(r"\s+", " ", " ".join(parts)).strip()
-        if len(text) >= 200:
-            return text[:YAHOO_ARTICLE_BODY_MAX_CHARS]
+    # 본문 컨테이너 후보
+    body_container = (
+        soup.select_one("div.caas-body")
+        or soup.select_one("div[data-test-locator='stream-item'] div.caas-body")
+        or soup.select_one("article")
+    )
 
-    # 마지막 폴백: 전체 문서에서 p를 모으되 너무 짧으면 무시
-    parts2: list[str] = []
-    for p in soup.select("p"):
-        t = (p.get_text(" ", strip=True) or "").strip()
-        if not t:
-            continue
-        parts2.append(t)
-        if sum(len(x) for x in parts2) >= YAHOO_ARTICLE_BODY_MAX_CHARS * 1.2:
-            break
-    text2 = re.sub(r"\s+", " ", " ".join(parts2)).strip()
-    if len(text2) >= 260:
-        return text2[:YAHOO_ARTICLE_BODY_MAX_CHARS]
-    return ""
+    if body_container:
+        try:
+            # 잡음 제거
+            for tag in body_container.select("script, style, noscript, iframe, figure, header, footer"):
+                tag.decompose()
+            for sel in _YAHOO_BODY_NOISE_SELECTORS:
+                for rem in body_container.select(sel):
+                    rem.decompose()
+
+            text = body_container.get_text(" ", strip=True)
+            text = re.sub(r"\s+", " ", text).strip()
+            if len(text) >= 200:
+                return text[:YAHOO_ARTICLE_BODY_MAX_CHARS]
+        except Exception as e:
+            logger.warning("Yahoo 본문 파싱 중 오류(폴백): %s, err=%s", u, e)
+
+    # 폴백: p 태그 모으기
+    return _plain_text_from_paragraphs(html, max_chars=YAHOO_ARTICLE_BODY_MAX_CHARS)
 
 
 def _attach_yahoo_finance_bodies(
