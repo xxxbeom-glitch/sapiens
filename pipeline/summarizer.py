@@ -1219,8 +1219,8 @@ CARD_MONEY_FLOW_VALUES = ("상승", "하락", "관망")
 # 각 필드 글자 수 범위
 CARD_MARKET_STATUS_MIN = 10
 CARD_MARKET_STATUS_MAX = 15
-CARD_BODY_MIN = 120
-CARD_BODY_MAX = 160
+CARD_BODY_MIN = 190
+CARD_BODY_MAX = 200
 CARD_INVEST_POINT_MIN = 10
 CARD_INVEST_POINT_MAX = 40
 
@@ -1264,7 +1264,7 @@ def _postprocess_card_dict(data: dict, category: str) -> dict:
         CARD_MARKET_STATUS_MAX,
     )
 
-    body = str(data.get("body", "")).strip()[:CARD_BODY_MAX]
+    body = str(data.get("body", "")).strip()[:200]
     if len(body) < CARD_BODY_MIN:
         body = ""
 
@@ -1426,7 +1426,7 @@ market_status (헤드라인, 필수)
 · 설명 금지, 판단만
 
 body (본문, 필수)
-· 120~160자, 완전 서술형 2~3문장
+· 190~200자, 완전 서술형 8~9문장
 · 구조: 결론 → 이유 → 영향
 · 불릿·리스트·핀 요약 절대 금지
 · 쉬운 표현 사용, 어려운 경제 용어 풀어쓰기

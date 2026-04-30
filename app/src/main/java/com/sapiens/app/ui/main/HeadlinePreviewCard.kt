@@ -170,15 +170,6 @@ fun HeadlinePreviewCard(
             color = HeadlineBodyColor,
         ).scaleForFigmaFrame(figmaScale)
     }
-    val reasonStyle = remember(figmaScale) {
-        TextStyle(
-            fontFamily = SapiensFontFamily,
-            fontWeight = FontWeight.Medium,
-            fontSize = 13.sp,
-            lineHeight = 20.sp,
-            color = HeadlineBodyColor,
-        ).scaleForFigmaFrame(figmaScale)
-    }
 
     val cardWidth    = remember(figmaScale) { scaledDp(DesignHeadlineCardWidth, figmaScale) }
     val cardHeight   = remember(figmaScale) { scaledDp(DesignHeadlineCardHeight, figmaScale) }
@@ -204,7 +195,6 @@ fun HeadlinePreviewCard(
     val date = card?.generatedAt?.take(10).orEmpty() // "2026-04-30"
     // 본문: body 단일 문자열(서술형). 없으면 Mock.
     val bodyText = card?.body.orEmpty().ifBlank { MOCK_BODY }
-    val investPoint = card?.investPoint ?: MOCK_INVEST_POINT
     val category = normalizeCardCategory(card?.category)
     val direction = card?.moneyFlowDirection() ?: MarketDirection.FLAT
     val moneyFlow = card?.moneyFlow ?: MOCK_MONEY_FLOW
@@ -314,16 +304,6 @@ fun HeadlinePreviewCard(
                         style = bodyStyle,
                         overflow = TextOverflow.Clip,
                     )
-                    if (investPoint.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "📌 $investPoint",
-                            modifier = Modifier.fillMaxWidth(),
-                            style = reasonStyle.copy(color = Color(0xFF6C54DD)),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
                 }
             }
         }
