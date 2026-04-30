@@ -116,8 +116,17 @@ private fun normalizeCardCategory(raw: String?): String {
     }
 }
 
-private fun categoryVariant(category: String): MarketCategoryLabelVariant =
-    if (category == "국내증시") MarketCategoryLabelVariant.KrMarket else MarketCategoryLabelVariant.UsMarket
+private fun categoryVariant(category: String): MarketCategoryLabelVariant = when (category) {
+    "미국증시" -> MarketCategoryLabelVariant.UsMarket
+    "시장변수" -> MarketCategoryLabelVariant.MarketVariable
+    "섹터·흐름" -> MarketCategoryLabelVariant.SectorFlow
+    "국내증시" -> MarketCategoryLabelVariant.KrMarket
+    "대장주" -> MarketCategoryLabelVariant.Leader
+    else -> MarketCategoryLabelVariant.UsMarket
+}
+
+private fun categoryDisplayText(category: String): String =
+    if (category == "섹터·흐름") "섹터,흐름" else category
 
 /**
  * 브리핑 카드 1장.
@@ -242,7 +251,7 @@ fun HeadlinePreviewCard(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     // 태그(칩)는 디자인 가이드의 5개 카테고리만 사용
-                    MarketCategoryLabel(category, categoryVariant(category))
+                    MarketCategoryLabel(categoryDisplayText(category), categoryVariant(category))
                 }
                 Image(
                     painter = painterResource(

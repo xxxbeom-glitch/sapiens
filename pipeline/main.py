@@ -66,13 +66,17 @@ def _schedule_unified_feed_push(firebase_client: Any) -> None:
 def _collect_all_articles(crawler: Any) -> list[dict]:
     """
     모든 RSS 피드에서 기사 수집 후 합산.
-    domestic_market + global_market + ai_issue 3개 풀 합침.
+    domestic_market + global_market + ai_issue + naver(2종) 합침.
     """
     domestic = crawler.crawl_domestic()
+    naver_realtime = crawler.crawl_naver_realtime()
+    naver_main = crawler.crawl_naver_main()
     all_articles: list[dict] = []
     all_articles.extend(domestic.get("domestic_market", []))
     all_articles.extend(domestic.get("global_market", []))
     all_articles.extend(domestic.get("ai_issue", []))
+    all_articles.extend(naver_realtime)
+    all_articles.extend(naver_main)
 
     # URL 기준 중복 제거
     seen: set[str] = set()
@@ -83,7 +87,15 @@ def _collect_all_articles(crawler: Any) -> list[dict]:
             seen.add(u)
             deduped.append(a)
 
-    logger.info("전체 기사 수집: %d개 (중복 제거 후)", len(deduped))
+    logger.info(
+        "기사 수집: domestic=%d global=%d ai=%d naver_realtime=%d naver_main=%d → 중복제거 후 %d개",
+        len(domestic.get("domestic_market", [])),
+        len(domestic.get("global_market", [])),
+        len(domestic.get("ai_issue", [])),
+        len(naver_realtime),
+        len(naver_main),
+        len(deduped),
+    )
     return deduped
 
 
