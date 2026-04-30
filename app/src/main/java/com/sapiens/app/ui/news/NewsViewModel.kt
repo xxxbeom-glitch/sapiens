@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.sapiens.app.data.model.Article
+import com.sapiens.app.data.model.BriefingCard
 import com.sapiens.app.data.repository.NewsRepository
 import android.util.Log
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -25,8 +26,22 @@ class NewsViewModel(
     private val _selectedNewsDocId = MutableStateFlow("kr_domestic_stock")
     val selectedNewsDocId: StateFlow<String> = _selectedNewsDocId.asStateFlow()
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val headlineNews: StateFlow<List<Article>> =
+    // ── 브리핑 카드 ───────────────────────────────────────
+    val briefingCards: StateFlow<List<BriefingCard>> =
+        repository.getBriefingCards()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    // ── 북마크 (로컬 in-memory, 필요시 DataStore로 교체) ──
+    private val _savedCardIds = MutableStateFlow<Set<String>>(emptySet())
+    val savedCardIds: StateFlow<Set<String>> = _savedCardIds.asStateFlow()
+
+    fun toggleBookmark(cardId: String) {
+        _savedCardIds.value = _savedCardIds.value.toMutableSet().also { set ->
+            if (cardId in set) set.remove(cardId) else set.add(cardId)
+        }
+    }
+
+    // ── 헤드라인 뉴스 ─────────────────────────────────────
         selectedNewsDocId
             .flatMapLatest { docId ->
                 repository.getNewsFeedDocument(docId)

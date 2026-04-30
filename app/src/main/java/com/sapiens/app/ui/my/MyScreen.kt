@@ -147,7 +147,7 @@ fun MyScreen(
                     text = "#마이",
                     modifier = Modifier.weight(1f),
                     color = TextPrimary,
-                    style = SapiensTextStyles.todayHeadlineTitle,
+                    style = SapiensTextStyles.todayHeadlineTitle(),
                     maxLines = 2,
                 )
             }

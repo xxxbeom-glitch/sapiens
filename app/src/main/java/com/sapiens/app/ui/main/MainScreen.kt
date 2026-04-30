@@ -1,232 +1,175 @@
 package com.sapiens.app.ui.main
 
-import android.app.Application
-import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.windowInsetsTopHeight
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.sapiens.app.ui.my.AuthViewModel
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.sapiens.app.R
-import com.sapiens.app.data.repository.NewsRepositoryImpl
-import com.sapiens.app.data.sync.UserCloudBackupRepository
-import com.sapiens.app.data.sync.UserCloudBackupScheduler
-import com.sapiens.app.ui.market.MarketScreen
-import com.sapiens.app.ui.market.MarketViewModel
-import com.sapiens.app.ui.my.MyScreen
-import com.sapiens.app.ui.news.NewsScreen
-import com.sapiens.app.ui.news.NewsViewModel
-import com.sapiens.app.ui.theme.Accent
-import com.sapiens.app.ui.theme.Background
-import com.sapiens.app.ui.theme.Spacing
-import com.sapiens.app.ui.theme.TextPrimary
-import com.sapiens.app.ui.theme.TextSecondary
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.sapiens.app.ui.theme.LocalFigmaFrameWidthScale
+import com.sapiens.app.ui.theme.scaledDp
+import kotlinx.coroutines.launch
 
-private data class BottomTab(
-    val label: String,
-    val iconResId: Int
-)
-
-/** false: 하단 마켓 탭·[MarketViewModel] 비활성. 뉴스(국내/미국 증시 기사)는 유지. */
-private const val MARKET_TAB_ENABLED = false
-
-private fun mainBottomTabs(): List<BottomTab> =
-    if (MARKET_TAB_ENABLED) {
-        listOf(
-            BottomTab(label = "뉴스", iconResId = R.drawable.ico_news),
-            BottomTab(label = "마켓", iconResId = R.drawable.ico_market),
-            BottomTab(label = "마이", iconResId = R.drawable.ico_my),
-        )
-    } else {
-        listOf(
-            BottomTab(label = "뉴스", iconResId = R.drawable.ico_news),
-            BottomTab(label = "마이", iconResId = R.drawable.ico_my),
-        )
-    }
+import com.sapiens.app.data.model.BriefingCard
 
 @Composable
 fun MainScreen(
     navigateToSectionKey: String? = null,
     onNavigateToSectionConsumed: () -> Unit = {},
+    briefingCards: List<BriefingCard> = emptyList(),
+    savedCardIds: Set<String> = emptySet(),
+    onBookmarkToggle: (cardId: String) -> Unit = {},
 ) {
-    var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val tabs = remember { mainBottomTabs() }
-
-    val context = LocalContext.current
-    val newsRepository = remember { NewsRepositoryImpl() }
-    val newsViewModel: NewsViewModel = viewModel(
-        factory = NewsViewModel.factory(newsRepository)
-    )
-    val marketViewModel: MarketViewModel? =
-        if (MARKET_TAB_ENABLED) {
-            viewModel(factory = MarketViewModel.factory(newsRepository))
-        } else {
-            null
-        }
-    val authViewModel: AuthViewModel = viewModel(
-        factory = AuthViewModel.factory(context.applicationContext as Application)
-    )
-    val application = context.applicationContext as Application
-    val cloudBackupRepository = remember { UserCloudBackupRepository.create(application) }
-    val authUser by authViewModel.authUser.collectAsState(initial = null)
-
-    LaunchedEffect(authUser?.uid) {
-        val uid = authUser?.uid
-        if (uid.isNullOrBlank()) {
-            UserCloudBackupScheduler.cancel(application)
-        } else {
-            UserCloudBackupScheduler.schedule(application)
-            withContext(Dispatchers.IO) {
-                cloudBackupRepository.restoreFromCloudIfNeeded(uid)
-            }
-        }
-    }
-
     LaunchedEffect(navigateToSectionKey) {
-        val key = navigateToSectionKey?.trim()?.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
-        when (key) {
-            "briefing", "domestic_news", "news" -> selectedTabIndex = 0
-            "market" -> selectedTabIndex = if (MARKET_TAB_ENABLED) 1 else 0
+        if (navigateToSectionKey != null) {
+            onNavigateToSectionConsumed()
         }
-        onNavigateToSectionConsumed()
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = Background,
-        topBar = {
-            val label = tabs.getOrNull(selectedTabIndex)?.label.orEmpty()
-            if (label == "뉴스" || label == "마이") {
-                Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars))
-            } else {
-                MainTopAppBar(
-                    title = tabs[selectedTabIndex].label,
-                )
-            }
-        },
-        bottomBar = {
-            BottomNavigationBar(
-                tabs = tabs,
-                selectedTabIndex = selectedTabIndex,
-                onTabSelected = { selectedTabIndex = it }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clipToBounds(),
+    ) {
+        var selectedMenu by remember { mutableStateOf(MainTopMenuItem.Today) }
+        var headlinePagerPage by remember { mutableStateOf(0) }
+        val figmaScale = LocalFigmaFrameWidthScale.current
+        val mainMenuTop = remember(figmaScale) { scaledDp(100f, figmaScale) }
+        val mainMenuToCardGap = remember(figmaScale) { scaledDp(42f, figmaScale) }
+        val headlineCardWidth = remember(figmaScale) { scaledDp(290f, figmaScale) }
+        val headlineCardPeekWidth = remember(figmaScale) { scaledDp(14f, figmaScale) }
+        val headlineCardHeight = remember(figmaScale) { scaledDp(443f, figmaScale) }
+        val cardToIndicatorGap = remember(figmaScale) { scaledDp(20f, figmaScale) }
+        val scope = rememberCoroutineScope()
+
+        Column(modifier = Modifier.fillMaxSize()) {
+            MainTopMenuBar(
+                selected = selectedMenu,
+                onSelect = { selectedMenu = it },
+                modifier = Modifier.padding(top = mainMenuTop),
             )
-        }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Background)
-                .padding(innerPadding)
-        ) {
-            when (selectedTabIndex) {
-                0 -> NewsScreen(viewModel = newsViewModel)
-                1 -> {
-                    val mv = marketViewModel
-                    if (MARKET_TAB_ENABLED && mv != null) {
-                        MarketScreen(viewModel = mv)
-                    } else {
-                        MyScreen(authViewModel = authViewModel)
+            Spacer(modifier = Modifier.height(mainMenuToCardGap))
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            ) {
+                val firstCardLeft = (maxWidth - headlineCardWidth) / 2f
+                val secondCardLeft = (maxWidth - headlineCardPeekWidth).coerceAtLeast(0.dp)
+                val density = LocalDensity.current
+
+                // page 0: 첫 카드 중앙 + 다음 카드 우측 14dp 노출
+                // page 1: 두 번째 카드 중앙(첫 카드는 왼쪽으로 일부만 노출)
+                val snapToPage1Px =
+                    remember(maxWidth, headlineCardWidth, headlineCardPeekWidth, density) {
+                        with(density) {
+                            // page1의 left가 중앙 정렬 위치(firstCardLeft)로 오도록 전체를 이동
+                            (firstCardLeft - secondCardLeft).toPx()
+                        }
+                    }
+
+                val minOffsetPx = snapToPage1Px // 음수
+                val maxOffsetPx = 0f
+                val offsetAnim = remember(minOffsetPx) { Animatable(0f) }
+                LaunchedEffect(minOffsetPx, headlinePagerPage) {
+                    offsetAnim.snapTo(if (headlinePagerPage == 1) minOffsetPx else 0f)
+                }
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(headlineCardHeight),
+                    ) {
+                        val draggableState = rememberDraggableState { delta ->
+                            val next = (offsetAnim.value + delta).coerceIn(minOffsetPx, maxOffsetPx)
+                            scope.launch { offsetAnim.snapTo(next) }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .draggable(
+                                    state = draggableState,
+                                    orientation = Orientation.Horizontal,
+                                    onDragStopped = { velocity ->
+                                        val velocityThresholdPxPerSec = 900f
+                                        val byVelocity = when {
+                                            velocity <= -velocityThresholdPxPerSec -> true
+                                            velocity >= velocityThresholdPxPerSec -> false
+                                            else -> null
+                                        }
+                                        val distanceThreshold = minOffsetPx * 0.25f
+                                        val shouldGoPage1 = byVelocity ?: (offsetAnim.value < distanceThreshold)
+                                        val target = if (shouldGoPage1) minOffsetPx else 0f
+                                        headlinePagerPage = if (shouldGoPage1) 1 else 0
+                                        scope.launch {
+                                            offsetAnim.animateTo(
+                                                targetValue = target,
+                                                animationSpec = tween(
+                                                    durationMillis = 260,
+                                                    easing = FastOutSlowInEasing,
+                                                ),
+                                            )
+                                        }
+                                    },
+                                ),
+                        ) {
+                            val dragOffsetDp = with(density) { offsetAnim.value.toDp() }
+                            // 첫 번째 카드
+                            HeadlinePreviewCard(
+                                card = briefingCards.getOrNull(headlinePagerPage * 2),
+                                isBookmarked = briefingCards.getOrNull(headlinePagerPage * 2)
+                                    ?.cardId?.let { it in savedCardIds } == true,
+                                onBookmarkToggle = onBookmarkToggle,
+                                modifier = Modifier.offset(x = firstCardLeft + dragOffsetDp),
+                            )
+                            // 두 번째 카드 (우측 peek)
+                            HeadlinePreviewCard(
+                                card = briefingCards.getOrNull(headlinePagerPage * 2 + 1),
+                                isBookmarked = briefingCards.getOrNull(headlinePagerPage * 2 + 1)
+                                    ?.cardId?.let { it in savedCardIds } == true,
+                                onBookmarkToggle = onBookmarkToggle,
+                                modifier = Modifier.offset(x = secondCardLeft + dragOffsetDp),
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(cardToIndicatorGap))
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        val pageCount = ((briefingCards.size + 1) / 2).coerceAtLeast(1)
+                        HeadlinePagerIndicator(
+                            currentPage = headlinePagerPage,
+                            pageCount = pageCount,
+                        )
                     }
                 }
-                else -> MyScreen(authViewModel = authViewModel)
             }
         }
     }
-
 }
-
-@Composable
-@OptIn(ExperimentalMaterial3Api::class)
-private fun MainTopAppBar(
-    title: String,
-) {
-    TopAppBar(
-        modifier = Modifier
-            .statusBarsPadding()
-            .padding(top = Spacing.space6),
-        windowInsets = WindowInsets(0, 0, 0, 0),
-        title = {
-            Text(
-                text = title,
-                style = androidx.compose.material3.MaterialTheme.typography.titleLarge.copy(
-                    fontSize = (androidx.compose.material3.MaterialTheme.typography.titleLarge.fontSize.value + 6f).sp
-                ),
-                color = TextPrimary,
-                fontWeight = FontWeight.Bold
-            )
-        },
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = Background,
-            titleContentColor = TextPrimary
-        )
-    )
-}
-
-@Composable
-private fun BottomNavigationBar(
-    tabs: List<BottomTab>,
-    selectedTabIndex: Int,
-    onTabSelected: (Int) -> Unit
-) {
-    NavigationBar(
-        containerColor = Background
-    ) {
-        tabs.forEachIndexed { index, tab ->
-            val selected = selectedTabIndex == index
-            val tint = if (selected) Accent else TextSecondary
-
-            NavigationBarItem(
-                selected = selected,
-                onClick = { onTabSelected(index) },
-                icon = {
-                    Icon(
-                        painter = painterResource(id = tab.iconResId),
-                        contentDescription = tab.label,
-                        tint = tint
-                    )
-                },
-                interactionSource = remember { MutableInteractionSource() },
-                colors = NavigationBarItemDefaults.colors(
-                    indicatorColor = androidx.compose.ui.graphics.Color.Transparent
-                ),
-                label = {
-                    Text(
-                        text = tab.label,
-                        color = tint
-                    )
-                }
-            )
-        }
-    }
-}
-

@@ -66,15 +66,12 @@ import com.sapiens.app.ui.theme.ContentAlpha
 import com.sapiens.app.ui.theme.RowVertical
 import com.sapiens.app.ui.theme.SectorChipPalette
 import com.sapiens.app.ui.theme.Spacing
+import com.sapiens.app.ui.theme.LocalFigmaFrameWidthScale
 import com.sapiens.app.ui.theme.TextPrimary
 import com.sapiens.app.ui.theme.TextSecondary
 import com.sapiens.app.ui.theme.TextTertiary
 import com.sapiens.app.R
 import kotlinx.coroutines.launch
-
-/** 피그마(테마 카드) 타이틀 예외 규격 — 나머지 타이포는 SapiensTypography 유지 */
-private val ThemeCardHashtagFontSize = 25.sp
-private val ThemeCardHashtagLineHeight = 34.sp
 
 /** 테마 종목 행: 로고 + 텍스트 간격(피그마식 인셋 구분선 정렬용) */
 private val ThemeStockLogoSize = Spacing.space40
@@ -212,6 +209,9 @@ private fun MarketThemeCard(
     modifier: Modifier = Modifier,
 ) {
     val svgLoader = rememberSvgImageLoader()
+    val figmaScale = LocalFigmaFrameWidthScale.current
+    val themeCardHashtagFontSize = remember(figmaScale) { (25f * figmaScale).sp }
+    val themeCardHashtagLineHeight = remember(figmaScale) { (34f * figmaScale).sp }
     val displayStocks = theme.stocksForDisplay()
     val descriptionText = theme.categoryInfo.trim()
     val cardKey = "${theme.themeNo}_${theme.themeName}"
@@ -242,8 +242,8 @@ private fun MarketThemeCard(
                     text = "#${theme.themeName}",
                     modifier = Modifier.fillMaxWidth(),
                     style = MaterialTheme.typography.titleLarge.copy(
-                        fontSize = ThemeCardHashtagFontSize,
-                        lineHeight = ThemeCardHashtagLineHeight,
+                        fontSize = themeCardHashtagFontSize,
+                        lineHeight = themeCardHashtagLineHeight,
                         fontWeight = FontWeight.SemiBold
                     ),
                     color = TextPrimary,

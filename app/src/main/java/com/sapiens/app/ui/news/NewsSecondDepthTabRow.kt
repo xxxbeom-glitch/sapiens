@@ -78,7 +78,7 @@ fun NewsSecondDepthTabRow(
                 Text(
                     text = label,
                     color = if (selected) TextPrimary else TextPrimary.copy(alpha = 0.3f),
-                    style = SapiensTextStyles.newsSecondDepthTab,
+                    style = SapiensTextStyles.newsSecondDepthTab(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

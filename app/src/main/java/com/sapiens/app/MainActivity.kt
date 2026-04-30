@@ -8,6 +8,12 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Surface
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -17,6 +23,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.core.app.ActivityCompat
@@ -25,7 +33,9 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.lifecycleScope
-import com.sapiens.app.data.store.UserPreferencesRepository
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sapiens.app.data.repository.NewsRepositoryImpl
+import com.sapiens.app.ui.news.NewsViewModel
 import com.sapiens.app.messaging.FcmTopicSync
 import com.sapiens.app.ui.main.MainScreen
 import com.sapiens.app.ui.theme.SapiensTheme
@@ -52,9 +62,10 @@ class MainActivity : ComponentActivity() {
         window.statusBarColor = AndroidColor.TRANSPARENT
         window.navigationBarColor = AndroidColor.TRANSPARENT
 
+        // Figma 172:2 — 밝은 그라데이션 배경: 어두운 아이콘(시스템 바)
         WindowCompat.getInsetsController(window, window.decorView).apply {
-            isAppearanceLightStatusBars = false
-            isAppearanceLightNavigationBars = false
+            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true
         }
 
         mergeSectionFromIntent(intent)
@@ -152,9 +163,32 @@ private fun SapiensApp(
     }
 
     SapiensTheme(darkTheme = isDarkTheme) {
-        MainScreen(
-            navigateToSectionKey = notificationSection,
-            onNavigateToSectionConsumed = onNotificationSectionConsumed,
-        )
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Color.Transparent,
+        ) {
+            // NewsViewModel — briefing_cards 구독
+            val newsViewModel: NewsViewModel = viewModel(
+                factory = NewsViewModel.factory(NewsRepositoryImpl())
+            )
+            val briefingCards by newsViewModel.briefingCards.collectAsState()
+            val savedCardIds by newsViewModel.savedCardIds.collectAsState()
+
+            Box(modifier = Modifier.fillMaxSize()) {
+                Image(
+                    painter = painterResource(R.drawable.frame_44),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+                MainScreen(
+                    navigateToSectionKey = notificationSection,
+                    onNavigateToSectionConsumed = onNotificationSectionConsumed,
+                    briefingCards = briefingCards,
+                    savedCardIds = savedCardIds,
+                    onBookmarkToggle = { cardId -> newsViewModel.toggleBookmark(cardId) },
+                )
+            }
+        }
     }
 }

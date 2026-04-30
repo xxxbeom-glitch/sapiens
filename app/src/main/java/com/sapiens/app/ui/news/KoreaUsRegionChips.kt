@@ -27,6 +27,7 @@ import com.sapiens.app.ui.theme.Accent
 import com.sapiens.app.ui.theme.AppRadius
 import com.sapiens.app.ui.theme.Card
 import com.sapiens.app.ui.theme.OnPrimaryFixed
+import com.sapiens.app.ui.theme.LocalFigmaFrameWidthScale
 import com.sapiens.app.ui.theme.SapiensFontFamily
 import com.sapiens.app.ui.theme.Spacing
 import com.sapiens.app.ui.theme.TextSecondary
@@ -83,6 +84,9 @@ private fun KoreaUsRegionSegment(
     modifier: Modifier = Modifier,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val s = LocalFigmaFrameWidthScale.current
+    val fontSize = remember(s) { (13f * s).sp }
+    val lineHeight = remember(s) { (15f * s).sp }
     val innerShape = RoundedCornerShape(AppRadius.radius6)
     Box(
         modifier = modifier
@@ -101,8 +105,8 @@ private fun KoreaUsRegionSegment(
             color = if (selected) OnPrimaryFixed else TextSecondary.copy(alpha = 0.3f),
             fontFamily = SapiensFontFamily,
             fontWeight = FontWeight.SemiBold,
-            fontSize = 13.sp,
-            lineHeight = 15.sp,
+            fontSize = fontSize,
+            lineHeight = lineHeight,
             letterSpacing = (-0.018f).em,
             maxLines = 1,
             overflow = TextOverflow.Clip,

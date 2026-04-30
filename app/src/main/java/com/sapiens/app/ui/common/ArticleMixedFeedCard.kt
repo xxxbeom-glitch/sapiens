@@ -108,7 +108,7 @@ fun ArticleMixedFeedCard(
                 Text(
                     text = first.headline,
                     modifier = Modifier.weight(1f),
-                    style = SapiensTextStyles.briefingThemeHeadline,
+                    style = SapiensTextStyles.briefingThemeHeadline(),
                     color = TextPrimary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -167,7 +167,7 @@ private fun FeedPublisherChip(label: String) {
     ) {
         Text(
             text = label,
-            style = SapiensTextStyles.briefingPublisherChip,
+            style = SapiensTextStyles.briefingPublisherChip(),
             color = textColor,
             modifier = Modifier.padding(horizontal = Spacing.space6, vertical = Spacing.space2)
         )

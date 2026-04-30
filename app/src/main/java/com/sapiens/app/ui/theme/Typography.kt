@@ -2,15 +2,25 @@ package com.sapiens.app.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.sapiens.app.R
 
-// NOTE:
-// SUIT TTF를 app/src/main/assets/fonts 에 둘 예정이므로,
-// 1단계에서는 시스템 SansSerif를 임시로 사용합니다.
-// (추후 SUIT TTF를 res/font 에 넣고 Font(...) 로 [SapiensFontFamily] 갱신)
-val SapiensFontFamily: FontFamily = FontFamily.SansSerif
+/**
+ * [SUIT](https://github.com/sun-typeface/SUIT) 정적 TTF 세트 (SIL OFL 1.1).
+ * Variable TTF는 일부 환경에서 굵기 축 매핑이 불안정하여, 정적 TTF로 확정 적용한다.
+ */
+val SapiensFontFamily: FontFamily =
+    FontFamily(
+        Font(R.font.suit_regular, FontWeight.Normal),
+        Font(R.font.suit_medium, FontWeight.Medium),
+        Font(R.font.suit_semibold, FontWeight.SemiBold),
+        Font(R.font.suit_bold, FontWeight.Bold),
+        Font(R.font.suit_extrabold, FontWeight.ExtraBold),
+        Font(R.font.suit_heavy, FontWeight.Black),
+    )
 
 val SapiensTypography = Typography(
     displayLarge = TextStyle(

@@ -141,7 +141,7 @@ fun NewsScreen(
                             .weight(1f)
                             .padding(end = Spacing.space12),
                         color = TextPrimary,
-                        style = SapiensTextStyles.todayHeadlineTitle,
+                        style = SapiensTextStyles.todayHeadlineTitle(),
                         maxLines = 2,
                     )
                     KoreaUsRegionChips(

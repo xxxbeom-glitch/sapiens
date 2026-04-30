@@ -3,6 +3,7 @@ package com.sapiens.app.data.repository
 import android.content.Context
 import android.content.SharedPreferences
 import com.sapiens.app.data.model.Article
+import com.sapiens.app.data.model.BriefingCard
 import com.sapiens.app.data.model.MarketDirection
 import com.sapiens.app.data.model.MarketIndex
 import com.sapiens.app.data.model.MarketIndexSnapshot
@@ -104,6 +105,25 @@ class NewsRepositoryImpl(
             )
             trySend(sorted.mapNotNull { it.toMarketThemeDoc() })
         }
+        awaitClose { reg.remove() }
+    }
+
+    override fun getBriefingCards(): Flow<List<BriefingCard>> = callbackFlow {
+        val reg = firestore.collection(COLLECTION_BRIEFING_CARDS)
+            .addSnapshotListener { qs, error ->
+                if (error != null) {
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                if (qs == null) {
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                val cards = qs.documents
+                    .mapNotNull { it.toBriefingCard() }
+                    .sortedByDescending { it.generatedAt }
+                trySend(cards)
+            }
         awaitClose { reg.remove() }
     }
 
@@ -328,8 +348,31 @@ class NewsRepositoryImpl(
         private const val PREFS_MARKET_CACHE = "market_index_cache"
         private const val PREF_LAST_FETCH_MILLIS = "last_fetch_millis"
         private const val PREF_CACHED_INDICES = "cached_indices_json"
+        private const val COLLECTION_BRIEFING_CARDS = "briefing_cards"
         private const val FETCH_INTERVAL_MILLIS = 3 * 60 * 60 * 1000L
         private const val USER_AGENT =
             "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+    }
+}
+
+// ── Firestore 파서 ────────────────────────────────────────────────────────────
+
+@Suppress("UNCHECKED_CAST")
+internal fun DocumentSnapshot.toBriefingCard(): BriefingCard? {
+    return try {
+        BriefingCard(
+            cardId      = id,
+            category    = getString("category").orEmpty(),
+            moneyFlow   = getString("money_flow").orEmpty(),
+            marketStatus = getString("market_status").orEmpty(),
+            keyReasons  = (get("key_reasons") as? List<*>)
+                ?.mapNotNull { it as? String } ?: emptyList(),
+            investPoint = getString("invest_point").orEmpty(),
+            tags        = (get("tags") as? List<*>)
+                ?.mapNotNull { it as? String } ?: emptyList(),
+            generatedAt = getString("generated_at").orEmpty(),
+        )
+    } catch (e: Exception) {
+        null
     }
 }
