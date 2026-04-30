@@ -2,6 +2,8 @@
 기존 summarizer.py 하단에 추가할 카드 생성 함수들.
 기존 코드는 그대로 유지하고 이 부분만 append.
 """
+from __future__ import annotations
+from typing import Any
 
 # ── 카드 생성 상수 ─────────────────────────────────────────
 CARD_CATEGORIES: list[str] = [
