@@ -1207,22 +1207,20 @@ def merge_to_firestore_article(raw: dict[str, Any], ai: dict[str, Any]) -> dict[
 
 # ── 카드 생성 상수 ─────────────────────────────────────────
 CARD_CATEGORIES: list[str] = [
-    "시장전체",
-    "금리·연준",
-    "섹터",
+    "미국증시",
+    "섹터·흐름",
     "대장주",
-    "매크로",
-    "이벤트",
-    "AI·테크",
+    "국내증시",
+    "시장변수",
 ]
 
 CARD_MONEY_FLOW_VALUES = ("상승", "하락", "관망")
 
 # 각 필드 글자 수 범위
 CARD_MARKET_STATUS_MIN = 10
-CARD_MARKET_STATUS_MAX = 30
-CARD_KEY_REASON_MIN = 15
-CARD_KEY_REASON_MAX = 50
+CARD_MARKET_STATUS_MAX = 15
+CARD_BODY_MIN = 120
+CARD_BODY_MAX = 160
 CARD_INVEST_POINT_MIN = 10
 CARD_INVEST_POINT_MAX = 40
 
@@ -1242,13 +1240,13 @@ def _clamp_text(text: str, min_len: int, max_len: int) -> str:
 
 
 def _validate_card_dict(data: dict) -> None:
-    for key in ("money_flow", "market_status", "key_reasons", "invest_point", "tags"):
+    for key in ("money_flow", "market_status", "body", "tags"):
         if key not in data:
             raise ValueError(f"필수 필드 누락: {key}")
     if data["money_flow"] not in CARD_MONEY_FLOW_VALUES:
         raise ValueError(f"money_flow 허용값 외: {data['money_flow']!r}")
-    if not isinstance(data["key_reasons"], list) or len(data["key_reasons"]) < 1:
-        raise ValueError("key_reasons 최소 1개 필요")
+    if not str(data.get("body", "")).strip():
+        raise ValueError("body 비어 있음")
     if not str(data.get("market_status", "")).strip():
         raise ValueError("market_status 비어 있음")
 
@@ -1266,13 +1264,9 @@ def _postprocess_card_dict(data: dict, category: str) -> dict:
         CARD_MARKET_STATUS_MAX,
     )
 
-    raw_reasons = data.get("key_reasons", [])
-    if not isinstance(raw_reasons, list):
-        raw_reasons = []
-    key_reasons = [
-        t for r in raw_reasons
-        if (t := _clamp_text(str(r), CARD_KEY_REASON_MIN, CARD_KEY_REASON_MAX))
-    ][:3]
+    body = str(data.get("body", "")).strip()[:CARD_BODY_MAX]
+    if len(body) < CARD_BODY_MIN:
+        body = ""
 
     invest_point = _clamp_text(
         str(data.get("invest_point", "")),
@@ -1285,8 +1279,8 @@ def _postprocess_card_dict(data: dict, category: str) -> dict:
 
     if not market_status:
         raise ValueError("market_status 후처리 후 비어 있음")
-    if not key_reasons:
-        raise ValueError("key_reasons 후처리 후 비어 있음")
+    if not body:
+        raise ValueError("body 후처리 후 비어 있음")
 
     now = datetime.now(timezone.utc)
     return {
@@ -1294,7 +1288,7 @@ def _postprocess_card_dict(data: dict, category: str) -> dict:
         "category": category,
         "money_flow": money_flow,
         "market_status": market_status,
-        "key_reasons": key_reasons,
+        "body": body,
         "invest_point": invest_point,
         "tags": tags,
         "generated_at": now.isoformat(),
@@ -1377,19 +1371,17 @@ def classify_articles_to_cards(
 
     user = (
         "아래 기사들을 각각 다음 카테고리 중 정확히 하나에만 배정해줘.\n"
-        "카테고리: 시장전체 / 금리·연준 / 섹터 / 대장주 / 매크로 / 이벤트 / AI·테크\n\n"
+        "카테고리: 미국증시 / 섹터·흐름 / 대장주 / 국내증시 / 시장변수\n\n"
         "【카테고리 기준】\n"
-        "- 시장전체: 코스피·코스닥·나스닥·S&P500 등 전체 지수 흐름, 외국인/기관 수급\n"
-        "- 금리·연준: 기준금리 결정·예상, 연준 발언, 한국은행 통화정책, FOMC\n"
-        "- 섹터: 반도체·바이오·에너지·2차전지 등 특정 산업 섹터 전체 흐름\n"
-        "- 대장주: 삼성전자·SK하이닉스·엔비디아·애플 등 개별 대형 종목 이슈\n"
-        "- 매크로: 환율·물가(CPI·PPI)·고용·GDP·무역수지·관세 등 거시경제 지표\n"
-        "- 이벤트: 실적발표·IPO·M&A·정부 규제·지정학 리스크 등 단발성 이벤트\n"
-        "- AI·테크: AI 모델·GPU·빅테크 전략·반도체 신제품·데이터센터 투자\n\n"
+        "- 미국증시: S&P500·나스닥 중심 글로벌 시장 방향성\n"
+        "- 섹터·흐름: 자금이 몰리는 섹터와 빠지는 섹터, 돈의 이동\n"
+        "- 대장주: M7(애플·마이크로소프트·구글·메타·아마존·엔비디아·테슬라) 및 주요 기술주\n"
+        "- 국내증시: 코스피·코스닥 흐름, 외국인 수급\n"
+        "- 시장변수: 금리·연준·CPI·환율·정책 등 시장 방향에 영향을 주는 핵심 요인\n\n"
         "【주의】 기사 하나는 반드시 한 카테고리에만 배정. 중복 배정 금지.\n\n"
         f"기사 목록:\n{chr(10).join(lines)}\n\n"
         "반드시 JSON 한 개만 출력 (코드펜스·설명 없이):\n"
-        '{"시장전체":[0,2],"금리·연준":[1],"섹터":[],"대장주":[3,4],"매크로":[],"이벤트":[5],"AI·테크":[6,7]}'
+        '{"미국증시":[0,2],"섹터·흐름":[1],"대장주":[3,4],"국내증시":[],"시장변수":[5]}'
     )
 
     result: dict[str, list[dict[str, Any]]] = {cat: [] for cat in CARD_CATEGORIES}
@@ -1415,53 +1407,50 @@ def classify_articles_to_cards(
 _CARD_PROMPT = """\
 카테고리: {category}
 
-아래 기사들을 읽고 한국 개인 투자자를 위한 시장 해석 카드를 만들어줘.
-"뉴스 요약"이 아닌 "시장 결론과 돈의 흐름"을 도출하는 것이 목적이야.
+아래 기사들을 읽고 한국 개인 투자자를 위한 시장 브리핑 카드를 만들어줘.
+"뉴스 요약"이 아닌 "시장 흐름과 돈의 방향에 대한 판단"을 내리는 것이 목적이야.
+
+【카테고리별 초점】
+- 미국증시: S&P500·나스닥 중심 글로벌 시장 방향성
+- 섹터·흐름: 자금이 몰리는 섹터와 빠지는 섹터, 돈의 이동
+- 대장주: M7(애플·마이크로소프트·구글·메타·아마존·엔비디아·테슬라) 및 주요 기술주
+- 국내증시: 코스피·코스닥 흐름, 외국인 수급
+- 시장변수: 금리·연준·CPI·환율·정책 등 시장 방향에 영향을 주는 핵심 요인
 
 【출력 필드】
 
+market_status (헤드라인, 필수)
+· 10~15자 이내, 결론만 표현
+· 방향성 포함 (상승/하락/관망/제한 등)
+· 예: "상승 제한, 금리 영향", "기술주 중심 반등", "방향 없음, 관망 흐름"
+· 설명 금지, 판단만
+
+body (본문, 필수)
+· 120~160자, 완전 서술형 2~3문장
+· 구조: 결론 → 이유 → 영향
+· 불릿·리스트·핀 요약 절대 금지
+· 쉬운 표현 사용, 어려운 경제 용어 풀어쓰기
+· 예: "투자 분위기가 약해지며 시장은 방향 없이 움직이고 있다. 금리 불확실성과 실적 기대가 엇갈리면서 매수세가 제한된 모습이다. 당분간 선별적인 접근이 이어질 가능성이 크다."
+
 money_flow (필수)
-· "상승" / "하락" / "관망" 중 하나만
-· 여러 기사가 같은 방향 → 상승 또는 하락
-· 방향 엇갈림·근거 부족 → 반드시 "관망"
-· 억지 결론 금지
-
-market_status (필수)
-· {status_min}~{status_max}자 이내, 명사형 종결
-· 예: "관망세 지속", "금리 인하 기대 약화", "반도체 수급 개선 기대"
-· 서술형·해요체 금지 / 기사에 없는 내용 지어내기 금지
-
-key_reasons (필수, 2~3개)
-· 각 항목 {reason_min}~{reason_max}자 이내, 명사형 종결
-· 판단의 근거가 되는 이유만 — 단순 뉴스 제목 복사 금지
-· 기사에 수치(등락률·금리·환율·실적 등)가 있으면 반드시 포함
-· 기사에 없는 수치·주장·기업명 지어내기 절대 금지
-· 예: "나스닥 -1.2%, 기술주 전반 매도세 확대"
-· 예: "연준 위원 매파 발언, 금리 인하 기대 후퇴"
-
-invest_point (필수)
-· {point_min}~{point_max}자 이내
-· 매수/매도 권유 금지 — "지금 무엇을 봐야 하는가" 관찰 포인트
-· 예: "CPI 발표 전 변동성 주의"
-· 예: "AI 반도체 대장주 수급 지속 여부 확인"
-· 예: "금리 방향 확인 후 포지션 조정 고려"
+· "상승" / "하락" / "관망" 중 하나
+· 기사 방향 엇갈리면 반드시 "관망"
 
 tags (1~2개)
-· 이 카드와 직접 관련된 시장 키워드
-· 예: 미국증시, 국내증시, AI, 반도체, 금리, 환율, 빅테크
+· 예: 미국증시, 국내증시, 금리, 반도체, 빅테크
 
 【반드시 준수】
-1. 기사에 없는 내용(기업명·수치·전망) 지어내기 절대 금지
-2. money_flow 근거 수치는 key_reasons에 반드시 포함
-3. 기사 방향 엇갈리면 money_flow는 반드시 "관망"
-4. 모든 필드 내부에 큰따옴표(") 사용 금지 — 필요시 작은따옴표(') 사용
-5. 서술형·해요체 종결 금지 ("~습니다" "~에요" "~있다" 금지)
+1. 기사 여러 개를 종합해서 하나의 판단을 내릴 것 (기사 1개 요약 금지)
+2. 기사에 없는 내용 지어내기 절대 금지
+3. 불확실하면 억지 결론 내리지 말고 관망으로 표현
+4. 모든 필드 내부에 큰따옴표(") 사용 금지
+5. body는 서술형 문장으로만 (불릿·리스트 금지)
 
 기사 목록:
 {articles_text}
 
 반드시 JSON 한 개만 출력 (코드펜스·설명 없이):
-{{"money_flow":"관망","market_status":"...","key_reasons":["...","..."],"invest_point":"...","tags":["미국증시"]}}
+{{"money_flow":"관망","market_status":"...","body":"...","tags":["미국증시"]}}
 """
 
 
@@ -1493,12 +1482,6 @@ def generate_single_card(
 
     user = _CARD_PROMPT.format(
         category=category,
-        status_min=CARD_MARKET_STATUS_MIN,
-        status_max=CARD_MARKET_STATUS_MAX,
-        reason_min=CARD_KEY_REASON_MIN,
-        reason_max=CARD_KEY_REASON_MAX,
-        point_min=CARD_INVEST_POINT_MIN,
-        point_max=CARD_INVEST_POINT_MAX,
         articles_text="\n\n".join(article_blocks),
     )
 
@@ -1512,8 +1495,8 @@ def generate_single_card(
             _validate_card_dict(data)
             card = _postprocess_card_dict(data, category)
             logger.info(
-                "카드 생성 완료: %s | money_flow=%s | reasons=%d개",
-                category, card["money_flow"], len(card["key_reasons"]),
+                "카드 생성 완료: %s | money_flow=%s | body_len=%d",
+                category, card["money_flow"], len(card.get("body", "")),
             )
             return card
         except Exception as e:

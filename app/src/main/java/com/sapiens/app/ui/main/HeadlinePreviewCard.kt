@@ -74,12 +74,50 @@ private val MoneyFlowUpColor = Color(0xFFE53935)
 private val MoneyFlowDownColor = Color(0xFF1565C0)
 private val MoneyFlowFlatColor = Color(0xFF757575)
 
+// ── Mock(테스트) 데이터: card == null일 때 표시 ─────────────────────────────
+private const val MOCK_MARKET_STATUS =
+    "미증시혼조실적연준변수속관망세지속"
+
+private const val MOCK_BODY =
+    "투자 분위기가 약해지며 시장은 방향 없이 움직이고 있다. 금리 불확실성과 실적 기대가 엇갈리면서 매수세가 제한된 모습이다. 당분간 선별적인 접근이 이어질 가능성이 크다."
+
+private const val MOCK_INVEST_POINT =
+    "AI반도체대장주수급지속여부확인필요"
+
+private const val MOCK_CATEGORY = "미국증시"
+private const val MOCK_MONEY_FLOW = "관망"
+
 /** money_flow 방향에 따른 강조 색상 */
 private fun moneyFlowColor(direction: MarketDirection): Color = when (direction) {
     MarketDirection.UP   -> MoneyFlowUpColor
     MarketDirection.DOWN -> MoneyFlowDownColor
     MarketDirection.FLAT -> MoneyFlowFlatColor
 }
+
+private val ALLOWED_CARD_CATEGORIES: Set<String> = setOf(
+    "미국증시",
+    "섹터·흐름",
+    "대장주",
+    "국내증시",
+    "시장변수",
+)
+
+private fun normalizeCardCategory(raw: String?): String {
+    val s = (raw ?: "").trim()
+    if (s in ALLOWED_CARD_CATEGORIES) return s
+    // 데이터가 다른 문자열로 들어오는 경우(공백/유사 표기) 최소한의 관용 처리
+    return when {
+        s.contains("미국") -> "미국증시"
+        s.contains("국내") -> "국내증시"
+        s.contains("섹터") || s.contains("흐름") -> "섹터·흐름"
+        s.contains("대장") -> "대장주"
+        s.contains("변수") || s.contains("금리") || s.contains("환율") || s.contains("연준") -> "시장변수"
+        else -> MOCK_CATEGORY
+    }
+}
+
+private fun categoryVariant(category: String): MarketCategoryLabelVariant =
+    if (category == "국내증시") MarketCategoryLabelVariant.KrMarket else MarketCategoryLabelVariant.UsMarket
 
 /**
  * 브리핑 카드 1장.
@@ -152,14 +190,15 @@ fun HeadlinePreviewCard(
         RoundedCornerShape(scaledDp(DesignCardCornerDp, figmaScale))
     }
 
-    // 카드 데이터 (null이면 빈 값으로 폴백)
-    val title       = card?.marketStatus.orEmpty()
-    val date        = card?.generatedAt?.take(10).orEmpty()  // "2026-04-30"
-    val bodyText    = card?.keyReasons?.joinToString("\n• ", prefix = "• ").orEmpty()
-    val investPoint = card?.investPoint.orEmpty()
-    val tags        = card?.tags ?: emptyList()
-    val direction   = card?.moneyFlowDirection() ?: MarketDirection.FLAT
-    val moneyFlow   = card?.moneyFlow.orEmpty()
+    // 카드 데이터 (card == null이면 테스트용 Mock 데이터 표시)
+    val title = card?.marketStatus ?: MOCK_MARKET_STATUS
+    val date = card?.generatedAt?.take(10).orEmpty() // "2026-04-30"
+    // 본문: body 단일 문자열(서술형). 없으면 Mock.
+    val bodyText = card?.body.orEmpty().ifBlank { MOCK_BODY }
+    val investPoint = card?.investPoint ?: MOCK_INVEST_POINT
+    val category = normalizeCardCategory(card?.category)
+    val direction = card?.moneyFlowDirection() ?: MarketDirection.FLAT
+    val moneyFlow = card?.moneyFlow ?: MOCK_MONEY_FLOW
 
     Box(
         modifier = modifier
@@ -202,19 +241,8 @@ fun HeadlinePreviewCard(
                     horizontalArrangement = Arrangement.spacedBy(chipGap),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    tags.take(2).forEach { tag ->
-                        val variant = when {
-                            tag.contains("미국") -> MarketCategoryLabelVariant.UsMarket
-                            tag.contains("AI") || tag.contains("반도체") ->
-                                MarketCategoryLabelVariant.UsMarket
-                            else -> MarketCategoryLabelVariant.KrMarket
-                        }
-                        MarketCategoryLabel(tag, variant)
-                    }
-                    // 태그가 없을 때 카테고리로 대체
-                    if (tags.isEmpty() && card != null) {
-                        MarketCategoryLabel(card.category, MarketCategoryLabelVariant.KrMarket)
-                    }
+                    // 태그(칩)는 디자인 가이드의 5개 카테고리만 사용
+                    MarketCategoryLabel(category, categoryVariant(category))
                 }
                 Image(
                     painter = painterResource(
@@ -270,7 +298,7 @@ fun HeadlinePreviewCard(
                     .clipToBounds(),
             ) {
                 Column {
-                    // key_reasons 불릿 리스트
+                    // body 서술형
                     Text(
                         text = bodyText,
                         modifier = Modifier.fillMaxWidth(),

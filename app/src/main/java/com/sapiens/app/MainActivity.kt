@@ -35,6 +35,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sapiens.app.data.repository.NewsRepositoryImpl
+import com.sapiens.app.data.store.UserPreferencesRepository
 import com.sapiens.app.ui.news.NewsViewModel
 import com.sapiens.app.messaging.FcmTopicSync
 import com.sapiens.app.ui.main.MainScreen

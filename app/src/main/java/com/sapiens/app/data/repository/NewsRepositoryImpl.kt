@@ -360,13 +360,13 @@ class NewsRepositoryImpl(
 @Suppress("UNCHECKED_CAST")
 internal fun DocumentSnapshot.toBriefingCard(): BriefingCard? {
     return try {
+        val body = getString("body").orEmpty()
         BriefingCard(
             cardId      = id,
             category    = getString("category").orEmpty(),
             moneyFlow   = getString("money_flow").orEmpty(),
             marketStatus = getString("market_status").orEmpty(),
-            keyReasons  = (get("key_reasons") as? List<*>)
-                ?.mapNotNull { it as? String } ?: emptyList(),
+            body = body,
             investPoint = getString("invest_point").orEmpty(),
             tags        = (get("tags") as? List<*>)
                 ?.mapNotNull { it as? String } ?: emptyList(),

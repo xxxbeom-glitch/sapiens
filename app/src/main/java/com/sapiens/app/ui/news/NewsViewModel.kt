@@ -6,15 +6,14 @@ import androidx.lifecycle.viewModelScope
 import com.sapiens.app.data.model.Article
 import com.sapiens.app.data.model.BriefingCard
 import com.sapiens.app.data.repository.NewsRepository
-import android.util.Log
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.flatMapLatest
 
 class NewsViewModel(
     private val repository: NewsRepository
@@ -42,6 +41,8 @@ class NewsViewModel(
     }
 
     // ── 헤드라인 뉴스 ─────────────────────────────────────
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val headlineNews: StateFlow<List<Article>> =
         selectedNewsDocId
             .flatMapLatest { docId ->
                 repository.getNewsFeedDocument(docId)

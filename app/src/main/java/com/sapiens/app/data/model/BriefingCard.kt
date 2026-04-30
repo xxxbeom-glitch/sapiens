@@ -11,8 +11,8 @@ data class BriefingCard(
     val moneyFlow: String = "",
     /** 현재 시장 상태 한 줄 (명사형 종결) */
     val marketStatus: String = "",
-    /** 핵심 이유 2~3개 */
-    val keyReasons: List<String> = emptyList(),
+    /** 서술형 본문 (결론 → 이유 → 영향, 2~3문장) */
+    val body: String = "",
     /** 투자 관찰 포인트 한 줄 */
     val investPoint: String = "",
     /** 관련 시장 태그 1~2개 (예: 미국증시, 국내증시, AI) */
