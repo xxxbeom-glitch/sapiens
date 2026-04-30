@@ -422,6 +422,44 @@ def write_push_schedule_entry(
         logger.exception("push_schedule 저장 실패 doc_id=%s: %s", doc_id, e)
 
 
+_BRIEFING_CARDS = "briefing_cards"
+
+
+def save_briefing_cards(cards: list[dict[str, Any]]) -> None:
+    """
+    briefing_cards 컬렉션에 카드 저장.
+    - 기존 카드 전체 삭제 후 새 카드로 교체 (매 실행마다 최신화).
+    - 각 문서 ID = card["card_id"].
+    - saved_cards 컬렉션은 별도이므로 여기서 건드리지 않음.
+    """
+    if not cards:
+        logger.warning("save_briefing_cards: 저장할 카드 없음")
+        return
+    try:
+        db = _get_db()
+        col = db.collection(_BRIEFING_CARDS)
+
+        # 기존 카드 삭제
+        for snap in col.stream():
+            try:
+                snap.reference.delete()
+            except Exception as e:
+                logger.warning("기존 카드 삭제 실패 %s: %s", snap.id, e)
+
+        # 새 카드 저장
+        for card in cards:
+            card_id = str(card.get("card_id") or "").strip()
+            if not card_id:
+                logger.warning("card_id 없음, 스킵: %s", str(card)[:80])
+                continue
+            payload = {**card, "updatedAt": SERVER_TIMESTAMP}
+            col.document(card_id).set(payload, merge=False)
+
+        logger.info("save_briefing_cards 완료: %d장", len(cards))
+    except Exception as e:
+        logger.exception("save_briefing_cards 실패: %s", e)
+
+
 def write_pipeline_log(
     *,
     doc_id: str,

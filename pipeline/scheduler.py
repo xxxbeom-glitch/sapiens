@@ -1,6 +1,6 @@
 """
-KST 기준 06:30, 12:00, 15:00, 18:00에 main.run() 실행.
-`schedule` 라이브러리로 분 단위 체크 후, KST 시각이 슬롯과 일치할 때만 run() 호출.
+KST 기준 06:30, 17:30에 main.run() 실행.
+푸시는 각각 07:00, 18:00에 FCM으로 전송 (push_schedule_util 처리).
 """
 from __future__ import annotations
 
@@ -19,7 +19,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("scheduler")
 
-RUN_SLOTS_KST = ("06:30", "12:00", "15:00", "18:00")
+# 크롤링+카드생성 실행 슬롯 (푸시는 30분 후 FCM으로)
+RUN_SLOTS_KST = ("06:30", "17:30")
 
 _last_fired: tuple | None = None
 
@@ -31,7 +32,7 @@ def _kst_slot() -> tuple[datetime, str]:
 
 
 def tick() -> None:
-    global _last_fired  # noqa: PLW0603
+    global _last_fired
     now, hm = _kst_slot()
     if hm not in RUN_SLOTS_KST:
         return

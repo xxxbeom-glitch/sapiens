@@ -1,1205 +1,378 @@
 """
-기사 요약·시황·기업 분석: Google Gemini API (google-genai).
+기존 summarizer.py 하단에 추가할 카드 생성 함수들.
+기존 코드는 그대로 유지하고 이 부분만 append.
 """
-from __future__ import annotations
 
-import json
-import logging
-import os
-import re
-import threading
-import time
-from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Literal
+# ── 카드 생성 상수 ─────────────────────────────────────────
+CARD_CATEGORIES: list[str] = [
+    "시장전체",
+    "금리·연준",
+    "섹터",
+    "대장주",
+    "매크로",
+    "이벤트",
+    "AI·테크",
+]
 
-from google import genai
-from google.genai import types
+CARD_MONEY_FLOW_VALUES = ("상승", "하락", "관망")
 
-logger = logging.getLogger(__name__)
-
-# 제품 기본: Gemini 3.1 Flash-Lite (`generateContent`·텍스트/JSON 요약).
-# 다른 모델: 환경변수 GEMINI_MODEL.
-_DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
-
-# SAPIENS_ARTICLE_LLM_JUDGE=1: 기사 JSON 요약을 [단일 LLM 호출·재시도 2회]만 사용.
-# 미설정·0이면 _call_news_llm 기반 2회 재시도 경로.
-def _article_llm_judge_enabled() -> bool:
-    v = (os.environ.get("SAPIENS_ARTICLE_LLM_JUDGE") or "").strip().lower()
-    return v in ("1", "true", "yes", "on")
+# 각 필드 글자 수 범위
+CARD_MARKET_STATUS_MIN = 10
+CARD_MARKET_STATUS_MAX = 30
+CARD_KEY_REASON_MIN = 15
+CARD_KEY_REASON_MAX = 50
+CARD_INVEST_POINT_MIN = 10
+CARD_INVEST_POINT_MAX = 40
 
 
-# SAPIENS_EVIDENCE_SPANS=1: 요약 전에 본문에서 근거 구간(span)을 한 번 더 뽑아 프롬프트에 넣음(추가 Gemini 호출).
-def _evidence_spans_enabled() -> bool:
-    v = (os.environ.get("SAPIENS_EVIDENCE_SPANS") or "").strip().lower()
-    return v in ("1", "true", "yes", "on")
+def _call_gemini_card(user_content: str) -> str:
+    """카드 생성 전용 Gemini 호출 (temperature 낮게 — 할루시네이션 억제)."""
+    return str(_call_gemini(user_content, temperature=0.20) or "").strip()
 
 
-def _gemini_model_id() -> str:
-    return (os.environ.get("GEMINI_MODEL") or _DEFAULT_GEMINI_MODEL).strip() or _DEFAULT_GEMINI_MODEL
+# ── 후처리 헬퍼 ───────────────────────────────────────────
 
-
-SELECTED_MODEL_CLAUDE = "claude"
-SELECTED_MODEL_GEMINI = "gemini"
-
-_RUNTIME_SELECTED_MODEL = SELECTED_MODEL_GEMINI
-
-_token_input_total: int = 0
-_token_output_total: int = 0
-_token_model: str = ""
-_token_usage_lock = threading.Lock()
-_gemini_client: Any = None
-_gemini_client_init_lock = threading.Lock()
-SYSTEM = (
-    "당신은 한국 투자자를 위한 금융 뉴스 에디터입니다.\n"
-    "뉴스를 분석해서 핵심 내용을 명확하고 구체적으로 요약하세요.\n"
-    "반드시 JSON 형식으로만 응답하세요."
-)
-
-
-_HANGUL_RE = re.compile(r"[가-힣]")
-_LATIN_RE = re.compile(r"[A-Za-z]")
-
-# 기사 summary_points: 앱/프롬프트·후처리 동기화. 각 항목은 아래 max 이내·명사형 종결로 맺을 것.
-SUMMARY_POINT_MIN_LEN = 60
-SUMMARY_POINT_MAX_LEN = 105
-
-# 근거 스팬 선추출(옵션): 본문 일부만 모델에 넘기고, 각 span은 본문 부분문자열로 검증.
-_EVIDENCE_BODY_MAX_CHARS = 8000
-_EVIDENCE_BODY_MIN_FOR_EXTRACT = 320
-_EVIDENCE_MAX_SPANS = 5
-_EVIDENCE_SPAN_MAX_CHARS = 480
-
-_SYSTEM_EVIDENCE_SPANS = (
-    "당신은 뉴스 본문에서 사실 근거만 골라 내는 조력자입니다.\n"
-    "반드시 JSON 객체 하나만 출력하세요. 코드펜스·주석·설명 없이.\n"
-    "키는 spans 하나뿐이며 값은 문자열 배열입니다.\n"
-    "각 문자열은 입력 본문에 나타난 연속 부분 문자열을 **그대로 복사**해야 합니다. "
-    "의역·요약·재작성·본문에 없는 문장 금지."
-)
-
-# 서술형·해요체 등 — summary_point에서는 쓰지 않음(명사형 종결만).
-_KO_VERBAL_SENTENCE_ENDINGS: tuple[str, ...] = (
-    "잖아요.",
-    "이에요.",
-    "습니다.",
-    "입니다.",
-    "합니다.",
-    "겠습니다.",
-    "어요.",
-    "에요.",
-    "지요.",
-    "니다.",
-    "된다.",
-    "있다.",
-    "없다.",
-    "했다.",
-    "렸다.",
-    "였다.",
-    "었다.",
-    "인다.",
-    "죠.",
-    "다.",
-)
-
-
-def _ko_point_tail_incomplete(t: str) -> bool:
-    """절·연결 꼬리, 숫자·% 잘림 등 — 명사형으로 잘 맺히지 않은 꼬리."""
-    if not t:
-        return False
-    if t.endswith("다고") or t.endswith("라고") or t.endswith("대고"):
-        return False
-    for suf in ("는데", "다가", "으면", "으나", "지만", "을까", "거든", "거나"):
-        if t.endswith(suf) and len(t) > 8:
-            return True
-    for suf in (
-        "하며",
-        "이며",
-        "라며",
-        "가며",
-        "되며",
-        "연이어",
-        "이어",
-        "가운데",
-        "아울러",
-        "이자",
-    ):
-        if t.endswith(suf) and len(t) > 8:
-            return True
-    if t.endswith("고") and re.search(r"[가-힣]고$", t):
-        if t.endswith("학고"):
-            return False
-        if t.endswith("이고") and " 이고" in t:
-            return False
-        if t.endswith("이고"):
-            return len(t) < 7
-        if "다고" in t[-4:]:
-            return False
-        return True
-    if len(t) >= 3 and t[-1] == "." and t[-2].isdigit():
-        if t.endswith((
-            "원.",
-            "조.",
-            "만.",
-            "초.",
-            "곳.",
-            "배.",
-        )):
-            return False
-        # '… 70.' 등 10~90% 흐름(공백/쉼표 뒤 N0.)이 잘린 경우
-        if re.search(r"[\s,、·](?:1|2|3|4|5|6|7|8|9)0\.$", t):
-            return True
-    return False
-
-
-def _korean_bullet_looks_ended(s: str) -> bool:
-    """summary_point가 **명사형 종결**로 맺혔는지(서술·해요체·절 꼬리 제외)."""
-    t = (s or "").rstrip().rstrip(",;")
-    if not t or len(t) < 2:
-        return False
-    if not _HANGUL_RE.search(t):
-        return False
-    if _ko_point_tail_incomplete(t):
-        return False
-    for v in _KO_VERBAL_SENTENCE_ENDINGS:
-        if t.endswith(v):
-            return False
-    last = t[-1]
-    if last not in (".", "!", "?", "…", "‥", "。．"):
-        return False
-    return len(t) >= 2 and (bool(_HANGUL_RE.match(t[-2])) or t[-2].isdigit())
-
-
-def _ensure_nominal_period(s: str) -> str:
-    """명사형 종결 강제: 가능하면 끝에 '.'를 붙여 종결 형태로 맞춘다."""
-    t = (s or "").rstrip().rstrip(",;")
-    if not t:
-        return t
-    if t[-1] in (".", "!", "?", "…", "‥", "。．"):
-        return t
-    # 절/미완/수치 꼬리면 억지로 마침표를 붙이지 않음
-    if _ko_point_tail_incomplete(t):
-        return t
-    for v in _KO_VERBAL_SENTENCE_ENDINGS:
-        if t.endswith(v):
-            return t
-    # 끝이 한글(또는 한글 단위 포함)일 때만 '.' 부착
-    if _HANGUL_RE.search(t[-2:]) or bool(_HANGUL_RE.match(t[-1])):
-        return t + "."
-    return t
-
-
-def _looks_dangling_ending(s: str) -> bool:
-    """절단·후처리용: 명사형으로 잘 맺히지 않으면 True."""
-    return not _korean_bullet_looks_ended(s)
-
-
-def _longest_nominal_prefix_in_window(s0: str, n: int, min_len: int) -> str | None:
-    """s0[:n] 안에서 min_len 이상·명사형 종결인 가장 긴 접두(뒤에서부터 탐색)."""
-    for e in range(n, min_len - 1, -1):
-        cand = _ensure_nominal_period(s0[:e].rstrip())
-        if len(cand) < min_len:
-            continue
-        if _korean_bullet_looks_ended(cand):
-            return cand
-    return None
-
-
-def _snap_away_dangling(
-    s0: str, proposed: str, *, max_len: int, min_preserve: int
-) -> str:
-    t = _ensure_nominal_period((proposed or "").rstrip())
-    if not t or len(s0) < 10:
-        return t
-    wmax = min(len(s0), max_len)
-    t = t[:wmax] if len(t) > wmax else t
-    if _korean_bullet_looks_ended(t):
-        return t
-    n = wmax
-    for mp in (min_preserve, max(12, min_preserve - 8), 10):
-        c = _longest_nominal_prefix_in_window(s0, n, mp)
-        if c and len(c) <= n and len(c) >= SUMMARY_POINT_MIN_LEN:
-            return c
-    return t if len(t) <= wmax else t[:wmax].rstrip()
-
-
-def _clip_at_last_space_before_max(s0: str, max_len: int) -> str | None:
-    """[min_tok, max) 구간의 마지막 공백(어구)에서 자름. 단어/자모 중간 절단을 줄이기 위함."""
-    if max_len < 2:
-        return None
-    win = s0[:max_len]
-    for lo in (int(max_len * 0.55), int(max_len * 0.42), 32, 22, 18):
-        if lo >= max_len - 1 or lo < 1:
-            continue
-        j = win.rfind(" ", lo, max_len)
-        if j >= lo:
-            t = s0[:j].rstrip()
-            if len(t) >= SUMMARY_POINT_MIN_LEN:
-                return t
-    return None
-
-
-def _finish_summary_point(
-    text: str,
-    *,
-    max_len: int = SUMMARY_POINT_MAX_LEN,
-) -> str:
-    """
-    각 요약 항목을 `max_len`자(기본 SUMMARY_POINT_MAX_LEN) 이하로 맞추되,
-    **가능하면 명사형 종결**로 끊기도록 맞춘다.
-    모델이 `max_len`을 넘긴 경우, 앞에서부터 가장 긴 명사형으로 맺힌 접두를 택한다.
-    """
-    s0 = (text or "").strip()
-    if not s0:
-        return s0
-
-    def _snapped(proposed: str) -> str:
-        return _snap_away_dangling(
-            s0, proposed, max_len=max_len, min_preserve=SUMMARY_POINT_MIN_LEN
-        )
-
-    if len(s0) <= max_len and _korean_bullet_looks_ended(s0):
-        return _ensure_nominal_period(s0)
-    if len(s0) <= max_len:
-        logger.info(
-            "summary_point: %d자 이하이나 명사형 종결이 약함(서술형·해요체·절 꼬리 없이 명사구로 끝낼 것): %r",
-            len(s0),
-            s0[: min(len(s0), max_len * 2)],
-        )
-        # max 이하여도 종결/미완을 보정(스냅/마침표)
-        return _snapped(s0)
-    for i in range(max_len, SUMMARY_POINT_MIN_LEN - 1, -1):
-        t = s0[:i].rstrip()
-        if SUMMARY_POINT_MIN_LEN <= len(t) <= max_len and _korean_bullet_looks_ended(t):
-            if len(s0) > max_len and len(s0) != len(t):
-                logger.info(
-                    "summary_point: %d자 → 명사형 접두 %d자: 앞 45자=%r",
-                    len(s0),
-                    len(t),
-                    t[:45],
-                )
-            return _snapped(t)
-    # 명사형 접두를 못 찾을 때: max_len 안에서 가장 긴 명사형 종결 접두
-    t_nom = _longest_nominal_prefix_in_window(s0, max_len, SUMMARY_POINT_MIN_LEN)
-    if t_nom and SUMMARY_POINT_MIN_LEN <= len(t_nom) <= max_len:
-        logger.info(
-            "summary_point: %d자 → 명사형 접두 %d자: %r",
-            len(s0),
-            len(t_nom),
-            t_nom[:50],
-        )
-        return _snapped(t_nom)
-    t3 = _clip_at_last_space_before_max(s0, max_len)
-    if t3 and SUMMARY_POINT_MIN_LEN <= len(t3) <= max_len:
-        logger.info(
-            "summary_point: %d자 → 어구 끝(공백)에서 %d자: %r",
-            len(s0),
-            len(t3),
-            t3[:50],
-        )
-        return _snapped(t3)
-    logger.info(
-        "summary_point: %d자, %d자에서 구절·공백 없이 하드 절단(앞 55자=%r)",
-        len(s0),
-        max_len,
-        s0[:55],
-    )
-    return _snapped(s0[:max_len].rstrip())
-
-
-# summarize_article JSON category — 국내·해외 동일. 앱 ChipColors·프롬프트와 동기화.
-_CANONICAL_ARTICLE_CATEGORIES: frozenset[str] = frozenset(
-    {
-        "경제",
-        "테크&반도체",
-        "증시",
-        "정치",
-        "국제",
-        "부동산",
-        "산업",
-        "사회",
-        "빅테크",
-        "암호화폐",
-    }
-)
-
-# 모델이 구 라벨을 쓸 때 정규화(표기 통일).
-_ARTICLE_CATEGORY_ALIASES: dict[str, str] = {
-    "it": "테크&반도체",
-    "it·테크": "테크&반도체",
-    "it 테크": "테크&반도체",
-    "테크·반도체": "테크&반도체",
-    "금융": "증시",
-    "증권": "증시",
-    "원자재": "증시",
-    "채권": "증시",
-    "매크로": "경제",
-}
-
-# 미국증시·AI 이슈(해외 RSS) 요약 시에만 프롬프트에 삽입. 국내증시(domestic_market)는 제외.
-_FOREIGN_RSS_NEWS_FEEDS: frozenset[str] = frozenset({"global_market", "ai_issue"})
-_FOREIGN_RSS_KO_FORMAL_BLOCK = (
-    "【해외 RSS】영문 출처 기사입니다. 회사·브랜드·제품·서비스·모델·인물·매체명은 "
-    "**한국어 정식 명칭**이나 국내 금융·테크 뉴스에서 통용되는 한글 표기를 쓰세요 "
-    "(예: 마이크로소프트, 엔비디아, 오픈AI, 앤스로픽, 구글, 애플, 메타, 스탠더드앤드푸어스 500). "
-    "원문 영문 표기를 그대로 베끼지 마세요. 어색한 순수 음역(예: 젬나이)보다 통용 한글명을 택하세요. "
-    "아래 구체성 규칙의 ‘원문 표기’는 이 【해외 RSS】 고유명 규칙보다 우선하지 않습니다. "
-    "headline은 자연스러운 한국어 **제목** 문체로 작성하세요. "
-    "summary_points는 국내 기사와 **동일하게 명사형 종결**만 쓰고(…다·…요·…습니다 등 서술·해요체로 끝내지 말 것), "
-    "문장형으로 길게 풀지 마세요.\n"
-)
-
-_SUMMARIZE_ARTICLE_CATEGORY_BLOCK = (
-    "category는 반드시 다음 중 **정확히 표기된 문자열 하나**만 사용하세요: "
-    "경제, 테크&반도체, 증시, 정치, 국제, 부동산, 산업, 사회, 빅테크, 암호화폐\n"
-    "분류 가이드:\n"
-    "- 금리, 환율, 매크로, 통화정책, 중앙은행, 물가·고용, 거시지표 등 → **경제**\n"
-    "- IT, 소프트웨어, 반도체, AI, 데이터센터, 칩·파운드리 등(초대형 플랫폼 **기업 자체** 이슈가 아닐 때) → **테크&반도체**\n"
-    "- 원자재, 채권, 증권, 주식시장, 지수, 거래소·종목 일반 → **증시**\n"
-    "- 비트코인, 이더리움, 블록체인, 가상자산·코인 규제 등 → **암호화폐**\n"
-    "- 애플, 구글(알파벳), 메타, 아마존, 마이크로소프트 등 **빅테크 기업** 중심 뉴스 → **빅테크**\n"
-)
-
-
-def _normalize_article_category(raw: str) -> str:
-    s = (raw or "").strip()
-    if s in _CANONICAL_ARTICLE_CATEGORIES:
-        return s
-    mapped = _ARTICLE_CATEGORY_ALIASES.get(s) or _ARTICLE_CATEGORY_ALIASES.get(s.replace(" ", ""))
-    if mapped:
-        return mapped
-    if s:
-        logger.warning("summarize_article: 허용 목록 밖 category %r — 경제로 대체", s)
-    return "경제"
-
-
-def _contains_hangul(text: str) -> bool:
-    return bool(_HANGUL_RE.search(text or ""))
-
-
-def _looks_english_headline(text: str) -> bool:
-    s = (text or "").strip()
-    if not s:
-        return False
-    return bool(_LATIN_RE.search(s)) and not _contains_hangul(s)
-
-
-def _preprocess_llm_json_blob(text: str | None) -> str:
-    """
-    모든 json.loads 시도 전 공통 전처리.
-    strip → ```json / ``` 마크다운 펜스 제거 → 첫 `{`~마지막 `}` 슬라이스.
-    """
-    if text is None:
+def _clamp_text(text: str, min_len: int, max_len: int) -> str:
+    t = (text or "").strip()
+    if len(t) < min_len:
         return ""
-    t = str(text).strip()
-    if not t:
-        return ""
-    t = re.sub(r"^```json\s*", "", t, flags=re.IGNORECASE)
-    t = re.sub(r"^```\s*", "", t)
-    t = re.sub(r"\s*```$", "", t)
-    t = t.strip()
-    start = t.find("{")
-    end = t.rfind("}")
-    if start != -1 and end != -1 and end >= start:
-        t = t[start : end + 1]
-    return t
+    return t[:max_len]
 
 
-def _json_object_slice(s: str) -> str | None:
-    """본문 앞뒤 잡음 제거용: 첫 `{`~마지막 `}` 구간."""
-    i = s.find("{")
-    j = s.rfind("}")
-    if 0 <= i < j:
-        return s[i : j + 1]
-    return None
+def _validate_card_dict(data: dict) -> None:
+    for key in ("money_flow", "market_status", "key_reasons", "invest_point", "tags"):
+        if key not in data:
+            raise ValueError(f"필수 필드 누락: {key}")
+    if data["money_flow"] not in CARD_MONEY_FLOW_VALUES:
+        raise ValueError(f"money_flow 허용값 외: {data['money_flow']!r}")
+    if not isinstance(data["key_reasons"], list) or len(data["key_reasons"]) < 1:
+        raise ValueError("key_reasons 최소 1개 필요")
+    if not str(data.get("market_status", "")).strip():
+        raise ValueError("market_status 비어 있음")
 
 
-# 비정상 입력(거대 한 줄)에 방어. 잘림 보완용 `]`·`}` 추가 상한.
-_MAX_TRAILING_BRACKET_CLOSES = 128
+def _postprocess_card_dict(data: dict, category: str) -> dict:
+    from datetime import datetime, timezone
 
+    money_flow = str(data.get("money_flow", "관망")).strip()
+    if money_flow not in CARD_MONEY_FLOW_VALUES:
+        money_flow = "관망"
 
-def _count_json_brackets_outside_strings(text: str) -> tuple[int, int, int, int]:
-    """
-    문자열·이스케이프 밖에서만 `{` `}` `[` `]` 개수.
-    반환: (open_curly, close_curly, open_square, close_square)
-    """
-    oc = cc = osq = csq = 0
-    in_str = False
-    esc = False
-    for ch in text:
-        if in_str:
-            if esc:
-                esc = False
-            elif ch == "\\":
-                esc = True
-            elif ch == '"':
-                in_str = False
-            continue
-        if ch == '"':
-            in_str = True
-        elif ch == "{":
-            oc += 1
-        elif ch == "}":
-            cc += 1
-        elif ch == "[":
-            osq += 1
-        elif ch == "]":
-            csq += 1
-    return oc, cc, osq, csq
-
-
-def _try_repair_truncated_json_dict(core: str) -> dict[str, Any] | None:
-    """
-    잘린 JSON 객체 복구: 문자열 밖에서 (열린 [ − 닫힌 ])만큼 `]` 추가,
-    (열린 { − 닫힌 })만큼 `}` 추가 후 json.loads. 순서: ] 먼저, } 나중.
-    """
-    t = _preprocess_llm_json_blob(core)
-    if not t.startswith("{"):
-        return None
-    try:
-        parsed0: Any = json.loads(t)
-        if isinstance(parsed0, dict):
-            return parsed0
-    except json.JSONDecodeError:
-        pass
-    oc, cc, osq, csq = _count_json_brackets_outside_strings(t)
-    need_sq = min(max(0, osq - csq), _MAX_TRAILING_BRACKET_CLOSES)
-    need_br = min(max(0, oc - cc), _MAX_TRAILING_BRACKET_CLOSES)
-    if need_sq == 0 and need_br == 0:
-        return None
-    candidate = t + ("]" * need_sq) + ("}" * need_br)
-    try:
-        parsed: Any = json.loads(candidate)
-        if isinstance(parsed, dict):
-            logger.info("JSON 파싱: 잘림 보완 성공 — ]+%d }+%d", need_sq, need_br)
-            return parsed
-    except json.JSONDecodeError:
-        pass
-    return None
-
-
-def _extract_json(text: str) -> dict[str, Any] | str:
-    """
-    JSON 객체 파싱 시도.
-    1) 공통 전처리 후 전체 문자열 json.loads
-    2) 첫 `{` 이후: `]`·`}` 균형 보완 후 json.loads
-    3) 첫 `{`~마지막 `}` 슬라이스 후 동일 보완
-    성공 시 dict. 실패 시 원문 처리 문자열 반환(호출부에서 dict 여부로 분기).
-    """
-    s = _preprocess_llm_json_blob(text)
-    if not s:
-        return ""
-    try:
-        parsed: Any = json.loads(s)
-        if isinstance(parsed, dict):
-            return parsed
-    except json.JSONDecodeError:
-        pass
-    i = s.find("{")
-    if i >= 0:
-        from_first = s[i:].strip()
-        fixed = _try_repair_truncated_json_dict(from_first)
-        if fixed is not None:
-            return fixed
-    fixed = _try_repair_truncated_json_dict(s.strip())
-    if fixed is not None:
-        return fixed
-    sub = _json_object_slice(s)
-    if sub:
-        try:
-            parsed = json.loads(sub)
-            if isinstance(parsed, dict):
-                return parsed
-        except json.JSONDecodeError:
-            pass
-        fixed_sub = _try_repair_truncated_json_dict(sub.strip())
-        if fixed_sub is not None:
-            return fixed_sub
-    return s
-
-
-def _require_json_dict(text: str) -> dict[str, Any]:
-    """모델 응답에서 JSON 객체만 허용. 파싱 실패 시 로그 후 ValueError."""
-    parsed = _extract_json(text)
-    if isinstance(parsed, dict):
-        return parsed
-    if isinstance(parsed, str) and not parsed.strip():
-        raise ValueError("empty model response text (JSON expected)")
-    raw = parsed if isinstance(parsed, str) else str(parsed)
-    logger.warning("JSON 파싱 실패 — 응답 앞 500자: %s", raw[:500])
-    raise ValueError("model response was not valid JSON object")
-
-
-def configure_ai(*, selected_model: str) -> None:
-    """main.py에서 Firebase settings/ai_config 읽은 뒤 호출."""
-    global _RUNTIME_SELECTED_MODEL
-    s = (selected_model or "").strip().lower()
-    if s == SELECTED_MODEL_CLAUDE:
-        _RUNTIME_SELECTED_MODEL = SELECTED_MODEL_CLAUDE
-    else:
-        _RUNTIME_SELECTED_MODEL = SELECTED_MODEL_GEMINI
-    logger.info(
-        "summarizer AI runtime: selected_model=%s gemini_model=%s",
-        _RUNTIME_SELECTED_MODEL,
-        _gemini_model_id(),
+    market_status = _clamp_text(
+        str(data.get("market_status", "")),
+        CARD_MARKET_STATUS_MIN,
+        CARD_MARKET_STATUS_MAX,
     )
 
+    raw_reasons = data.get("key_reasons", [])
+    if not isinstance(raw_reasons, list):
+        raw_reasons = []
+    key_reasons = [
+        t for r in raw_reasons
+        if (t := _clamp_text(str(r), CARD_KEY_REASON_MIN, CARD_KEY_REASON_MAX))
+    ][:3]
 
-def reset_token_counters() -> None:
-    global _token_input_total, _token_output_total, _token_model
-    with _token_usage_lock:
-        _token_input_total = 0
-        _token_output_total = 0
-        _token_model = ""
-
-
-def get_token_usage() -> dict[str, Any]:
-    with _token_usage_lock:
-        return {
-            "input": _token_input_total,
-            "output": _token_output_total,
-            "total": _token_input_total + _token_output_total,
-            "model": _token_model,
-        }
-
-
-def _append_model_label(label: str) -> None:
-    global _token_model
-    s = (label or "").strip()
-    if not s:
-        return
-    parts = [p.strip() for p in _token_model.split(",") if p.strip()] if _token_model else []
-    if s not in parts:
-        parts.append(s)
-        _token_model = ",".join(parts)
-
-
-def _usage_meta_get_int(obj: Any, *names: str) -> int:
-    if obj is None:
-        return 0
-    if isinstance(obj, dict):
-        for n in names:
-            v = obj.get(n)
-            if v is not None:
-                try:
-                    return int(v)
-                except (TypeError, ValueError):
-                    pass
-        return 0
-    for n in names:
-        v = getattr(obj, n, None)
-        if v is not None:
-            try:
-                return int(v)
-            except (TypeError, ValueError):
-                pass
-    return 0
-
-
-def _accumulate_gemini_usage(response: Any) -> None:
-    global _token_input_total, _token_output_total
-    um = getattr(response, "usage_metadata", None)
-    if um is None:
-        return
-    inp = _usage_meta_get_int(um, "prompt_token_count", "prompt_tokens")
-    out = _usage_meta_get_int(um, "candidates_token_count", "candidates_tokens", "output_token_count")
-    with _token_usage_lock:
-        _token_input_total += max(0, inp)
-        _token_output_total += max(0, out)
-        _append_model_label(_gemini_model_id())
-
-
-def _ai_any_news_enabled() -> bool:
-    return True
-
-
-def _call_news_llm(user_content: str) -> str:
-    """뉴스/시황/큐레이션 — Gemini."""
-    if not _ai_any_news_enabled():
-        return ""
-    return str(_call_gemini(user_content) or "").strip()
-
-
-def classify_kr_headline_bucket(
-    row: dict[str, Any],
-) -> tuple[Literal["domestic_stock", "domestic_economy", "none"], float]:
-    """
-    RSS 한 줄(제목·요약·가능하면 본문)만 보고, 국내 '증시' / '경제' 중 어디에 더 맞는지 판정.
-    키워드 누락(표기/동음이의어 등) 보강용 — 호출 측에서 budget 을 둡니다.
-    """
-    if not _ai_any_news_enabled():
-        return "none", 0.0
-
-    title = str(row.get("title") or "").strip()
-    summary = str(row.get("summary") or "").strip()
-    body = str(row.get("body") or "").strip()
-    if len(body) > 6000:
-        body = body[:6000] + "…"
-
-    if not (title or summary or body):
-        return "none", 0.0
-
-    user = (
-        "아래 기사(제목+요약+가능한 본문)를 읽고, '국내 증시'와 '국내 경제(거시/정책/물가/고용/무역/환율/부동산정책/실물경제)'\n"
-        "중에서 더 잘 맞는 한 가지로 분류하세요.\n"
-        "- domestic_stock: 상장기업, 실적, 목표가, 밸류에이션, 국내 주식/지수/ETF, 증권·거래제도, 공매도/공시 등 '주식·증시' 중심\n"
-        "- domestic_economy: 한은/금리, CPI/GDP, 고용, 재정, 세금, 대외/무역, 가계/기업/부채, 정책(부동산/규제 포함) 등 '경제' 중심\n"
-        "둘 다에 해당해도, 더 강한 축을 하나만 고르세요. 뉴스가 둘 다에 해당 없으면 none.\n\n"
-        f"title:\n{title}\n\nsummary:\n{summary}\n\nbody:\n{body}\n\n"
-        "반드시 JSON 한 개만(코드펜스/주석/설명 없이) 출력:\n"
-        '{"bucket":"domestic_stock"|"domestic_economy"|"none","confidence":0.0~1.0}'
+    invest_point = _clamp_text(
+        str(data.get("invest_point", "")),
+        CARD_INVEST_POINT_MIN,
+        CARD_INVEST_POINT_MAX,
     )
 
-    raw = str(_call_gemini(user, temperature=0.15) or "").strip()
-    if not raw:
-        return "none", 0.0
-    # 모델이 ```json``` 이나 잡담을 앞/뒤에 붙이는 경우 — 마지막 {..} 쪽을 우선 파싱
-    try:
-        data = _require_json_dict(raw)
-    except Exception:
-        m = re.search(r"\{[\s\S]*\}\s*$", raw)
-        if not m:
-            return "none", 0.0
-        try:
-            data = json.loads(m.group(0))
-        except Exception:
-            return "none", 0.0
+    raw_tags = data.get("tags", [])
+    tags = [str(t).strip() for t in (raw_tags if isinstance(raw_tags, list) else []) if str(t).strip()][:2]
 
-    b = str(data.get("bucket", "")).strip().lower()
-    if b in ("stock", "kr_stock", "korea_stock", "kospi", "kosdaq"):
-        b = "domestic_stock"
-    if b in ("economy", "macro", "korea_economy"):
-        b = "domestic_economy"
-    if b not in ("domestic_stock", "domestic_economy", "none"):
-        b = "none"
-    try:
-        conf = float(data.get("confidence", 0.0))
-    except (TypeError, ValueError):
-        conf = 0.0
-    if conf < 0.0:
-        conf = 0.0
-    if conf > 1.0:
-        conf = 1.0
-    return b, conf  # type: ignore[return-value]
+    if not market_status:
+        raise ValueError("market_status 후처리 후 비어 있음")
+    if not key_reasons:
+        raise ValueError("key_reasons 후처리 후 비어 있음")
 
-
-def _get_gemini_client() -> Any:
-    global _gemini_client
-    if _gemini_client is not None:
-        return _gemini_client
-    with _gemini_client_init_lock:
-        if _gemini_client is not None:
-            return _gemini_client
-        key = (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
-        if not key:
-            raise RuntimeError("GEMINI_API_KEY 또는 GOOGLE_API_KEY 가 설정되어 있어야 합니다.")
-        _gemini_client = genai.Client(api_key=key)
-        return _gemini_client
-
-
-def _call_gemini(user_content: str, *, temperature: float = 0.35) -> str:
-    try:
-        client = _get_gemini_client()
-        model_id = _gemini_model_id()
-        response = client.models.generate_content(
-            model=model_id,
-            contents=user_content,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM,
-                max_output_tokens=8192,
-                temperature=temperature,
-            ),
-        )
-        try:
-            _accumulate_gemini_usage(response)
-        except Exception as e:
-            logger.warning("Gemini usage 집계 실패(무시): %s", e)
-        text = (getattr(response, "text", None) or "").strip()
-        return text
-    except Exception as e:
-        logger.exception("_call_gemini 실패: %s", e)
-        return ""
-
-
-def _call_gemini_with_system(
-    user_content: str,
-    *,
-    temperature: float,
-    system_instruction: str,
-    max_output_tokens: int = 4096,
-) -> str:
-    try:
-        client = _get_gemini_client()
-        model_id = _gemini_model_id()
-        response = client.models.generate_content(
-            model=model_id,
-            contents=user_content,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                max_output_tokens=max_output_tokens,
-                temperature=temperature,
-            ),
-        )
-        try:
-            _accumulate_gemini_usage(response)
-        except Exception as e:
-            logger.warning("Gemini usage 집계 실패(무시): %s", e)
-        text = (getattr(response, "text", None) or "").strip()
-        return text
-    except Exception as e:
-        logger.exception("_call_gemini_with_system 실패: %s", e)
-        return ""
-
-
-def _extract_evidence_spans_from_article(title: str, body: str) -> list[str]:
-    """
-    본문에서 사실·수치가 든 구간을 부분문자열로 뽑아 요약 프롬프트에 넣기 위한 선행 단계.
-    파싱 실패·검증 실패 시 빈 리스트.
-    """
-    b = (body or "").strip()
-    if len(b) < _EVIDENCE_BODY_MIN_FOR_EXTRACT:
-        return []
-    body_for_model = b if len(b) <= _EVIDENCE_BODY_MAX_CHARS else b[:_EVIDENCE_BODY_MAX_CHARS] + "…"
-    user = (
-        "제목(참고만 — spans에 제목 문장을 복사하지 말 것):\n"
-        f"{title.strip()}\n\n"
-        "기사 본문:\n"
-        f"{body_for_model}\n\n"
-        '위 본문에서 2~5개의 span을 골라 JSON만 출력하세요.\n'
-        '{"spans":["…","…"]}\n'
-        f"각 span은 본문의 연속된 일부를 **글자 단위로 동일하게** 복사해야 합니다. "
-        f"수치·날짜·고유명·정책·거래 조건 등이 든 문장·절을 우선하세요. "
-        f"한 span당 최대 {_EVIDENCE_SPAN_MAX_CHARS}자."
-    )
-    raw = _call_gemini_with_system(
-        user,
-        temperature=0.12,
-        system_instruction=_SYSTEM_EVIDENCE_SPANS,
-        max_output_tokens=2048,
-    )
-    if not raw:
-        return []
-    try:
-        data = _require_json_dict(raw)
-    except Exception:
-        m = re.search(r"\{[\s\S]*\}\s*$", raw)
-        if not m:
-            return []
-        try:
-            data = json.loads(m.group(0))
-        except Exception:
-            return []
-    spans_raw = data.get("spans")
-    if not isinstance(spans_raw, list):
-        return []
-    out: list[str] = []
-    seen: set[str] = set()
-    for x in spans_raw:
-        s = str(x).strip()
-        if not s or len(s) > _EVIDENCE_SPAN_MAX_CHARS:
-            continue
-        if s not in b:
-            continue
-        if s in seen:
-            continue
-        seen.add(s)
-        out.append(s)
-        if len(out) >= _EVIDENCE_MAX_SPANS:
-            break
-    return out
-
-
-def _validate_summarize_article_shape(data: dict[str, Any]) -> None:
-    if "headline" not in data or "category" not in data or "summary_points" not in data:
-        raise ValueError(f"Invalid JSON keys: {list(data.keys())}")
-    pts = data["summary_points"]
-    if not isinstance(pts, list):
-        raise ValueError("summary_points must be a list")
-
-
-def _postprocess_summarize_article_dict(
-    data: dict[str, Any],
-    max_points_keep: int,
-    title: str,
-    source: str,
-    summary: str,
-    body_stripped: str,
-    *,
-    news_feed: str | None = None,
-) -> dict[str, Any]:
-    out = dict(data)
-    out["headline"] = str(out.get("headline", "")).strip()
-    foreign = news_feed in _FOREIGN_RSS_NEWS_FEEDS
-    headline_has_latin = bool(_LATIN_RE.search(out["headline"]))
-    if _looks_english_headline(out["headline"]) or (foreign and headline_has_latin):
-        out["headline"] = translate_headline_to_korean(
-            headline=out["headline"],
-            source=source,
-            summary=summary,
-            body=body_stripped,
-            formal_korean_names=foreign,
-        )
-    out["category"] = _normalize_article_category(str(out.get("category", "")))
-    pts = out["summary_points"]
-    if not isinstance(pts, list):
-        raise ValueError("summary_points must be a list")
-    cleaned: list[str] = []
-    for p in pts:
-        t = str(p).strip()
-        if not t:
-            continue
-        t2 = _finish_summary_point(t)
-        if t2 and len(t2) >= SUMMARY_POINT_MIN_LEN:
-            cleaned.append(t2)
-    out["summary_points"] = cleaned[:max_points_keep]
-    return out
-
-
-def _summarize_article_claude_judge_once(
-    user: str,
-    *,
-    title: str,
-    source: str,
-    summary: str,
-    body_stripped: str,
-    max_points_keep: int,
-    news_feed: str | None = None,
-) -> dict[str, Any]:
-    """
-    SAPIENS_ARTICLE_LLM_JUDGE=1: 단일 LLM 호출·JSON 파싱 후 반환(일반 2회 재시도 루프는 생략).
-    JSON·스키마 오류 시 최대 2회까지 동일 프롬프트로 재시도.
-    """
-    last_err: Exception | None = None
-    for attempt in range(2):
-        try:
-            raw = _call_gemini(user)
-            if not (raw or "").strip():
-                raise ValueError("empty Gemini response")
-            data = _require_json_dict(raw)
-            _validate_summarize_article_shape(data)
-            out = _postprocess_summarize_article_dict(
-                data,
-                max_points_keep,
-                title,
-                source,
-                summary,
-                body_stripped,
-                news_feed=news_feed,
-            )
-            out["_quality"] = {"path": "gemini_judge_once", "attempts": attempt + 1}
-            return out
-        except Exception as e:
-            last_err = e
-            logger.warning("Gemini(저지 1경로) 요약 재시도 (%s/2): %s", attempt + 1, e)
-            if attempt == 0:
-                time.sleep(0.5)
-    raise last_err or RuntimeError("gemini_judge_once summarize failed")
-
-
-NewsFeedId = Literal["domestic_market", "global_market", "ai_issue"]
-
-
-def summarize_article(
-    title: str,
-    summary: str,
-    source: str,
-    body: str = "",
-    *,
-    news_feed: NewsFeedId | None = None,
-) -> dict[str, Any]:
-    """
-    반환:
-    headline, category, summary_points
-    """
-    body_stripped = (body or "").strip()
-    summary_stripped = (summary or "").strip()
-
-    if not _ai_any_news_enabled():
-        logger.info("summarize_article: AI off — 원문 폴백용 스텁")
-        return {"headline": "", "category": "", "summary_points": []}
-
-    if body_stripped:
-        article_block = (
-            f"제목: {title}\n"
-            f"기사 본문 (요약의 주된 근거):\n{body_stripped}\n"
-        )
-        if summary_stripped:
-            article_block += f"목록/리드용 짧은 설명 (보조 참고): {summary_stripped}\n"
-    else:
-        article_block = f"제목: {title}\n목록/리드 요약문:\n{summary_stripped}\n"
-
-    use_evidence_spans = False
-    if (
-        body_stripped
-        and _evidence_spans_enabled()
-        and len(body_stripped) >= _EVIDENCE_BODY_MIN_FOR_EXTRACT
-    ):
-        try:
-            ev_spans = _extract_evidence_spans_from_article(title, body_stripped)
-        except Exception as e:
-            logger.warning("근거 스팬 추출 예외(무시): %s", e)
-            ev_spans = []
-        if ev_spans:
-            use_evidence_spans = True
-            evidence_intro = (
-                "[근거 인용] 아래는 기사 본문에서 **문자 그대로** 복사한 구간입니다. "
-                "summary_points에 넣는 **구체 사실·수치·고유명·날짜**는 우선 이 구간에 나온 표현과 일치하게 쓰고, "
-                "제목에만 있는 사실은 제목 범위로 한정하세요. 인용에 없는 수치·주장을 지어내지 마세요.\n\n"
-            )
-            evidence_body = "\n\n".join(f"(구간 {i})\n{s}" for i, s in enumerate(ev_spans, start=1))
-            article_block = evidence_intro + evidence_body + "\n\n---\n\n" + article_block
-
-    max_points_keep = 10
-    foreign = news_feed in _FOREIGN_RSS_NEWS_FEEDS
-    foreign_rss_extra = _FOREIGN_RSS_KO_FORMAL_BLOCK if foreign else ""
-    proper_noun_rule = (
-        "- 기업명·종목·브랜드·인물·매체명은 **한국어 정식 명칭** 또는 국내 금융·테크 뉴스 관례적 한글 표기로 쓸 것. "
-        "원문 영문 표기를 그대로 베끼지 말 것.\n"
-        if foreign
-        else "- 기업명, 종목명, 브랜드명, 인물명은 원문에 나온 표기를 그대로 포함할 것.\n"
-    )
-    closing_foreign = (
-        "**최종 확인(해외 RSS):** headline·summary_points 안의 고유명은 한글(정식·통용)만 쓰세요. "
-        "영문 회사·제품명만 남기지 마세요.\n\n"
-        if foreign
-        else ""
-    )
-    evidence_rule = (
-        "입력 상단에 [근거 인용]이 있으면, summary_points의 **검증 가능한 사실·수치**는 그 인용(또는 제목)에 근거할 것. "
-        "인용 밖 본문만 보고 새 수치·단정을 만들지 말 것.\n"
-        if use_evidence_spans
-        else ""
-    )
-    user = (
-        f"다음 뉴스를 분석해 JSON만 출력하세요.\n"
-        f'키: "headline", "category", "summary_points"\n'
-        f"headline·summary_points 각 문자열 안에 **큰따옴표(\")를 넣지 마세요**. "
-        f"인용이 필요하면 작은따옴표(')나 「」를 쓰세요.\n"
-        f"headline은 반드시 한국어로 작성하세요. 원문이 영어면 자연스러운 한국어 제목으로 번역하세요.\n"
-        f"{foreign_rss_extra}"
-        f"{_SUMMARIZE_ARTICLE_CATEGORY_BLOCK}"
-        f"summary_points는 기사 핵심을 빠짐없이 담은 문자열 배열로 작성하세요.\n"
-        f"반드시 2개 이상 4개 이하로 작성하세요. "
-        f"각 summary_point는 **명사형 종결문체**로만 작성하세요(서술형 **…다.**·해요체 **…요.**·**…습니다** 등으로 끝내지 말 것). "
-        f"각 줄은 **마침표(.)로 끝낼 것**(명사구 끝에 `.`를 붙이세요). "
-        f"한 줄은 **한 덩어리의 명사구**(핵심 명사·형용사형 명사화·뉴스식 **…세·…화·…전망·…상황** 등)로 맺고, {SUMMARY_POINT_MIN_LEN}자 이상 {SUMMARY_POINT_MAX_LEN}자 이하(공백·구두점 포함)에서 "
-        f"접속·미완(…고, …으나, …는데, …하며)이나 **수치/퍼센트·단위(원·%) 중간**으로 끊지 말 것. "
-        f"{SUMMARY_POINT_MAX_LEN}자 중간이나 '…'로 끝내지 말 것. 쉼표 뒤에 절이 더 이어질 정도로 길게 쓰지 말 것(한 덩어리로 끊을 것).\n"
-        f"중요한 사실·수치·배경·영향을 누락하지 말고, 내용을 함축하거나 생략하지 마세요.\n"
-        f"{evidence_rule}"
-        f"**[매우 중요] 핵심 종목/기업명 추출 규칙:**\n"
-        f"- 제목·본문에 '매수', '매도', '보유', '투자', '포트폴리오', '담았다', '주목', '추천', 'Top', '유망', '성장주' 등 **특정 종목(기업) 목록**을 암시하는 표현이 있으면, "
-        f"**반드시** summary_points 첫 번째 또는 두 번째 항목에 **기사에 나온 모든 관련 종목(회사)명/티커를 구체적으로 나열**하세요. "
-        f"(예: 마이클 버리가 매수한 종목은 오라클(ORCL)·구글(GOOGL) 등 빅테크 관련주.). "
-        f"이 규칙은 **절대적**이며, 종목명을 '관련주'·'해당 기업'처럼 뭉뚱그려서는 안 됩니다.\n"
-        f"구체성 규칙(headline·summary_points 모두 적용):\n"
-        f"{proper_noun_rule}"
-        f"- 주가, 등락률·퍼센트, 금액 등 구체적 수치가 원문에 있으면 반드시 요약에 포함할 것.\n"
-        f"- 「특정 종목」「해당 기업」「관련 주」처럼 추상적으로 바꾸어 고유명·수치를 대체하거나 감추지 말 것.\n"
-        f"- 핵심 정보(누가·무엇을·얼마나)를 빠뜨리지 말고 구체적으로 서술할 것.\n"
-        f"어려운 경제/금융/전문 용어는 뜻을 유지하되 쉬운 일상 언어로 풀어쓰세요.\n"
-        f"headline은 짧고 읽기 쉬운 **제목체**로 쓰세요. summary_points는 **명사형 종결**만(위 규칙과 동일)이며, "
-        f"각 줄을 서술형 장문으로 늘리거나 딱딱한 사무적 문장만 나열하는 식은 피하세요.\n\n"
-        f"{closing_foreign}"
-        f"{article_block}"
-        f"출처: {source}\n"
-    )
-
-    if _article_llm_judge_enabled():
-        try:
-            return _summarize_article_claude_judge_once(
-                user,
-                title=title,
-                source=source,
-                summary=summary,
-                body_stripped=body_stripped,
-                max_points_keep=max_points_keep,
-                news_feed=news_feed,
-            )
-        except Exception as e:
-            logger.exception(
-                "SAPIENS_ARTICLE_LLM_JUDGE(단일 경로) 실패, 일반 2회 재시도 경로로 폴백: %s",
-                e,
-            )
-
-    last_err: Exception | None = None
-    for attempt in range(2):
-        try:
-            raw = _call_news_llm(user)
-            data = _require_json_dict(raw)
-            _validate_summarize_article_shape(data)
-            return _postprocess_summarize_article_dict(
-                data,
-                max_points_keep,
-                title,
-                source,
-                summary,
-                body_stripped,
-                news_feed=news_feed,
-            )
-        except Exception as e:
-            last_err = e
-            logger.warning("summarize_article 재시도 (%s): %s", attempt + 1, e)
-            if attempt == 0:
-                time.sleep(1.0)
-    raise last_err or RuntimeError("summarize_article failed")
-
-
-def translate_headline_to_korean(
-    headline: str,
-    source: str,
-    summary: str = "",
-    body: str = "",
-    *,
-    formal_korean_names: bool = False,
-) -> str:
-    """헤드라인을 한국어 투자 뉴스 제목으로 정리·번역."""
-    src = (headline or "").strip()
-    if not src:
-        return src
-    ctx = (body or "").strip() or (summary or "")
-    if formal_korean_names:
-        proper = (
-            "기업·브랜드·인물·매체·상품명은 국내 금융·테크 뉴스에 맞는 **한글 정식·통용 표기**로 쓰세요. "
-            "원문 영어 철자만 남기지 마세요. 필요하면 한글명 뒤 괄호에 티커·약어만 병기할 수 있습니다."
-        )
-    else:
-        proper = "브랜드명, 기업명, 인물명 등 고유명사는 원문 그대로 유지하세요."
-    user = (
-        "다음 뉴스 헤드라인을 한국어로 번역하거나 다듬으세요.\n"
-        "의미를 보존하되 과장 없이 간결한 뉴스 제목 톤으로 작성하세요.\n"
-        f"{proper}\n"
-        '반드시 JSON 한 개만 출력: {"headline_ko":"..."}\n\n'
-        f"source: {source}\n"
-        f"headline_src: {src}\n"
-        f"context: {ctx[:400]}\n"
-    )
-    if not _ai_any_news_enabled():
-        return src
-
-    last_err: Exception | None = None
-    for attempt in range(2):
-        try:
-            raw = _call_news_llm(user)
-            data = _require_json_dict(raw)
-            ko = str(data.get("headline_ko", "")).strip()
-            if not ko:
-                raise ValueError("missing headline_ko")
-            return ko
-        except Exception as e:
-            last_err = e
-            logger.warning("translate_headline_to_korean 재시도 (%s): %s", attempt + 1, e)
-            if attempt == 0:
-                time.sleep(0.7)
-    logger.warning("translate_headline_to_korean 실패, 원문 유지: %s", last_err)
-    return src
-
-
-def generate_market_report(
-    indicators: list[dict[str, Any]],
-    articles: list[dict[str, Any]],
-) -> dict[str, Any]:
-    """3줄 시황 요약. 반환: {\"report\": \"...\"}"""
-    ind_lines = "\n".join(
-        f"- {i.get('name','')}: {i.get('value','')} ({i.get('change','')})" for i in indicators[:12]
-    )
-    headlines = "\n".join(f"- {(a.get('headline') or a.get('title',''))[:120]}" for a in articles[:15])
-    user = (
-        "다음 지표와 해외 뉴스 헤드라인을 바탕으로 미국·글로벌 시황을 한국어로 정확히 3문장으로 요약하세요.\n"
-        '반드시 JSON 한 개만: {"report": "..."}\n\n'
-        f"[지표]\n{ind_lines or '(없음)'}\n\n[뉴스]\n{headlines or '(없음)'}\n"
-    )
-    if not _ai_any_news_enabled():
-        return {"report": ""}
-
-    last_err: Exception | None = None
-    for attempt in range(2):
-        try:
-            raw = _call_news_llm(user)
-            data = _require_json_dict(raw)
-            if "report" not in data:
-                raise ValueError("missing report")
-            return {"report": str(data["report"]).strip()}
-        except Exception as e:
-            last_err = e
-            logger.warning("generate_market_report 재시도 (%s): %s", attempt + 1, e)
-            if attempt == 0:
-                time.sleep(1.0)
-    raise last_err or RuntimeError("generate_market_report failed")
-
-
-def _summarize_batch_concurrency() -> int:
-    """SAPIENS_SUMMARIZE_CONCURRENCY: 병렬 요약 동시 수(기본 4, 1~16)."""
-    v = (os.environ.get("SAPIENS_SUMMARIZE_CONCURRENCY") or "4").strip()
-    try:
-        n = int(v, 10)
-    except ValueError:
-        n = 4
-    return max(1, min(16, n))
-
-
-def summarize_batch(
-    items: list[dict[str, Any]],
-    *,
-    news_feed: NewsFeedId | None = None,
-) -> list[dict[str, Any]]:
-    """기사 요약. SAPIENS_SUMMARIZE_CONCURRENCY>1이면 ThreadPool(입력 순서 유지), 1이면 순차+항목 간 0.5s."""
-    if not items:
-        return []
-    n = _summarize_batch_concurrency()
-    if n <= 1:
-        out: list[dict[str, Any]] = []
-        for it in items:
-            try:
-                ai = summarize_article(
-                    title=it.get("title", ""),
-                    summary=it.get("summary", ""),
-                    source=it.get("source", ""),
-                    body=str(it.get("body") or ""),
-                    news_feed=news_feed,
-                )
-                out.append({**it, "_ai": ai})
-            except Exception as e:
-                logger.error("배치 항목 스킵: %s — %s", it.get("title", "")[:40], e)
-            time.sleep(0.5)
-        return out
-
-    def one(idx: int, it: dict[str, Any]) -> tuple[int, dict[str, Any] | None]:
-        try:
-            ai = summarize_article(
-                title=it.get("title", ""),
-                summary=it.get("summary", ""),
-                source=it.get("source", ""),
-                body=str(it.get("body") or ""),
-                news_feed=news_feed,
-            )
-            return (idx, {**it, "_ai": ai})
-        except Exception as e:
-            logger.error("배치 항목 스킵: %s — %s", it.get("title", "")[:40], e)
-            return (idx, None)
-
-    out_pairs: list[tuple[int, dict[str, Any] | None]] = []
-    with ThreadPoolExecutor(max_workers=n) as ex:
-        futs = [ex.submit(one, i, it) for i, it in enumerate(items)]
-        for f in futs:
-            out_pairs.append(f.result())
-    out_pairs.sort(key=lambda t: t[0])
-    return [row for _i, row in out_pairs if row is not None]
-
-
-def merge_to_firestore_article(raw: dict[str, Any], ai: dict[str, Any]) -> dict[str, Any]:
-    """앱 Article 스키마에 맞춘 dict."""
-    ko_headline = str(ai.get("headline", "")).strip() or str(raw.get("title", "")).strip()
+    now = datetime.now(timezone.utc)
     return {
-        "source": raw.get("source", ""),
-        "headline": ko_headline,
-        "headline_ko": ko_headline,
-        "headline_en": raw.get("title", ""),
-        "imageUrl": raw.get("thumbnail_url", ""),
-        "summary": (raw.get("summary") or "")[:500],
-        "time": raw.get("published_at") or "",
-        "category": ai.get("category", ""),
-        "summaryPoints": ai.get("summary_points", []),
-        "tag": ai.get("category", ""),
-        "sourceColor": None,
-        "url": str(raw.get("url") or "").strip(),
+        "card_id": f"{category}_{now.strftime('%Y%m%d_%H%M')}",
+        "category": category,
+        "money_flow": money_flow,
+        "market_status": market_status,
+        "key_reasons": key_reasons,
+        "invest_point": invest_point,
+        "tags": tags,
+        "generated_at": now.isoformat(),
     }
+
+
+# ── 1단계: 필터링 ──────────────────────────────────────────
+
+def filter_important_articles(
+    articles: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    수집된 기사 전체 제목+요약을 AI에 한 번에 던져
+    투자 판단에 중요한 기사만 추려낸다. API 1회 호출.
+    필터링 실패 시 전체 반환(파이프라인 중단 방지).
+    """
+    if not articles:
+        return []
+
+    lines = []
+    for i, a in enumerate(articles):
+        title = (a.get("title") or "").strip()[:120]
+        summary = (a.get("summary") or "").strip()[:80]
+        source = (a.get("source") or "").strip()
+        lines.append(f"{i}. [{source}] {title} — {summary}")
+
+    user = (
+        "아래 뉴스 기사 목록을 읽고, 한국 개인 투자자의 투자 판단에 실질적으로 영향을 주는 기사 번호만 골라줘.\n\n"
+        "【제거 기준 — 하나라도 해당하면 제거】\n"
+        "- 거의 동일한 내용의 중복 기사\n"
+        "- PR성·보도자료·광고성·협찬 기사\n"
+        "- 수치만 나열하고 시장 해석이 없는 단순 시세 기사\n"
+        "- 연예·스포츠·사건사고·날씨 등 금융시장과 무관한 뉴스\n"
+        "- '급등' '폭락' '대박' '반드시' 등 근거 없는 어그로성 제목\n"
+        "- 특정 종목 매수/매도를 직접 권유하는 기사\n\n"
+        "【유지 기준 — 하나라도 해당하면 유지】\n"
+        "- 금리·환율·지수·실적·정책 등 시장에 직접 영향을 주는 내용\n"
+        "- 주요 기업 실적 발표·가이던스·M&A·경영 변화\n"
+        "- 연준·한국은행·정부 정책 발표 및 위원 발언\n"
+        "- 글로벌 매크로 지표 (CPI·GDP·고용 등)\n"
+        "- 지정학 리스크 (전쟁·제재·무역분쟁 등 시장 영향)\n\n"
+        f"기사 목록:\n{chr(10).join(lines)}\n\n"
+        "반드시 JSON 한 개만 출력 (코드펜스·설명 없이):\n"
+        '{"keep": [0, 3, 5, ...]}'
+    )
+
+    try:
+        raw = _call_gemini_card(user)
+        data = _require_json_dict(raw)
+        keep_indices = data.get("keep", [])
+        if not isinstance(keep_indices, list):
+            return articles
+        kept = [
+            articles[i] for i in keep_indices
+            if isinstance(i, int) and 0 <= i < len(articles)
+        ]
+        logger.info("필터링: %d개 → %d개", len(articles), len(kept))
+        return kept if kept else articles
+    except Exception as e:
+        logger.warning("filter_important_articles 실패, 전체 사용: %s", e)
+        return articles
+
+
+# ── 2단계: 카테고리 분류 ───────────────────────────────────
+
+def classify_articles_to_cards(
+    articles: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    """
+    필터링된 기사들을 카드 카테고리별로 분류. API 1회 호출.
+    한 기사는 반드시 하나의 카테고리에만 배정.
+    """
+    if not articles:
+        return {cat: [] for cat in CARD_CATEGORIES}
+
+    lines = [
+        f"{i}. [{(a.get('source') or '').strip()}] {(a.get('title') or '').strip()[:120]}"
+        for i, a in enumerate(articles)
+    ]
+
+    user = (
+        "아래 기사들을 각각 다음 카테고리 중 정확히 하나에만 배정해줘.\n"
+        "카테고리: 시장전체 / 금리·연준 / 섹터 / 대장주 / 매크로 / 이벤트 / AI·테크\n\n"
+        "【카테고리 기준】\n"
+        "- 시장전체: 코스피·코스닥·나스닥·S&P500 등 전체 지수 흐름, 외국인/기관 수급\n"
+        "- 금리·연준: 기준금리 결정·예상, 연준 발언, 한국은행 통화정책, FOMC\n"
+        "- 섹터: 반도체·바이오·에너지·2차전지 등 특정 산업 섹터 전체 흐름\n"
+        "- 대장주: 삼성전자·SK하이닉스·엔비디아·애플 등 개별 대형 종목 이슈\n"
+        "- 매크로: 환율·물가(CPI·PPI)·고용·GDP·무역수지·관세 등 거시경제 지표\n"
+        "- 이벤트: 실적발표·IPO·M&A·정부 규제·지정학 리스크 등 단발성 이벤트\n"
+        "- AI·테크: AI 모델·GPU·빅테크 전략·반도체 신제품·데이터센터 투자\n\n"
+        "【주의】 기사 하나는 반드시 한 카테고리에만 배정. 중복 배정 금지.\n\n"
+        f"기사 목록:\n{chr(10).join(lines)}\n\n"
+        "반드시 JSON 한 개만 출력 (코드펜스·설명 없이):\n"
+        '{"시장전체":[0,2],"금리·연준":[1],"섹터":[],"대장주":[3,4],"매크로":[],"이벤트":[5],"AI·테크":[6,7]}'
+    )
+
+    result: dict[str, list[dict[str, Any]]] = {cat: [] for cat in CARD_CATEGORIES}
+    assigned: set[int] = set()
+
+    try:
+        raw = _call_gemini_card(user)
+        data = _require_json_dict(raw)
+        for cat in CARD_CATEGORIES:
+            for i in (data.get(cat) or []):
+                if isinstance(i, int) and 0 <= i < len(articles) and i not in assigned:
+                    assigned.add(i)
+                    result[cat].append(articles[i])
+        logger.info("카테고리 분류 완료: %s", {k: len(v) for k, v in result.items() if v})
+    except Exception as e:
+        logger.warning("classify_articles_to_cards 실패: %s", e)
+
+    return result
+
+
+# ── 3단계: 카드 1장 생성 ───────────────────────────────────
+
+_CARD_PROMPT = """\
+카테고리: {category}
+
+아래 기사들을 읽고 한국 개인 투자자를 위한 시장 해석 카드를 만들어줘.
+"뉴스 요약"이 아닌 "시장 결론과 돈의 흐름"을 도출하는 것이 목적이야.
+
+【출력 필드】
+
+money_flow (필수)
+· "상승" / "하락" / "관망" 중 하나만
+· 여러 기사가 같은 방향 → 상승 또는 하락
+· 방향 엇갈림·근거 부족 → 반드시 "관망"
+· 억지 결론 금지
+
+market_status (필수)
+· {status_min}~{status_max}자 이내, 명사형 종결
+· 예: "관망세 지속", "금리 인하 기대 약화", "반도체 수급 개선 기대"
+· 서술형·해요체 금지 / 기사에 없는 내용 지어내기 금지
+
+key_reasons (필수, 2~3개)
+· 각 항목 {reason_min}~{reason_max}자 이내, 명사형 종결
+· 판단의 근거가 되는 이유만 — 단순 뉴스 제목 복사 금지
+· 기사에 수치(등락률·금리·환율·실적 등)가 있으면 반드시 포함
+· 기사에 없는 수치·주장·기업명 지어내기 절대 금지
+· 예: "나스닥 -1.2%, 기술주 전반 매도세 확대"
+· 예: "연준 위원 매파 발언, 금리 인하 기대 후퇴"
+
+invest_point (필수)
+· {point_min}~{point_max}자 이내
+· 매수/매도 권유 금지 — "지금 무엇을 봐야 하는가" 관찰 포인트
+· 예: "CPI 발표 전 변동성 주의"
+· 예: "AI 반도체 대장주 수급 지속 여부 확인"
+· 예: "금리 방향 확인 후 포지션 조정 고려"
+
+tags (1~2개)
+· 이 카드와 직접 관련된 시장 키워드
+· 예: 미국증시, 국내증시, AI, 반도체, 금리, 환율, 빅테크
+
+【반드시 준수】
+1. 기사에 없는 내용(기업명·수치·전망) 지어내기 절대 금지
+2. money_flow 근거 수치는 key_reasons에 반드시 포함
+3. 기사 방향 엇갈리면 money_flow는 반드시 "관망"
+4. 모든 필드 내부에 큰따옴표(") 사용 금지 — 필요시 작은따옴표(') 사용
+5. 서술형·해요체 종결 금지 ("~습니다" "~에요" "~있다" 금지)
+
+기사 목록:
+{articles_text}
+
+반드시 JSON 한 개만 출력 (코드펜스·설명 없이):
+{{"money_flow":"관망","market_status":"...","key_reasons":["...","..."],"invest_point":"...","tags":["미국증시"]}}
+"""
+
+
+def generate_single_card(
+    category: str,
+    articles: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """
+    카테고리별 기사 묶음 → 카드 1장 생성. API 1회 (최대 2회 재시도).
+    본문(body) 있으면 본문 우선, 없으면 제목+요약 사용.
+    """
+    if not articles:
+        return None
+
+    article_blocks = []
+    for i, a in enumerate(articles, start=1):
+        title = (a.get("title") or "").strip()
+        body = (a.get("body") or "").strip()
+        summary = (a.get("summary") or "").strip()
+        source = (a.get("source") or "").strip()
+        published = (a.get("published_at") or "").strip()[:16]
+        content = body[:1800] if body else summary[:300]
+        date_str = f" ({published})" if published else ""
+        article_blocks.append(
+            f"[기사 {i}] 출처: {source}{date_str}\n"
+            f"제목: {title}\n"
+            f"내용: {content}"
+        )
+
+    user = _CARD_PROMPT.format(
+        category=category,
+        status_min=CARD_MARKET_STATUS_MIN,
+        status_max=CARD_MARKET_STATUS_MAX,
+        reason_min=CARD_KEY_REASON_MIN,
+        reason_max=CARD_KEY_REASON_MAX,
+        point_min=CARD_INVEST_POINT_MIN,
+        point_max=CARD_INVEST_POINT_MAX,
+        articles_text="\n\n".join(article_blocks),
+    )
+
+    last_err: Exception | None = None
+    for attempt in range(2):
+        try:
+            raw = _call_gemini_card(user)
+            if not raw:
+                raise ValueError("Gemini 응답 비어 있음")
+            data = _require_json_dict(raw)
+            _validate_card_dict(data)
+            card = _postprocess_card_dict(data, category)
+            logger.info(
+                "카드 생성 완료: %s | money_flow=%s | reasons=%d개",
+                category, card["money_flow"], len(card["key_reasons"]),
+            )
+            return card
+        except Exception as e:
+            last_err = e
+            logger.warning(
+                "generate_single_card 재시도 (%d/2) category=%s: %s",
+                attempt + 1, category, e,
+            )
+            if attempt == 0:
+                time.sleep(1.0)
+
+    logger.error("generate_single_card 최종 실패: %s — %s", category, last_err)
+    return None
+
+
+# ── 전체 카드 생성 파이프라인 ──────────────────────────────
+
+def generate_briefing_cards(
+    all_articles: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    RSS 기사 전체 → 필터링 → 분류 → 카드 6~7장 생성.
+
+    1) filter_important_articles  : 중요 기사 추출  (API 1회)
+    2) classify_articles_to_cards : 카테고리 분류   (API 1회)
+    3) generate_single_card × N   : 카드 생성       (API 최대 7회)
+
+    기사 없는 카테고리는 스킵. 총 API 호출 8~9회.
+    """
+    if not all_articles:
+        logger.warning("generate_briefing_cards: 입력 기사 없음")
+        return []
+
+    logger.info("브리핑 카드 생성 시작: 입력 기사 %d개", len(all_articles))
+
+    # 1단계: 필터링
+    filtered = filter_important_articles(all_articles)
+    if not filtered:
+        logger.warning("필터링 후 기사 없음 — 원본 사용")
+        filtered = all_articles
+    logger.info("필터링 완료: %d개", len(filtered))
+
+    # 2단계: 카테고리 분류
+    categorized = classify_articles_to_cards(filtered)
+
+    # 3단계: 카드 생성
+    cards: list[dict[str, Any]] = []
+    for category in CARD_CATEGORIES:
+        articles_for_cat = categorized.get(category, [])
+        if not articles_for_cat:
+            logger.info("카드 스킵 (기사 없음): %s", category)
+            continue
+        logger.info("카드 생성 중: %s (%d개 기사)", category, len(articles_for_cat))
+        card = generate_single_card(category, articles_for_cat)
+        if card:
+            cards.append(card)
+        time.sleep(0.5)
+
+    logger.info(
+        "브리핑 카드 생성 완료: %d장 | 카테고리: %s",
+        len(cards),
+        [c["category"] for c in cards],
+    )
+    return cards

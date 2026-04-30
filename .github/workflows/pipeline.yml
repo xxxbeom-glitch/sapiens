@@ -1,40 +1,38 @@
 name: Sapiens Pipeline
 
-# ━ 스케줄(UTC): KST 20분 전 작업 → 정각 푸시(PUSH_KST_HOUR는 워크플로에서 고정).
-# ━ 전 슬롯 뉴스만(PIPELINE_SECTION=news). 마켓 파이프라인은 코드 기본 비활성(SAPIENS_MARKET_PIPELINE=1 시에만).
-# ━ 수동 실행: job 1개(manual), `section` → PIPELINE_SECTION. 푸시 시각은 PUSH_KST 없을 때 다음 KST 정각.
+# ━ 스케줄(UTC): KST 30분 전 작업 → 정각 푸시
+# ━ 06:30 KST (21:30 UTC 전날) → 07:00 KST 푸시
+# ━ 17:30 KST (08:30 UTC)      → 18:00 KST 푸시
+# ━ 수동 실행: workflow_dispatch
 'on':
   schedule:
-    - cron: "40 22 * * *"  # 07:40 KST 뉴스
-    - cron: "40 1 * * *"   # 10:40 KST 뉴스
-    - cron: "40 5 * * *"   # 14:40 KST 뉴스
-    - cron: "40 7 * * *"   # 16:40 KST 뉴스
+    - cron: "30 21 * * *"  # 06:30 KST (미국 장 마감 후)
+    - cron: "30 8 * * *"   # 17:30 KST (국내 장 마감 후)
   workflow_dispatch:
     inputs:
       section:
-        description: "news(기본), all, full — 마켓은 SAPIENS_MARKET_PIPELINE=1일 때만"
+        description: "news(기본), all"
         required: false
         default: "news"
         type: choice
         options:
           - news
           - all
-          - full
 
 permissions:
   contents: read
 
-# Actions UI에 로그가 바로 보이게 (Python stdout 버퍼링 완화)
 env:
   PYTHONUNBUFFERED: "1"
 
 jobs:
-  news_07_40_kst:
+  # ── 오전 브리핑: 06:30 KST 작업 → 07:00 KST 푸시 ─────────
+  morning_06_30_kst:
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' && github.event.schedule == '40 22 * * *'
+    if: github.event_name == 'schedule' && github.event.schedule == '30 21 * * *'
     env:
       PIPELINE_SECTION: news
-      PUSH_KST_HOUR: "8"
+      PUSH_KST_HOUR: "7"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -42,10 +40,8 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: |
-          echo "pip install 시작…"
           python -m pip install --upgrade pip
           pip install -r pipeline/requirements.txt
-          echo "pip install 완료"
       - name: Run pipeline
         working-directory: pipeline
         env:
@@ -53,17 +49,17 @@ jobs:
           PUSH_KST_HOUR: ${{ env.PUSH_KST_HOUR }}
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          SAPIENS_ARTICLE_LLM_JUDGE: "1"
         run: |
           echo "파이프라인 시작 PIPELINE_SECTION=$PIPELINE_SECTION PUSH_KST_HOUR=$PUSH_KST_HOUR"
           python -u main.py
 
-  news_10_40_kst:
+  # ── 저녁 브리핑: 17:30 KST 작업 → 18:00 KST 푸시 ─────────
+  evening_17_30_kst:
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' && github.event.schedule == '40 1 * * *'
+    if: github.event_name == 'schedule' && github.event.schedule == '30 8 * * *'
     env:
       PIPELINE_SECTION: news
-      PUSH_KST_HOUR: "11"
+      PUSH_KST_HOUR: "18"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -71,10 +67,8 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: |
-          echo "pip install 시작…"
           python -m pip install --upgrade pip
           pip install -r pipeline/requirements.txt
-          echo "pip install 완료"
       - name: Run pipeline
         working-directory: pipeline
         env:
@@ -82,69 +76,11 @@ jobs:
           PUSH_KST_HOUR: ${{ env.PUSH_KST_HOUR }}
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          SAPIENS_ARTICLE_LLM_JUDGE: "1"
         run: |
           echo "파이프라인 시작 PIPELINE_SECTION=$PIPELINE_SECTION PUSH_KST_HOUR=$PUSH_KST_HOUR"
           python -u main.py
 
-  news_14_40_kst:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' && github.event.schedule == '40 5 * * *'
-    env:
-      PIPELINE_SECTION: news
-      PUSH_KST_HOUR: "15"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install dependencies
-        run: |
-          echo "pip install 시작…"
-          python -m pip install --upgrade pip
-          pip install -r pipeline/requirements.txt
-          echo "pip install 완료"
-      - name: Run pipeline
-        working-directory: pipeline
-        env:
-          PIPELINE_SECTION: ${{ env.PIPELINE_SECTION }}
-          PUSH_KST_HOUR: ${{ env.PUSH_KST_HOUR }}
-          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          SAPIENS_ARTICLE_LLM_JUDGE: "1"
-        run: |
-          echo "파이프라인 시작 PIPELINE_SECTION=$PIPELINE_SECTION PUSH_KST_HOUR=$PUSH_KST_HOUR"
-          python -u main.py
-
-  news_16_40_kst:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' && github.event.schedule == '40 7 * * *'
-    env:
-      PIPELINE_SECTION: news
-      PUSH_KST_HOUR: "17"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install dependencies
-        run: |
-          echo "pip install 시작…"
-          python -m pip install --upgrade pip
-          pip install -r pipeline/requirements.txt
-          echo "pip install 완료"
-      - name: Run pipeline
-        working-directory: pipeline
-        env:
-          PIPELINE_SECTION: ${{ env.PIPELINE_SECTION }}
-          PUSH_KST_HOUR: ${{ env.PUSH_KST_HOUR }}
-          FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          SAPIENS_ARTICLE_LLM_JUDGE: "1"
-        run: |
-          echo "파이프라인 시작 PIPELINE_SECTION=$PIPELINE_SECTION PUSH_KST_HOUR=$PUSH_KST_HOUR"
-          python -u main.py
-
+  # ── 수동 실행 ───────────────────────────────────────────────
   manual:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch'
@@ -155,17 +91,14 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: |
-          echo "pip install 시작…"
           python -m pip install --upgrade pip
           pip install -r pipeline/requirements.txt
-          echo "pip install 완료"
       - name: Run pipeline
         working-directory: pipeline
         env:
           PIPELINE_SECTION: ${{ github.event.inputs.section }}
           FIREBASE_SERVICE_ACCOUNT_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          SAPIENS_ARTICLE_LLM_JUDGE: "1"
         run: |
           echo "파이프라인 시작 PIPELINE_SECTION=$PIPELINE_SECTION"
           python -u main.py
